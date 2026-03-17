@@ -1,0 +1,132 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Team {
+  id             String            @id @default(cuid())
+  name           String
+  season         String
+  organization   String?           // JSON: { front: string[], coaching: string[], player: string[] } 팀 조직 직책
+  statDefinition String?           // JSON: 스탯 평가 카테고리/항목 정의
+  players        Player[]
+  schedules      Schedule[]
+  tasks          Task[]
+  matchAnalyses  MatchAnalysis[]
+  staff          TeamStaff[]
+  staffEvals     StaffEvaluation[]
+  playerEvals    PlayerEvaluation[]
+}
+
+model StaffEvaluation {
+  id               String   @id @default(cuid())
+  teamId           String
+  evaluatorStaffId String   // 평가한 지도진(코치) ID
+  subjectStaffId   String   // 평가 대상 스태프 ID
+  scores           String   // JSON: { categoryId: number[] } 항목별 1~5 점수
+  createdAt        DateTime @default(now())
+  team             Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+}
+
+model TeamStaff {
+  id        String   @id @default(cuid())
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId    String
+  role      String   // 조직에 저장된 직책명 (프론트·코칭)
+  name      String
+  phone     String?
+  email     String?
+  guidance  Boolean? @default(false) // 지도 여부
+}
+
+model PlayerEvaluation {
+  id               String   @id @default(cuid())
+  teamId           String
+  evaluatorStaffId String   // 평가한 지도진(코치) ID
+  subjectPlayerId  String   // 평가 대상 선수 ID
+  scores           String   // JSON: { categoryId: number[] } 항목별 1~5 점수
+  createdAt        DateTime @default(now())
+  team             Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+}
+
+model Player {
+  id            String         @id @default(cuid())
+  name          String
+  team          Team           @relation(fields: [teamId], references: [id])
+  teamId        String
+  position      String?
+  height        String?        // 키 (예: 180, 180cm)
+  weight        String?        // 체중 (예: 70, 70kg)
+  dateOfBirth   String?        // 생년월일 (예: 2000-01-15)
+  gender        String?        // 성별 (예: M/F, 남/여)
+  photo         String?        // 사진 URL
+  phone         String?        // 전화번호
+  tasks         Task[]         @relation("PlayerTasks")
+  taskProgress  TaskProgress[]
+}
+
+model Schedule {
+  id         String          @id @default(cuid())
+  title      String
+  date       DateTime
+  team       Team            @relation(fields: [teamId], references: [id])
+  teamId     String
+  analyses   MatchAnalysis[]
+}
+
+model MatchAnalysis {
+  id         String    @id @default(cuid())
+  schedule   Schedule? @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId String?
+  team       Team?     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId     String?
+  opponent   String?   // 상대 팀명 (기존 호환)
+  matchDate  DateTime? // 날짜 (저장 시 입력)
+  matchName  String?   // 이름 (경기명/상대)
+  result       String?   // 결과 (예: 2-1 승)
+  events       String    // JSON: 코치가 기록한 { atk: [], def: [], pass: [], gk: [] }
+  playerEvents String?   // JSON: 선수별 제출 { [playerId]: { atk, def, pass, gk } }
+  updatedAt    DateTime  @updatedAt
+}
+
+enum TaskCategory {
+  기술
+  체력
+  멘탈
+  전술
+}
+
+model Task {
+  id            String         @id @default(cuid())
+  title         String
+  category      TaskCategory
+  dueDate       DateTime?
+  details       String?        // JSON: 과제 내부 항목들 { htmlTaskType, htmlCategory, contents, goal, weekdays, ... }
+  team          Team?          @relation(fields: [teamId], references: [id])
+  teamId        String?
+  player        Player?        @relation("PlayerTasks", fields: [playerId], references: [id])
+  playerId      String?
+  taskProgress  TaskProgress[]
+}
+
+model TaskProgress {
+  id        String  @id @default(cuid())
+  task      Task    @relation(fields: [taskId], references: [id])
+  taskId    String
+  player    Player  @relation(fields: [playerId], references: [id])
+  playerId  String
+  completed Boolean @default(false)
+  note      String? @default("")
+  updatedAt DateTime @updatedAt
+
+  @@unique([taskId, playerId])
+}
