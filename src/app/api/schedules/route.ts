@@ -7,7 +7,7 @@ export async function GET(req: Request) {
   const session = await getSession();
   let where: { teamId?: { in: string[] } } | undefined;
 
-  if (session && session.role === "coach") {
+  if (session && (session.role === "coach" || session.role === "owner")) {
     const ids = await getAccessibleTeamIds(session);
     where = { teamId: { in: ids } };
   }

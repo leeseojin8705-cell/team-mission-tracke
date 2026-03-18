@@ -48,7 +48,7 @@ export default function CoachLayout({ children }: { children: ReactNode }) {
           session?: { role?: string } | null;
         };
         if (cancelled) return;
-        if (data.session?.role === "coach") {
+        if (data.session?.role === "coach" || data.session?.role === "owner") {
           setAuthorized(true);
           const orgRes = await fetch("/api/coach/organizations/me", {
             cache: "no-store",

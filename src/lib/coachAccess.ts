@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { SessionPayload } from "@/lib/session";
 
 export async function getAccessibleTeamIds(session: SessionPayload): Promise<string[]> {
-  if (session.role !== "coach") return [];
+  if (session.role !== "coach" && session.role !== "owner") return [];
 
   // 오너가 가진 조직의 팀들
   const orgs = await prisma.organization.findMany({

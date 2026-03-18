@@ -7,7 +7,7 @@ export async function GET() {
   const session = await getSession();
   let where: { teamId?: { in: string[] | null }; OR?: any[] } | undefined;
 
-  if (session && session.role === "coach") {
+  if (session && (session.role === "coach" || session.role === "owner")) {
     const ids = await getAccessibleTeamIds(session);
     // 팀 과제는 접근 가능한 팀만, 개인 과제는 모두(선수/자신) 허용
     where = {

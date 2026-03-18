@@ -40,7 +40,7 @@ export async function GET(req: Request) {
       );
     }
     let where: { id?: { in: string[] } } | undefined;
-    if (session && session.role === "coach") {
+    if (session && (session.role === "coach" || session.role === "owner")) {
       const ids = await getAccessibleTeamIds(session);
       where = { id: { in: ids } };
     }
@@ -71,7 +71,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const session = await getSession();
-    if (!session || session.role !== "coach") {
+    if (!session || (session.role !== "coach" && session.role !== "owner")) {
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
     }
 

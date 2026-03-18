@@ -10,7 +10,7 @@ export async function GET(req: Request) {
 
   let where: { teamId?: string | { in: string[] } } = {};
 
-  if (session && session.role === "coach") {
+  if (session && (session.role === "coach" || session.role === "owner")) {
     const ids = await getAccessibleTeamIds(session);
     if (teamId) {
       if (!ids.includes(teamId)) {

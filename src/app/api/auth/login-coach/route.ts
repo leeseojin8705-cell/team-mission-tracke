@@ -43,8 +43,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // 코치 세션 설정 (role: "coach")
-    await setSession({ role: "coach", userId: user.id });
+    // 코치/오너 세션 설정 (role: "coach" | "owner")
+    await setSession({ role: user.role === "owner" ? "owner" : "coach", userId: user.id });
     return NextResponse.json(
       {
         ok: true,

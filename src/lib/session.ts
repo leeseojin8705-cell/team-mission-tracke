@@ -11,7 +11,7 @@ export type SessionPayload =
       playerId: string;
     }
   | {
-      role: "coach";
+      role: "coach" | "owner";
       userId: string;
     };
 
