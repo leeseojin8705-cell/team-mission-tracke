@@ -3,8 +3,9 @@
 import FootballTacticsAnalyzer, {
   type AnalysisEventsData,
 } from "@/components/FootballTacticsAnalyzer";
-import type { MatchAnalysis } from "@/lib/types";
+import type { MatchAnalysis, Player } from "@/lib/types";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type AnalysisWithMeta = MatchAnalysis & {
@@ -32,12 +33,16 @@ function formatDate(dateStr: string): string {
 }
 
 export default function PlayerAnalysisPage() {
+  const searchParams = useSearchParams();
+  const taskId = searchParams.get("taskId");
+
   const [analyses, setAnalyses] = useState<AnalysisWithMeta[]>([]);
-  const [players, setPlayers] = useState<{ id: string; name: string; teamId: string }[]>([]);
+  const [player, setPlayer] = useState<Player | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPlayerId, setCurrentPlayerId] = useState("");
   const [selectedAnalysisId, setSelectedAnalysisId] = useState<string | null>(null);
+  const [initialEvents, setInitialEvents] = useState<AnalysisEventsData | null>(null);
   const [playerEvents, setPlayerEvents] = useState<AnalysisEventsData>({
     atk: [],
     def: [],
@@ -46,12 +51,17 @@ export default function PlayerAnalysisPage() {
   });
   const [sending, setSending] = useState(false);
   const [sendMessage, setSendMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [goals, setGoals] = useState(0);
+  const [assists, setAssists] = useState(0);
+  const [starterType, setStarterType] = useState<"starter" | "sub">("starter");
+  const [injured, setInjured] = useState(false);
+  const [matchResult, setMatchResult] = useState<"win" | "draw" | "loss">("win");
+  const [savingRecord, setSavingRecord] = useState(false);
+  const [recordMessage, setRecordMessage] = useState<
+    { type: "ok" | "err"; text: string } | null
+  >(null);
 
-  const me = useMemo(
-    () => players.find((p) => p.id === currentPlayerId),
-    [players, currentPlayerId],
-  );
-  const myTeamId = me?.teamId;
+  const myTeamId = player?.teamId;
 
   useEffect(() => {
     let cancelled = false;
@@ -59,23 +69,27 @@ export default function PlayerAnalysisPage() {
       try {
         setLoading(true);
         setError(null);
-        const [playersRes, analysesRes] = await Promise.all([
-          fetch("/api/players"),
+        const sessionRes = await fetch("/api/auth/session");
+        const sessionData = await sessionRes.json().catch(() => ({}));
+        const sessionPlayerId: string | null =
+          sessionData?.session?.role === "player" ? sessionData.session.playerId : null;
+        if (!sessionPlayerId) {
+          throw new Error("선수 로그인 정보가 없습니다. 다시 로그인해 주세요.");
+        }
+
+        const [playerRes, analysesRes] = await Promise.all([
+          fetch(`/api/players/${sessionPlayerId}`),
           fetch("/api/analyses"),
         ]);
-        if (!playersRes.ok || !analysesRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
-        const [playersData, analysesData]: [
-          { id: string; name: string; teamId: string }[],
-          AnalysisWithMeta[],
-        ] = await Promise.all([playersRes.json(), analysesRes.json()]);
+        if (!playerRes.ok || !analysesRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
+        const [playerData, analysesData]: [Player, AnalysisWithMeta[]] = await Promise.all([
+          playerRes.json(),
+          analysesRes.json(),
+        ]);
         if (cancelled) return;
-        setPlayers(playersData);
+        setPlayer(playerData);
         setAnalyses(analysesData);
-        if (!currentPlayerId && playersData[0]) {
-          const saved = typeof window !== "undefined" ? window.localStorage.getItem("tmt:lastPlayerId") : null;
-          const id = saved && playersData.some((p) => p.id === saved) ? saved : playersData[0].id;
-          setCurrentPlayerId(id);
-        }
+        setCurrentPlayerId(playerData.id);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "오류가 발생했습니다.");
       } finally {
@@ -87,11 +101,75 @@ export default function PlayerAnalysisPage() {
   }, []);
 
   const myAnalyses = useMemo(() => {
-    if (!myTeamId) return [];
-    return analyses
-      .filter((a) => a.teamId === myTeamId)
-      .sort((a, b) => getSortDate(b) - getSortDate(a));
+    if (analyses.length === 0) return [];
+
+    const teamFiltered =
+      myTeamId != null
+        ? analyses.filter((a) => a.teamId === myTeamId)
+        : [];
+
+    const base = teamFiltered.length > 0 ? teamFiltered : analyses;
+
+    return [...base].sort((a, b) => getSortDate(b) - getSortDate(a));
   }, [analyses, myTeamId]);
+
+  // 과제 상세에서 taskId 로 진입했을 때, 과제 날짜와 같은 경기 자동 선택
+  useEffect(() => {
+    if (!taskId || !player || !myTeamId) return;
+    if (selectedAnalysisId || myAnalyses.length === 0) return;
+    let cancelled = false;
+
+    async function selectByTask() {
+      try {
+        const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`);
+        if (!res.ok) return;
+        const task = (await res.json()) as {
+          details?: {
+            singleDate?: string | null;
+            dailyStart?: string | null;
+          } | null;
+          dueDate?: string | null;
+        };
+        const dateStr =
+          task.details?.singleDate ??
+          task.details?.dailyStart ??
+          task.dueDate ??
+          null;
+        if (!dateStr) return;
+        const target = new Date(dateStr);
+        if (Number.isNaN(target.getTime())) return;
+        const ty = target.getFullYear();
+        const tm = target.getMonth();
+        const td = target.getDate();
+
+        const found = myAnalyses.find((a) => {
+          const raw =
+            a.matchDate ??
+            (typeof a.schedule?.date === "string"
+              ? a.schedule.date
+              : null);
+          if (!raw) return false;
+          const d = new Date(raw);
+          if (Number.isNaN(d.getTime())) return false;
+          return (
+            d.getFullYear() === ty &&
+            d.getMonth() === tm &&
+            d.getDate() === td
+          );
+        });
+        if (!cancelled && found) {
+          setSelectedAnalysisId(found.id);
+        }
+      } catch {
+        // 실패해도 조용히 무시
+      }
+    }
+
+    selectByTask();
+    return () => {
+      cancelled = true;
+    };
+  }, [taskId, player, myTeamId, myAnalyses, selectedAnalysisId]);
 
   const selectedAnalysis = useMemo(
     () => myAnalyses.find((a) => a.id === selectedAnalysisId),
@@ -102,16 +180,17 @@ export default function PlayerAnalysisPage() {
     if (!selectedAnalysisId || !currentPlayerId || !selectedAnalysis) return;
     const pe = selectedAnalysis.playerEvents as Record<string, AnalysisEventsData> | null | undefined;
     const existing = pe?.[currentPlayerId];
-    if (existing && typeof existing === "object") {
-      setPlayerEvents({
-        atk: existing.atk ?? [],
-        def: existing.def ?? [],
-        pass: existing.pass ?? [],
-        gk: existing.gk ?? [],
-      });
-    } else {
-      setPlayerEvents({ atk: [], def: [], pass: [], gk: [] });
-    }
+    const next: AnalysisEventsData =
+      existing && typeof existing === "object"
+        ? {
+            atk: existing.atk ?? [],
+            def: existing.def ?? [],
+            pass: existing.pass ?? [],
+            gk: existing.gk ?? [],
+          }
+        : { atk: [], def: [], pass: [], gk: [] };
+    setInitialEvents(next);
+    setPlayerEvents(next);
   }, [selectedAnalysisId, currentPlayerId, selectedAnalysis?.id]);
 
   const handleAnalysisSelect = useCallback((id: string) => {
@@ -150,6 +229,76 @@ export default function PlayerAnalysisPage() {
     }
   }, [selectedAnalysisId, currentPlayerId, playerEvents]);
 
+  const handleEnterPracticeMode = useCallback(() => {
+    setSelectedAnalysisId(null);
+    setInitialEvents(null);
+    setPlayerEvents({
+      atk: [],
+      def: [],
+      pass: [],
+      gk: [],
+    });
+    setSendMessage(null);
+    setRecordMessage(null);
+  }, []);
+
+  const handleSavePersonalRecord = useCallback(async () => {
+    if (!currentPlayerId) {
+      setRecordMessage({
+        type: "err",
+        text: "선수 정보를 불러오지 못했습니다. 다시 로그인해 주세요.",
+      });
+      return;
+    }
+    setSavingRecord(true);
+    setRecordMessage(null);
+    try {
+      const res = await fetch("/api/player-match-records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matchAnalysisId: selectedAnalysisId ?? null,
+          playerId: currentPlayerId,
+          goals,
+          assists,
+          starterType,
+          injured,
+          matchResult,
+          events: playerEvents,
+        }),
+      });
+      const data = await res.json().catch(() => ({} as any));
+      if (!res.ok) {
+        const detail = data.detail ? ` (${String(data.detail)})` : "";
+        setRecordMessage({
+          type: "err",
+          text: (data.error || "개인 기록 저장에 실패했습니다.") + detail,
+        });
+        return;
+      }
+      setRecordMessage({
+        type: "ok",
+        text: "개인 기록이 저장되었습니다. (코치 기록과는 아직 합쳐지지 않습니다.)",
+      });
+    } catch {
+      setRecordMessage({
+        type: "err",
+        text: "개인 기록 저장 중 오류가 발생했습니다.",
+      });
+    } finally {
+      setSavingRecord(false);
+    }
+  }, [
+    assists,
+    currentPlayerId,
+    goals,
+    injured,
+    matchResult,
+    playerEvents,
+    selectedAnalysisId,
+    starterType,
+  ]);
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 px-4 py-8">
       <div className="mx-auto max-w-6xl space-y-4">
@@ -174,29 +323,30 @@ export default function PlayerAnalysisPage() {
 
         {loading ? (
           <p className="text-sm text-slate-400">불러오는 중…</p>
-        ) : !me ? (
-          <p className="text-sm text-slate-400">선수를 선택해 주세요.</p>
+        ) : !player ? (
+          <p className="text-sm text-slate-400">선수 로그인 정보가 없습니다. 다시 로그인해 주세요.</p>
         ) : (
           <div className="flex flex-wrap gap-6">
             <aside className="w-full shrink-0 sm:max-w-[260px]">
               <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  선수 선택
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  선수
                 </p>
-                <select
-                  value={currentPlayerId}
-                  onChange={handlePlayerChange}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500"
-                >
-                  {players.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  경기 선택
+                <p className="mb-3 text-sm font-medium text-slate-100">
+                  {player.name}
                 </p>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    경기 선택
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleEnterPracticeMode}
+                    className="rounded-full border border-slate-600 px-2.5 py-1 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+                  >
+                    연습 모드
+                  </button>
+                </div>
                 {myAnalyses.length === 0 ? (
                   <p className="mt-2 text-sm text-slate-500">
                     우리 팀 경기 기록이 없습니다. 코치가 전술 데이터를 저장하면 여기에서 선택할 수 있습니다.
@@ -240,35 +390,126 @@ export default function PlayerAnalysisPage() {
             <div className="min-w-0 flex-1">
               {selectedAnalysis ? (
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 sm:p-5">
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-800/50 px-3 py-2 text-sm">
-                    <span className="font-medium text-slate-200">
-                      {selectedAnalysis.matchName ?? selectedAnalysis.opponent ?? "—"}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleSendToCoach}
-                        disabled={sending}
-                        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
-                      >
-                        {sending ? "전송 중…" : "코치에게 보내기"}
-                      </button>
+                  <div className="mb-4 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-800/50 px-3 py-2 text-sm">
+                      <span className="font-medium text-slate-200">
+                        {selectedAnalysis.matchName ?? selectedAnalysis.opponent ?? "—"}
+                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSendToCoach}
+                          disabled={sending}
+                          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
+                        >
+                          {sending ? "전송 중…" : "코치에게 보내기"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSavePersonalRecord}
+                          disabled={savingRecord}
+                          className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-sky-500 disabled:opacity-50"
+                        >
+                          {savingRecord ? "저장 중…" : "개인 기록 저장"}
+                        </button>
+                      </div>
                     </div>
+
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-800/50 px-3 py-2 text-xs sm:text-sm">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-1">
+                          <span>득점</span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={goals}
+                            onChange={(e) => setGoals(Number(e.target.value) || 0)}
+                            className="w-12 rounded border border-slate-600 bg-slate-900 px-1 py-0.5 text-right text-xs sm:text-sm"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span>도움</span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={assists}
+                            onChange={(e) => setAssists(Number(e.target.value) || 0)}
+                            className="w-12 rounded border border-slate-600 bg-slate-900 px-1 py-0.5 text-right text-xs sm:text-sm"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span>출전</span>
+                          <select
+                            value={starterType}
+                            onChange={(e) =>
+                              setStarterType(e.target.value === "starter" ? "starter" : "sub")
+                            }
+                            className="rounded border border-slate-600 bg-slate-900 px-2 py-0.5 text-xs sm:text-sm"
+                          >
+                            <option value="starter">선발</option>
+                            <option value="sub">교체</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <label className="flex items-center gap-1 text-xs sm:text-sm">
+                          <input
+                            type="checkbox"
+                            checked={injured}
+                            onChange={(e) => setInjured(e.target.checked)}
+                            className="h-3 w-3 sm:h-4 sm:w-4 rounded border-slate-600 bg-slate-900"
+                          />
+                          <span>부상 여부</span>
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <span>경기 결과</span>
+                          <select
+                            value={matchResult}
+                            onChange={(e) =>
+                              setMatchResult(
+                                e.target.value === "win"
+                                  ? "win"
+                                  : e.target.value === "draw"
+                                    ? "draw"
+                                    : "loss",
+                              )
+                            }
+                            className="rounded border border-slate-600 bg-slate-900 px-2 py-0.5 text-xs sm:text-sm"
+                          >
+                            <option value="win">승</option>
+                            <option value="draw">무</option>
+                            <option value="loss">패</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {sendMessage && (
+                      <p
+                        className={`rounded-lg px-3 py-2 text-xs sm:text-sm ${
+                          sendMessage.type === "ok"
+                            ? "bg-emerald-950/50 text-emerald-200"
+                            : "bg-rose-950/50 text-rose-200"
+                        }`}
+                      >
+                        {sendMessage.text}
+                      </p>
+                    )}
+                    {recordMessage && (
+                      <p
+                        className={`rounded-lg px-3 py-2 text-xs sm:text-sm ${
+                          recordMessage.type === "ok"
+                            ? "bg-sky-950/50 text-sky-200"
+                            : "bg-rose-950/50 text-rose-200"
+                        }`}
+                      >
+                        {recordMessage.text}
+                      </p>
+                    )}
                   </div>
-                  {sendMessage && (
-                    <p
-                      className={`mb-3 rounded-lg px-3 py-2 text-sm ${
-                        sendMessage.type === "ok"
-                          ? "bg-emerald-950/50 text-emerald-200"
-                          : "bg-rose-950/50 text-rose-200"
-                      }`}
-                    >
-                      {sendMessage.text}
-                    </p>
-                  )}
                   <div className="min-w-0 w-full max-w-4xl">
                     <FootballTacticsAnalyzer
-                      initialData={playerEvents}
+                      initialData={initialEvents ?? playerEvents}
                       onChange={setPlayerEvents}
                       showHalfToggle={true}
                       readOnly={false}
@@ -276,11 +517,113 @@ export default function PlayerAnalysisPage() {
                   </div>
                 </div>
               ) : (
-                <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-900/30 px-6 py-12 text-center">
-                  <p className="text-sm font-medium text-slate-400">경기 선택</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    왼쪽에서 경기를 선택하면 개인 전술 포인트를 기록하고 코치에게 보낼 수 있습니다. 제출한 데이터는 기록관에서 확인할 수 있습니다.
-                  </p>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 sm:p-5 space-y-3">
+                  <div className="rounded-lg bg-slate-800/60 px-3 py-2 text-sm text-slate-200">
+                    연습 모드 — 아직 코치가 등록한 경기가 없습니다. 아래 경기장을 자유롭게 클릭해
+                    개인 전술 포인트를 연습해 보세요. 이 모드에서도 「개인 기록 저장」을 누르면 내
+                    개인 기록관에만 저장됩니다. 코치에게는 자동으로 보내지지 않습니다.
+                  </div>
+
+                  <div className="space-y-2 rounded-lg bg-slate-800/50 px-3 py-2 text-xs sm:text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-1">
+                          <span>득점</span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={goals}
+                            onChange={(e) => setGoals(Number(e.target.value) || 0)}
+                            className="w-12 rounded border border-slate-600 bg-slate-900 px-1 py-0.5 text-right text-xs sm:text-sm"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span>도움</span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={assists}
+                            onChange={(e) => setAssists(Number(e.target.value) || 0)}
+                            className="w-12 rounded border border-slate-600 bg-slate-900 px-1 py-0.5 text-right text-xs sm:text-sm"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span>출전</span>
+                          <select
+                            value={starterType}
+                            onChange={(e) =>
+                              setStarterType(e.target.value === "starter" ? "starter" : "sub")
+                            }
+                            className="rounded border border-slate-600 bg-slate-900 px-2 py-0.5 text-xs sm:text-sm"
+                          >
+                            <option value="starter">선발</option>
+                            <option value="sub">교체</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <label className="flex items-center gap-1 text-xs sm:text-sm">
+                          <input
+                            type="checkbox"
+                            checked={injured}
+                            onChange={(e) => setInjured(e.target.checked)}
+                            className="h-3 w-3 sm:h-4 sm:w-4 rounded border-slate-600 bg-slate-900"
+                          />
+                          <span>부상 여부</span>
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <span>경기 결과</span>
+                          <select
+                            value={matchResult}
+                            onChange={(e) =>
+                              setMatchResult(
+                                e.target.value === "win"
+                                  ? "win"
+                                  : e.target.value === "draw"
+                                    ? "draw"
+                                    : "loss",
+                              )
+                            }
+                            className="rounded border border-slate-600 bg-slate-900 px-2 py-0.5 text-xs sm:text-sm"
+                          >
+                            <option value="win">승</option>
+                            <option value="draw">무</option>
+                            <option value="loss">패</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleSavePersonalRecord}
+                        disabled={savingRecord}
+                        className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-sky-500 disabled:opacity-50"
+                      >
+                        {savingRecord ? "저장 중…" : "개인 기록 저장"}
+                      </button>
+                    </div>
+                    {recordMessage && (
+                      <p
+                        className={`rounded-lg px-3 py-2 text-xs sm:text-sm ${
+                          recordMessage.type === "ok"
+                            ? "bg-sky-950/50 text-sky-200"
+                            : "bg-rose-950/50 text-rose-200"
+                        }`}
+                      >
+                        {recordMessage.text}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="min-w-0 w-full max-w-4xl">
+                    <FootballTacticsAnalyzer
+                      initialData={initialEvents ?? playerEvents}
+                      onChange={setPlayerEvents}
+                      showHalfToggle={true}
+                      readOnly={false}
+                    />
+                  </div>
                 </div>
               )}
             </div>

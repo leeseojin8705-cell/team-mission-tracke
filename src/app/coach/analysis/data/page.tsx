@@ -5,11 +5,15 @@ import FootballTacticsAnalyzer, {
 } from "@/components/FootballTacticsAnalyzer";
 import { useCallback, useRef, useState } from "react";
 
+type Outcome = "win" | "loss" | "draw" | null;
+
 export default function CoachAnalysisDataPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [matchDate, setMatchDate] = useState("");
   const [matchName, setMatchName] = useState("");
-  const [result, setResult] = useState("");
+  const [ourScore, setOurScore] = useState(0);
+  const [oppScore, setOppScore] = useState(0);
+  const [outcome, setOutcome] = useState<Outcome>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -20,6 +24,7 @@ export default function CoachAnalysisDataPage() {
     pass: [],
     gk: [],
   });
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const handleAnalyzerChange = useCallback((data: AnalysisEventsData) => {
     eventsRef.current = data;
@@ -31,9 +36,17 @@ export default function CoachAnalysisDataPage() {
     const today = new Date().toISOString().slice(0, 10);
     setMatchDate(today);
     setMatchName("");
-    setResult("");
+    setOurScore(0);
+    setOppScore(0);
+    setOutcome(null);
     setModalOpen(true);
+    setTimeout(() => nameInputRef.current?.focus(), 100);
   }, []);
+
+  const resultString =
+    outcome !== null
+      ? `${ourScore}-${oppScore} ${outcome === "win" ? "승" : outcome === "loss" ? "패" : "무"}`
+      : "";
 
   const handleSave = useCallback(async () => {
     if (!matchDate.trim()) {
@@ -53,7 +66,7 @@ export default function CoachAnalysisDataPage() {
         body: JSON.stringify({
           matchDate: new Date(matchDate).toISOString(),
           matchName: matchName.trim(),
-          result: result.trim() || undefined,
+          result: resultString || undefined,
           events: eventsRef.current,
         }),
       });
@@ -70,7 +83,7 @@ export default function CoachAnalysisDataPage() {
     } finally {
       setSaving(false);
     }
-  }, [matchDate, matchName, result]);
+  }, [matchDate, matchName, resultString]);
 
   return (
     <div className="space-y-6">
@@ -120,7 +133,7 @@ export default function CoachAnalysisDataPage() {
                 저장
               </h2>
               <p className="mt-0.5 text-xs text-slate-500">
-                날짜·이름·결과를 입력한 뒤 저장하세요.
+                경기 정보를 입력한 뒤 저장하세요. 날짜·이름은 필수, 결과는 선택입니다.
               </p>
             </div>
             <div className="px-5 py-4 space-y-4">
@@ -137,7 +150,7 @@ export default function CoachAnalysisDataPage() {
               <div className="space-y-4">
                 <div>
                   <label htmlFor="save-date" className="mb-1.5 block text-xs font-medium text-slate-400">
-                    날짜
+                    날짜 <span className="font-normal text-slate-500">(필수)</span>
                   </label>
                   <input
                     id="save-date"
@@ -149,9 +162,10 @@ export default function CoachAnalysisDataPage() {
                 </div>
                 <div>
                   <label htmlFor="save-name" className="mb-1.5 block text-xs font-medium text-slate-400">
-                    이름
+                    이름 <span className="font-normal text-slate-500">(필수)</span>
                   </label>
                   <input
+                    ref={nameInputRef}
                     id="save-name"
                     type="text"
                     value={matchName}
@@ -161,17 +175,86 @@ export default function CoachAnalysisDataPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="save-result" className="mb-1.5 block text-xs font-medium text-slate-400">
-                    결과 <span className="font-normal text-slate-600">(선택)</span>
-                  </label>
-                  <input
-                    id="save-result"
-                    type="text"
-                    value={result}
-                    onChange={(e) => setResult(e.target.value)}
-                    placeholder="예: 2-1 승"
-                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30"
-                  />
+                  <p className="mb-2 text-xs font-medium text-slate-400">
+                    결과 <span className="font-normal text-slate-500">(선택)</span>
+                  </p>
+                  <div className="mb-3 flex items-center justify-center gap-4 rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-3">
+                    <div className="flex items-center gap-1">
+                      <span className="w-12 text-center text-xs text-slate-500">우리</span>
+                      <button
+                        type="button"
+                        onClick={() => setOurScore((n) => Math.max(0, n - 1))}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                        aria-label="우리 득점 감소"
+                      >
+                        −
+                      </button>
+                      <span className="min-w-[2rem] text-center text-lg font-semibold text-slate-100">
+                        {ourScore}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setOurScore((n) => Math.min(99, n + 1))}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                        aria-label="우리 득점 증가"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <span className="text-slate-500">:</span>
+                    <div className="flex items-center gap-1">
+                      <span className="w-12 text-center text-xs text-slate-500">상대</span>
+                      <button
+                        type="button"
+                        onClick={() => setOppScore((n) => Math.max(0, n - 1))}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                        aria-label="상대 득점 감소"
+                      >
+                        −
+                      </button>
+                      <span className="min-w-[2rem] text-center text-lg font-semibold text-slate-100">
+                        {oppScore}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setOppScore((n) => Math.min(99, n + 1))}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                        aria-label="상대 득점 증가"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <p className="mb-1.5 text-[11px] text-slate-500">승·패·무 중 하나를 선택하세요.</p>
+                  <div className="flex gap-2">
+                    {[
+                      { value: "win" as const, label: "승" },
+                      { value: "loss" as const, label: "패" },
+                      { value: "draw" as const, label: "무" },
+                    ].map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setOutcome((prev) => (prev === value ? null : value))}
+                        className={`flex-1 rounded-lg border py-2 text-sm font-medium transition ${
+                          outcome === value
+                            ? value === "win"
+                              ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+                              : value === "loss"
+                                ? "border-rose-500 bg-rose-500/20 text-rose-300"
+                                : "border-slate-400 bg-slate-500/20 text-slate-200"
+                            : "border-slate-600 bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {resultString && (
+                    <p className="mt-2 text-[11px] text-slate-400">
+                      저장 시 「{resultString}」로 기록되며, 기록관 통계에 반영됩니다.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

@@ -1,78 +1,93 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 
 const roles = [
   {
     id: "coach",
-    label: "코치로 시작하기",
-    description: "팀·선수·일정·과제를 관리하는 코치 대시보드로 이동합니다.",
+    label: "코치",
+    description: "팀·선수·일정·과제·공지·전술을 관리합니다.",
     href: "/coach",
   },
   {
     id: "player",
-    label: "선수로 시작하기",
-    description: "오늘 일정과 내 과제를 확인하는 선수 대시보드로 이동합니다.",
-    href: "/player",
+    label: "선수",
+    description: "개인 번호·비밀번호로 로그인 후 내 일정·과제를 확인합니다.",
+    href: "/login",
   },
 ];
 
 export default function Home() {
-  const router = useRouter();
+  const [adminMode, setAdminMode] = useState(false);
 
   useEffect(() => {
     try {
-      const storedRole = window.localStorage.getItem("tmt:lastRole");
-      const storedPlayer = window.localStorage.getItem("tmt:lastPlayerId");
-
-      if (storedRole === "coach") {
-        router.replace("/coach");
-      } else if (storedRole === "player") {
-        // 선수일 때는 우선 /player로 보내고, 내부에서 lastPlayerId를 활용
-        router.replace("/player");
-      }
+      const v = window.localStorage.getItem("tmt:adminMode");
+      setAdminMode(v === "on");
     } catch {
-      // localStorage가 없어도 조용히 무시
+      // ignore
     }
-  }, [router]);
+  }, []);
+
+  function toggleAdmin() {
+    setAdminMode((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem("tmt:adminMode", next ? "on" : "off");
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-900/60 shadow-xl p-8 md:p-10 space-y-8">
-        <header className="space-y-2">
+      <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900/60 shadow-xl p-8 md:p-10 space-y-8">
+        <header className="text-center space-y-2">
           <p className="text-sm font-semibold tracking-wide text-emerald-400">
             TEAM MISSION TRACKER
           </p>
           <h1 className="text-2xl md:text-3xl font-bold">
-            어떤 역할로 사용할까요?
+            역할을 선택하세요
           </h1>
-          <p className="text-sm md:text-base text-slate-300">
-            지금은 로그인 없이 역할만 선택해서 들어가는 1차 버전입니다. 이후에
-            계정/권한 시스템을 추가해도 이 구조를 그대로 확장할 수 있습니다.
+          <p className="text-sm text-slate-400">
+            코치로 들어갈지, 선수로 들어갈지 선택합니다.
           </p>
+          <div className="mt-1 flex items-center justify-center gap-2 text-[11px] text-slate-500">
+            <button
+              type="button"
+              onClick={toggleAdmin}
+              className={`rounded-full border px-2 py-0.5 ${
+                adminMode
+                  ? "border-amber-500 bg-amber-500/15 text-amber-300"
+                  : "border-slate-600 bg-slate-900 text-slate-400"
+              }`}
+            >
+              관리자 모드 {adminMode ? "ON" : "OFF"}
+            </button>
+            <span className="hidden sm:inline">
+              (개발/수정용 – 이 브라우저에서만 적용)
+            </span>
+          </div>
         </header>
 
-        <section className="grid gap-4 md:grid-cols-2">
+        <section className="grid gap-4 sm:grid-cols-2">
           {roles.map((role) => (
-            <a
+            <Link
               key={role.id}
               href={role.href}
-              className="group rounded-xl border border-slate-800 bg-slate-900/60 px-5 py-4 flex flex-col gap-2 transition hover:border-emerald-400/80 hover:bg-slate-900"
+              className="group rounded-xl border-2 border-slate-700 bg-slate-900/80 px-6 py-5 flex flex-col gap-2 transition hover:border-emerald-400 hover:bg-slate-800/60"
             >
-              <span className="text-sm font-semibold text-emerald-300 group-hover:text-emerald-200">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">
                 {role.id === "coach" ? "Coach" : "Player"}
               </span>
-              <span className="text-lg font-semibold">{role.label}</span>
-              <span className="text-sm text-slate-300">{role.description}</span>
-            </a>
+              <span className="text-xl font-bold text-slate-100">{role.label}</span>
+              <span className="text-sm text-slate-400">{role.description}</span>
+            </Link>
           ))}
         </section>
-
-        <p className="text-xs text-slate-400">
-          2차 버전에서는 여기에서 이메일/비밀번호 또는 소셜 로그인을 붙이고,
-          역할은 계정에 따라 자동으로 선택되도록 확장할 수 있습니다.
-        </p>
       </div>
     </main>
   );

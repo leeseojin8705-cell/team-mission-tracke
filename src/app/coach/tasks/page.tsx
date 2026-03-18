@@ -1,7 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import type { Task, Team, Player, TaskCategory, TeamStaff } from "@/lib/types";
+import type { Task, Team, Player, TaskCategory, TeamStaff, TaskProgress } from "@/lib/types";
+import {
+  aggregatePhaseScores,
+  getTaskScores,
+  type EvaluationRow,
+} from "@/lib/taskScore";
 
 const categories: TaskCategory[] = ["기술", "체력", "멘탈", "전술"];
 
@@ -38,12 +44,20 @@ export default function CoachTasksPage() {
   // 확장 UI 상태 (HTML 템플릿 반영, 현재는 미리보기/UX 용)
   const [htmlTaskType, setHtmlTaskType] = useState<HtmlTaskType>("daily");
   const [htmlCategory, setHtmlCategory] = useState<HtmlCategory>(null);
+  const [taskType, setTaskType] = useState<
+    "자기관리" | "연습 및 훈련" | "연습 경기" | "정식 경기"
+  >("연습 및 훈련");
+  const [contentCategory, setContentCategory] = useState<
+    "기술" | "신체" | "전술" | "심리" | "인지" | "태도"
+  >("기술");
   const [taskDetail, setTaskDetail] = useState("");
   const [taskGoal, setTaskGoal] = useState("");
   const [dailyStart, setDailyStart] = useState("");
   const [dailyEnd, setDailyEnd] = useState("");
   const [singleDate, setSingleDate] = useState("");
   const [weekdaySet, setWeekdaySet] = useState<Set<string>>(new Set());
+  const [timeStart, setTimeStart] = useState("");
+  const [timeEnd, setTimeEnd] = useState("");
   const [contentTags, setContentTags] = useState<string[]>([]);
   const [positionSet, setPositionSet] = useState<Set<string>>(new Set(["ALL"]));
   const [positionWeights, setPositionWeights] = useState<Record<string, number>>({
@@ -66,11 +80,43 @@ export default function CoachTasksPage() {
   const currentTargetOptions =
     targetType === "team" ? teamOptions : playerOptions;
 
+  // 현재 과제가 연결될 팀 id (팀 과제면 그 팀, 선수 과제면 해당 선수의 팀)
+  const currentTeamIdForTask = useMemo(() => {
+    if (targetType === "team" && targetId) return targetId;
+    if (targetType === "player" && targetId) {
+      const p = players.find((pl) => pl.id === targetId);
+      return p?.teamId ?? null;
+    }
+    return null;
+  }, [players, targetId, targetType]);
+
+  // 엔트리/선수 지정 후보: 현재 팀 소속 선수들만
+  const entryCandidatePlayers = useMemo(() => {
+    if (!currentTeamIdForTask) return players;
+    return players.filter((p) => p.teamId === currentTeamIdForTask);
+  }, [currentTeamIdForTask, players]);
+
   const [filterType, setFilterType] = useState<TargetType | "all">("all");
   const [filterTeamId, setFilterTeamId] = useState<string>("all");
   const [filterPlayerId, setFilterPlayerId] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "overdue">("all");
+  const [taskSortOrder, setTaskSortOrder] = useState<"dueDate" | "title">("dueDate");
+  const [taskSearchQuery, setTaskSearchQuery] = useState("");
+  const [taskPeriodPreset, setTaskPeriodPreset] = useState<"all" | "30d" | "custom">("all");
+  const [taskDateFrom, setTaskDateFrom] = useState("");
+  const [taskDateTo, setTaskDateTo] = useState("");
   const [selectedTaskForModal, setSelectedTaskForModal] = useState<Task | null>(null);
+  const [taskProgressList, setTaskProgressList] = useState<TaskProgress[]>([]);
+  const [progressSaving, setProgressSaving] = useState<string | null>(null);
+  const [showLoadFromTaskModal, setShowLoadFromTaskModal] = useState(false);
+  const [taskSummaries, setTaskSummaries] = useState<Record<string, {
+    taskId: string;
+    completed: number;
+    total: number;
+    understanding: number;
+    achievement: number;
+    evaluation: number;
+  }>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -190,6 +236,51 @@ export default function CoachTasksPage() {
     };
   }, [players, targetId, targetType]);
 
+  useEffect(() => {
+    if (!selectedTaskForModal?.id) {
+      setTaskProgressList([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/task-progress?taskId=${encodeURIComponent(selectedTaskForModal.id)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: TaskProgress[]) => {
+        if (!cancelled) setTaskProgressList(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setTaskProgressList([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTaskForModal?.id]);
+
+  async function saveTaskProgress(playerId: string, completed: boolean, note: string) {
+    if (!selectedTaskForModal?.id) return;
+    setProgressSaving(playerId);
+    try {
+      const res = await fetch("/api/task-progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskId: selectedTaskForModal.id,
+          playerId,
+          completed,
+          note: note ?? "",
+        }),
+      });
+      if (res.ok) {
+        const updated = (await res.json()) as TaskProgress;
+        setTaskProgressList((prev) => {
+          const rest = prev.filter((p) => p.playerId !== playerId);
+          return [...rest, updated];
+        });
+      }
+    } finally {
+      setProgressSaving(null);
+    }
+  }
+
   function resetForm() {
     setEditingId(null);
     setTitle("");
@@ -199,12 +290,16 @@ export default function CoachTasksPage() {
     setTargetId(teams[0]?.id ?? "");
     setHtmlTaskType("daily");
     setHtmlCategory(null);
+    setTaskType("연습 및 훈련");
+    setContentCategory("기술");
     setTaskDetail("");
     setTaskGoal("");
     setDailyStart("");
     setDailyEnd("");
     setSingleDate("");
     setWeekdaySet(new Set());
+    setTimeStart("");
+    setTimeEnd("");
     setContentTags([]);
     setPositionSet(new Set(["ALL"]));
     setPositionWeights({ GK: 25, DF: 25, MF: 25, FW: 25 });
@@ -229,6 +324,8 @@ export default function CoachTasksPage() {
     const details = {
       htmlTaskType,
       htmlCategory,
+    taskType,
+    contentCategory,
       contents: contentTags.length ? contentTags : undefined,
       detailText: taskDetail || undefined,
       goalText: taskGoal || undefined,
@@ -236,6 +333,8 @@ export default function CoachTasksPage() {
       dailyEnd: dailyEnd || undefined,
       singleDate: singleDate || undefined,
       weekdays: weekdaySet.size ? Array.from(weekdaySet) : undefined,
+      timeStart: timeStart || undefined,
+      timeEnd: timeEnd || undefined,
       positions: positionSet.size ? Array.from(positionSet) : undefined,
       positionWeights,
       players:
@@ -324,8 +423,9 @@ export default function CoachTasksPage() {
     }
   }
 
-  function handleEdit(task: Task) {
-    setEditingId(task.id);
+  function fillFormFromTask(task: Task, asEdit: boolean) {
+    if (asEdit) setEditingId(task.id);
+    else setEditingId(null);
     setTitle(task.title);
     setCategory(task.category);
     setDueDate(
@@ -335,6 +435,8 @@ export default function CoachTasksPage() {
     if (task.details) {
       setHtmlTaskType(task.details.htmlTaskType ?? "daily");
       setHtmlCategory(task.details.htmlCategory ?? null);
+      setTaskType(task.details.taskType ?? "연습 및 훈련");
+      setContentCategory(task.details.contentCategory ?? "기술");
       setTaskDetail(task.details.detailText ?? "");
       setTaskGoal(task.details.goalText ?? "");
       setDailyStart(task.details.dailyStart ?? "");
@@ -343,6 +445,8 @@ export default function CoachTasksPage() {
       setWeekdaySet(
         new Set<string>(Array.isArray(task.details.weekdays) ? task.details.weekdays : []),
       );
+      setTimeStart(task.details.timeStart ?? "");
+      setTimeEnd(task.details.timeEnd ?? "");
       setContentTags(
         Array.isArray(task.details.contents)
           ? (task.details.contents as string[])
@@ -386,6 +490,15 @@ export default function CoachTasksPage() {
     }
   }
 
+  function handleEdit(task: Task) {
+    fillFormFromTask(task, true);
+  }
+
+  function loadFromTask(task: Task) {
+    fillFormFromTask(task, false);
+    setShowLoadFromTaskModal(false);
+  }
+
   async function handleDelete(id: string) {
     try {
       setSubmitting(true);
@@ -414,7 +527,40 @@ export default function CoachTasksPage() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    return tasks.filter((task) => {
+    // 기간 필터용 from/to 계산
+    const now = new Date();
+    let from: Date | null = null;
+    let to: Date | null = null;
+    if (taskPeriodPreset === "30d") {
+      to = now;
+      from = new Date(now);
+      from.setDate(from.getDate() - 30);
+      from.setHours(0, 0, 0, 0);
+      to.setHours(23, 59, 59, 999);
+    } else if (taskPeriodPreset === "custom") {
+      if (taskDateFrom) {
+        const f = new Date(taskDateFrom);
+        if (!Number.isNaN(f.getTime())) {
+          f.setHours(0, 0, 0, 0);
+          from = f;
+        }
+      }
+      if (taskDateTo) {
+        const t = new Date(taskDateTo);
+        if (!Number.isNaN(t.getTime())) {
+          t.setHours(23, 59, 59, 999);
+          to = t;
+        }
+      }
+    }
+
+    const filtered = tasks.filter((task) => {
+      // 선수 개인이 만든 개인 과제( playerId 가 있고, 평가자를 지정한 경우 )는
+      // 이 화면(팀/코치 과제 관리)에서는 제외한다.
+      if (task.playerId && Array.isArray(task.details?.evaluators) && task.details.evaluators.length > 0) {
+        return false;
+      }
+
       if (filterType === "team") {
         if (!task.teamId) return false;
         if (filterTeamId !== "all" && task.teamId !== filterTeamId) return false;
@@ -424,7 +570,7 @@ export default function CoachTasksPage() {
           return false;
       }
 
-      if (statusFilter !== "all") {
+      if (statusFilter !== "all" || taskPeriodPreset !== "all") {
         if (!task.dueDate) return false;
         const d = new Date(task.dueDate);
         if (Number.isNaN(d.getTime())) return false;
@@ -432,11 +578,130 @@ export default function CoachTasksPage() {
         const isActive = d >= today;
         if (statusFilter === "active" && !isActive) return false;
         if (statusFilter === "overdue" && isActive) return false;
+
+        // 기간 필터: 마감일 기준으로 from/to 안에 있는 과제만
+        if (from && d < from) return false;
+        if (to && d > to) return false;
       }
+
+      const q = taskSearchQuery.trim().toLowerCase();
+      if (q && !(task.title ?? "").toLowerCase().includes(q)) return false;
 
       return true;
     });
-  }, [tasks, filterType, filterTeamId, filterPlayerId, statusFilter]);
+
+    const sorted = [...filtered].sort((a, b) => {
+      if (taskSortOrder === "dueDate") {
+        const aDue = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+        const bDue = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+        if (aDue !== bDue) return aDue - bDue;
+      }
+      return (a.title ?? "").localeCompare(b.title ?? "", "ko");
+    });
+    return sorted;
+  }, [
+    tasks,
+    filterType,
+    filterTeamId,
+    filterPlayerId,
+    statusFilter,
+    taskSortOrder,
+    taskSearchQuery,
+    taskPeriodPreset,
+    taskDateFrom,
+    taskDateTo,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSummaries() {
+      if (visibleTasks.length === 0) {
+        setTaskSummaries({});
+        return;
+      }
+
+      try {
+        const next: typeof taskSummaries = {};
+
+        await Promise.all(
+          visibleTasks.map(async (t) => {
+            // 1) TaskProgress: 완료/전체
+            let completed = 0;
+            let total = 0;
+            try {
+              const res = await fetch(`/api/task-progress?taskId=${encodeURIComponent(t.id)}`);
+              if (res.ok) {
+                const list: { completed: boolean }[] = await res.json();
+                total = list.length;
+                completed = list.filter((p) => p.completed).length;
+              }
+            } catch {
+              // ignore
+            }
+
+            // 2) PlayerEvaluation: 이해/달성/코치 평균
+            let understanding = 0;
+            let achievement = 0;
+            let evaluation = 0;
+
+            if (t.teamId) {
+              try {
+                const evalRes = await fetch(
+                  `/api/teams/${encodeURIComponent(
+                    t.teamId,
+                  )}/player-evaluations?taskId=${encodeURIComponent(t.id)}`,
+                );
+                if (evalRes.ok) {
+                  const evalList = (await evalRes.json()) as EvaluationRow[];
+                  if (evalList.length > 0) {
+                    const byPhase = aggregatePhaseScores(evalList);
+                    const playerIds = Object.keys(byPhase);
+                    if (playerIds.length > 0) {
+                      let sumU = 0;
+                      let sumA = 0;
+                      let sumE = 0;
+                      for (const pid of playerIds) {
+                        const s = getTaskScores(byPhase, pid);
+                        sumU += s.understanding;
+                        sumA += s.achievement;
+                        sumE += s.evaluation;
+                      }
+                      understanding = sumU / playerIds.length;
+                      achievement = sumA / playerIds.length;
+                      evaluation = sumE / playerIds.length;
+                    }
+                  }
+                }
+              } catch {
+                // ignore
+              }
+            }
+
+            next[t.id] = {
+              taskId: t.id,
+              completed,
+              total,
+              understanding,
+              achievement,
+              evaluation,
+            };
+          }),
+        );
+
+        if (!cancelled) {
+          setTaskSummaries(next);
+        }
+      } catch {
+        if (!cancelled) setTaskSummaries({});
+      }
+    }
+
+    loadSummaries();
+    return () => {
+      cancelled = true;
+    };
+  }, [visibleTasks]);
 
   const summary = useMemo(() => {
     const total = tasks.length;
@@ -569,24 +834,36 @@ export default function CoachTasksPage() {
         ) : (
           <div className="flex flex-wrap gap-2">
             {visibleTasks.slice(0, 6).map((task) => (
-              <button
+              <div
                 key={task.id}
-                type="button"
-                onClick={() => setSelectedTaskForModal(task)}
-                className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-left hover:border-emerald-500"
+                className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-left"
               >
-                <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">
-                  {task.teamId ? "팀" : task.playerId ? "선수" : "기타"}
-                </span>
-                <span className="text-[12px] font-medium text-slate-100">
-                  {task.title}
-                </span>
-                {task.dueDate && (
-                  <span className="text-[10px] text-slate-400">
-                    마감 {String(task.dueDate).slice(0, 10)}
+                <button
+                  type="button"
+                  onClick={() => setSelectedTaskForModal(task)}
+                  className="flex flex-1 items-center gap-2 text-left hover:text-emerald-300"
+                >
+                  <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">
+                    {task.teamId ? "팀" : task.playerId ? "선수" : "기타"}
                   </span>
+                  <span className="text-[12px] font-medium text-slate-100">
+                    {task.title}
+                  </span>
+                  {task.dueDate && (
+                    <span className="text-[10px] text-slate-400">
+                      마감 {String(task.dueDate).slice(0, 10)}
+                    </span>
+                  )}
+                </button>
+                {task.teamId && (
+                  <Link
+                    href={`/coach/tasks/${task.id}/results`}
+                    className="rounded-md border border-slate-600 px-2 py-1 text-[10px] text-slate-200 hover:border-emerald-500 hover:text-emerald-300"
+                  >
+                    평가 결과
+                  </Link>
                 )}
-              </button>
+              </div>
             ))}
           </div>
         )}
@@ -596,6 +873,13 @@ export default function CoachTasksPage() {
       <div className="flex flex-col gap-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-300">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-[11px]">목록 필터</span>
+          <input
+            type="text"
+            value={taskSearchQuery}
+            onChange={(e) => setTaskSearchQuery(e.target.value)}
+            placeholder="제목 검색"
+            className="w-28 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400 placeholder:text-slate-500"
+          />
           <select
             value={filterType}
             onChange={(e) => {
@@ -635,6 +919,46 @@ export default function CoachTasksPage() {
                 </option>
               ))}
             </select>
+          )}
+          <span className="text-slate-500">|</span>
+          <select
+            value={taskSortOrder}
+            onChange={(e) => setTaskSortOrder(e.target.value as "dueDate" | "title")}
+            className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+          >
+            <option value="dueDate">마감일 순</option>
+            <option value="title">제목 순</option>
+          </select>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <span className="text-[11px]">마감일 기간</span>
+          <select
+            value={taskPeriodPreset}
+            onChange={(e) =>
+              setTaskPeriodPreset(e.target.value as "all" | "30d" | "custom")
+            }
+            className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] outline-none focus:border-emerald-400"
+          >
+            <option value="all">전체</option>
+            <option value="30d">최근 30일(마감 기준)</option>
+            <option value="custom">직접 선택</option>
+          </select>
+          {taskPeriodPreset === "custom" && (
+            <>
+              <input
+                type="date"
+                value={taskDateFrom}
+                onChange={(e) => setTaskDateFrom(e.target.value)}
+                className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-emerald-400"
+              />
+              <span className="text-[11px] text-slate-500">~</span>
+              <input
+                type="date"
+                value={taskDateTo}
+                onChange={(e) => setTaskDateTo(e.target.value)}
+                className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-emerald-400"
+              />
+            </>
           )}
         </div>
         <span className="text-[11px] text-slate-400">
@@ -685,6 +1009,188 @@ export default function CoachTasksPage() {
               </div>
             </button>
           </div>
+        </section>
+
+        {/* 과제 분류 (자기관리 / 연습 / 연습경기 / 정식경기) */}
+        <section className="space-y-2 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
+          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            과제 분류
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            {["자기관리", "연습 및 훈련", "연습 경기", "정식 경기"].map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTaskType(t as typeof taskType)}
+                className={`rounded-full border px-3 py-1.5 font-medium transition ${
+                  taskType === t
+                    ? "border-emerald-500 bg-emerald-500 text-slate-950"
+                    : "border-slate-700 bg-slate-950 text-slate-200 hover:border-emerald-400"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* 과제 내용 축 (기술 / 신체 / 전술 / 심리 / 인지 / 태도) - 중복 선택 가능 */}
+        <section className="space-y-2 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
+          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            과제 내용
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            {["기술", "신체", "전술", "심리", "인지", "태도"].map((label) => {
+              const id = label; // 한글 라벨 그대로 id로 사용
+              const on = contentTags.includes(id);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() =>
+                    setContentTags((prev) => {
+                      const next = prev.includes(id)
+                        ? prev.filter((v) => v !== id)
+                        : [...prev, id];
+                      // 대표 contentCategory 는 첫 번째 선택값으로 유지
+                      setContentCategory(
+                        (next[0] as typeof contentCategory) ?? "기술",
+                      );
+                      return next;
+                    })
+                  }
+                  className={`rounded-full border px-3 py-1.5 font-medium transition ${
+                    on
+                      ? "border-emerald-500 bg-emerald-500 text-slate-950"
+                      : "border-slate-700 bg-slate-950 text-slate-200 hover:border-emerald-400"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ② 기간 / 요일 / 시간 */}
+        <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
+          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            기간 · 요일 · 시간
+          </div>
+          {htmlTaskType === "daily" ? (
+            <>
+              <p className="text-[11px] text-slate-500">
+                반복 과제입니다. 과제가 유효한 기간과 요일, 시간대를 선택하세요.
+              </p>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <label className="flex items-center gap-2">
+                  <span className="text-slate-300">시작일</span>
+                  <input
+                    type="date"
+                    value={dailyStart}
+                    onChange={(e) => setDailyStart(e.target.value)}
+                    className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                  />
+                </label>
+                <span className="text-slate-500">~</span>
+                <label className="flex items-center gap-2">
+                  <span className="text-slate-300">종료일</span>
+                  <input
+                    type="date"
+                    value={dailyEnd}
+                    onChange={(e) => setDailyEnd(e.target.value)}
+                    className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                  />
+                </label>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                <span>요일</span>
+                {["일", "월", "화", "수", "목", "금", "토"].map((label, idx) => {
+                  const key = String(idx);
+                  const on = weekdaySet.has(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() =>
+                        setWeekdaySet((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(key)) next.delete(key);
+                          else next.add(key);
+                          return next;
+                        })
+                      }
+                      className={`min-w-[2rem] rounded-full border px-2 py-0.5 text-center ${
+                        on
+                          ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
+                          : "border-slate-700 bg-slate-950 text-slate-300 hover:border-emerald-400"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+                <label className="flex items-center gap-2">
+                  <span className="text-slate-300">시작 시간</span>
+                  <input
+                    type="time"
+                    value={timeStart}
+                    onChange={(e) => setTimeStart(e.target.value)}
+                    className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                  />
+                </label>
+                <label className="flex items-center gap-2">
+                  <span className="text-slate-300">종료 시간</span>
+                  <input
+                    type="time"
+                    value={timeEnd}
+                    onChange={(e) => setTimeEnd(e.target.value)}
+                    className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                  />
+                </label>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-[11px] text-slate-500">
+                단일 과제입니다. 평가가 이루어질 날짜와 시간대를 선택하세요.
+              </p>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <label className="flex items-center gap-2">
+                  <span className="text-slate-300">일자</span>
+                  <input
+                    type="date"
+                    value={singleDate}
+                    onChange={(e) => setSingleDate(e.target.value)}
+                    className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                  />
+                </label>
+                <label className="flex items-center gap-2">
+                  <span className="text-slate-300">시작 시간</span>
+                  <input
+                    type="time"
+                    value={timeStart}
+                    onChange={(e) => setTimeStart(e.target.value)}
+                    className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                  />
+                </label>
+                <label className="flex items-center gap-2">
+                  <span className="text-slate-300">종료 시간</span>
+                  <input
+                    type="time"
+                    value={timeEnd}
+                    onChange={(e) => setTimeEnd(e.target.value)}
+                    className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                  />
+                </label>
+              </div>
+            </>
+          )}
         </section>
 
         {/* ② 과제 기본 정보 + 분류 */}
@@ -986,22 +1492,23 @@ export default function CoachTasksPage() {
           </div>
         </section>
 
-        {/* ⑤ 선수 지정 (참고용 목록) */}
+        {/* ⑤ 연습/경기 엔트리(선수 지정) */}
         <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
           <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
             <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            선수 지정
+            연습·경기 엔트리
           </div>
           <p className="text-[11px] text-slate-500">
-            이 과제가 적용될 선수들을 선택합니다. 실제 저장은 과제 상세 정보(`players`)에 남고, 대표 대상 한 명은 아래 팀/선수 대상에서 선택됩니다.
+            이 과제가 적용될 선수들을 선택합니다. 현재 선택된 팀(또는 선수 소속 팀)의 선수만
+            엔트리 후보로 표시되며, 실제 저장은 과제 상세 정보(`players`)에 남습니다.
           </p>
           <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-400">
             <span>
-              전체 선수 수: {players.length}명 / 선택: {selectedPlayerIds.size}명
+              엔트리 후보: {entryCandidatePlayers.length}명 / 선택: {selectedPlayerIds.size}명
             </span>
           </div>
           <div className="mt-2 grid max-h-60 grid-cols-2 gap-2 overflow-y-auto md:grid-cols-3">
-            {players.map((p) => {
+            {entryCandidatePlayers.map((p) => {
               const on = selectedPlayerIds.has(p.id);
               return (
                 <button
@@ -1128,7 +1635,14 @@ export default function CoachTasksPage() {
         </section>
 
         {/* 하단 버튼 */}
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setShowLoadFromTaskModal(true)}
+            className="rounded-lg border border-slate-500 px-4 py-2 text-xs text-slate-300 hover:bg-slate-800"
+          >
+            이전 과제에서 불러오기
+          </button>
           <button
             type="button"
             onClick={resetForm}
@@ -1155,6 +1669,61 @@ export default function CoachTasksPage() {
           </button>
         </div>
       </form>
+
+      {/* 이전 과제 불러오기 모달 */}
+      {showLoadFromTaskModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setShowLoadFromTaskModal(false)}
+        >
+          <div
+            className="max-h-[80vh] w-full max-w-lg overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-slate-700 p-4">
+              <h3 className="text-lg font-semibold text-slate-50">이전 과제에서 불러오기</h3>
+              <p className="mt-1 text-xs text-slate-400">
+                선택한 과제의 제목·분류·세부·목표·일정·포지션·선수·평가자 설정이 폼에 채워집니다. 수정 후 새로 등록하면 됩니다.
+              </p>
+            </div>
+            <div className="max-h-[50vh] overflow-y-auto p-2">
+              {tasks.length === 0 ? (
+                <p className="p-4 text-center text-sm text-slate-500">등록된 과제가 없습니다.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {tasks.map((task) => (
+                    <li key={task.id}>
+                      <button
+                        type="button"
+                        onClick={() => loadFromTask(task)}
+                        className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2.5 text-left text-sm hover:bg-slate-700/60"
+                      >
+                        <span className="font-medium text-slate-100">{task.title}</span>
+                        <span className="ml-2 text-xs text-slate-500">
+                          {task.dueDate
+                            ? String(task.dueDate).slice(0, 10)
+                            : "—"}
+                          {" · "}
+                          {task.category}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="border-t border-slate-700 p-3 text-right">
+              <button
+                type="button"
+                onClick={() => setShowLoadFromTaskModal(false)}
+                className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 과제 상세 모달 */}
       {selectedTaskForModal && (
@@ -1350,6 +1919,95 @@ export default function CoachTasksPage() {
                   </div>
                 )}
               </div>
+
+              {/* 선수별 진행도 */}
+              {(() => {
+                const task = selectedTaskForModal;
+                const playerIds: string[] =
+                  task.details?.players && task.details.players.length > 0
+                    ? task.details.players
+                    : task.teamId
+                      ? players.filter((p) => p.teamId === task.teamId).map((p) => p.id)
+                      : task.playerId
+                        ? [task.playerId]
+                        : [];
+                if (playerIds.length === 0) return null;
+                return (
+                  <div>
+                    <div className="mb-2 text-xs text-slate-400">선수별 진행도</div>
+                    <div className="rounded-lg border border-slate-700 bg-slate-900/80 overflow-hidden">
+                      <table className="w-full text-left text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-700 bg-slate-800/60">
+                            <th className="px-3 py-2 text-slate-400 font-medium">선수</th>
+                            <th className="px-3 py-2 text-slate-400 font-medium w-24">완료</th>
+                            <th className="px-3 py-2 text-slate-400 font-medium">메모</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {playerIds.map((pid) => {
+                            const player = players.find((p) => p.id === pid);
+                            const prog = taskProgressList.find((p) => p.playerId === pid);
+                            const completed = prog?.completed ?? false;
+                            const note = prog?.note ?? "";
+                            const isSaving = progressSaving === pid;
+                            return (
+                              <tr key={pid} className="border-b border-slate-700/80 last:border-0">
+                                <td className="px-3 py-2 text-slate-100">
+                                  {player?.name ?? pid}
+                                  {player?.position && (
+                                    <span className="ml-1 text-xs text-slate-500">{player.position}</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={completed}
+                                    onChange={(e) =>
+                                      saveTaskProgress(pid, e.target.checked, note)
+                                    }
+                                    disabled={isSaving}
+                                    className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-emerald-500"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="text"
+                                    value={note}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setTaskProgressList((prev) => {
+                                        const rest = prev.filter((p) => p.playerId !== pid);
+                                        const next: TaskProgress = prog
+                                          ? { ...prog, note: v }
+                                          : {
+                                              id: "",
+                                              taskId: task.id,
+                                              playerId: pid,
+                                              completed: false,
+                                              note: v,
+                                            };
+                                        return [...rest, next];
+                                      });
+                                    }}
+                                    onBlur={(e) => {
+                                      const v = e.target.value.trim();
+                                      if (v !== (prog?.note ?? "")) saveTaskProgress(pid, completed, v);
+                                    }}
+                                    placeholder="메모"
+                                    disabled={isSaving}
+                                    className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500"
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="mt-5 flex justify-end gap-2">
@@ -1389,7 +2047,7 @@ export default function CoachTasksPage() {
               <th className="px-4 py-2 text-left">대상(팀/선수)</th>
               <th className="px-4 py-2 text-left">카테고리</th>
               <th className="px-4 py-2 text-left">마감일</th>
-              <th className="px-4 py-2 text-right">상태</th>
+            <th className="px-4 py-2 text-right">진행 / 평가 요약</th>
             </tr>
           </thead>
           <tbody>
@@ -1431,6 +2089,73 @@ export default function CoachTasksPage() {
                     </td>
                     <td className="px-4 py-2 text-slate-300">
                       {task.dueDate ?? "-"}
+                    </td>
+                    <td className="px-4 py-2 text-xs text-slate-200">
+                      {(() => {
+                        const s = taskSummaries[task.id];
+                        if (!s) return <span className="text-slate-500">요약 계산 중…</span>;
+                        const rate =
+                          s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0;
+                        const safeU = Math.max(0, Math.min(100, s.understanding));
+                        const safeA = Math.max(0, Math.min(100, s.achievement));
+                        const safeE = Math.max(0, Math.min(100, s.evaluation));
+                        return (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="text-slate-300">
+                                완료 {s.completed}/{s.total}
+                              </span>
+                              <span className="font-semibold text-emerald-400">
+                                {rate}%
+                              </span>
+                            </div>
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500"
+                                style={{ width: `${rate}%` }}
+                              />
+                            </div>
+                            <div className="mt-1 grid grid-cols-3 gap-2 text-[10px] text-slate-300">
+                              <div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400">이해</span>
+                                  <span>{safeU.toFixed(1)}%</span>
+                                </div>
+                                <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-slate-800">
+                                  <div
+                                    className="h-full rounded-full bg-emerald-400/90"
+                                    style={{ width: `${safeU}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400">달성</span>
+                                  <span>{safeA.toFixed(1)}%</span>
+                                </div>
+                                <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-slate-800">
+                                  <div
+                                    className="h-full rounded-full bg-emerald-500"
+                                    style={{ width: `${safeA}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400">코치</span>
+                                  <span>{safeE.toFixed(1)}%</span>
+                                </div>
+                                <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-slate-800">
+                                  <div
+                                    className="h-full rounded-full bg-sky-500"
+                                    style={{ width: `${safeE}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-2 text-right text-xs space-x-2">
                       <button

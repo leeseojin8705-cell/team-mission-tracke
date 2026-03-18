@@ -1,12 +1,48 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/session";
+import { getAccessibleTeamIds } from "@/lib/coachAccess";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const teamId = searchParams.get("teamId");
+  const session = await getSession();
+
+  let where: { teamId?: string | { in: string[] } } = {};
+
+  if (session && session.role === "coach") {
+    const ids = await getAccessibleTeamIds(session);
+    if (teamId) {
+      if (!ids.includes(teamId)) {
+        return NextResponse.json([]);
+      }
+      where.teamId = teamId;
+    } else {
+      where.teamId = { in: ids };
+    }
+  } else if (teamId) {
+    where.teamId = teamId;
+  }
+
   const players = await prisma.player.findMany({
-    where: teamId ? { teamId } : undefined,
+    where,
     orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      teamId: true,
+      position: true,
+      height: true,
+      weight: true,
+      dateOfBirth: true,
+      gender: true,
+      photo: true,
+      phone: true,
+      parentPhone: true,
+      address: true,
+      school: true,
+      loginId: true,
+    },
   });
   return NextResponse.json(players);
 }

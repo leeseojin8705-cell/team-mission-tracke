@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import type { StatCategory, StatDefinition, TeamStaff } from "@/lib/types";
+import { aggregatePhaseScores, getImprovement, getTaskScores } from "@/lib/taskScore";
 import { DEFAULT_STAT_DEFINITION, formatCategoryValue, getWeightedOverall, isMeasurementCategory } from "@/lib/statDefinition";
 
 const RADAR_SIZE = 280;
@@ -92,14 +93,37 @@ function TaskScoreBar({ label, score }: { label: string; score: number }) {
   );
 }
 
+type PlayerSnapshot = {
+  id: string;
+  name: string;
+  periodPreset: "all" | "30d" | "custom";
+  dateFrom: string;
+  dateTo: string;
+  createdAt: string;
+};
+
 function StatsContent() {
   const searchParams = useSearchParams();
   const playerId = searchParams.get("playerId") ?? "";
 
-  const [evaluations, setEvaluations] = useState<{ evaluatorStaffId: string; scores: Record<string, number[]> }[]>([]);
+  const [evaluations, setEvaluations] = useState<
+    {
+      evaluatorStaffId: string;
+      phase?: string | null;
+      scores: Record<string, number[]>;
+      createdAt?: string | null;
+    }[]
+  >([]);
   const [staffMap, setStaffMap] = useState<Record<string, TeamStaff>>({});
   const [def, setDef] = useState<StatDefinition>(DEFAULT_STAT_DEFINITION);
   const [loading, setLoading] = useState(!!playerId);
+  const [periodPreset, setPeriodPreset] = useState<"all" | "30d" | "custom">("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [compareFrom, setCompareFrom] = useState("");
+  const [compareTo, setCompareTo] = useState("");
+  const [showCompare, setShowCompare] = useState(false);
+  const [snapshots, setSnapshots] = useState<PlayerSnapshot[]>([]);
 
   useEffect(() => {
     if (!playerId) {
@@ -118,7 +142,18 @@ function StatsContent() {
       }
     };
     fetch(`/api/players/${playerId}/evaluations`)
-      .then((r) => safeJson(r, [] as { teamId?: string; evaluatorStaffId: string; scores: Record<string, number[]> }[]))
+      .then((r) =>
+        safeJson(
+          r,
+          [] as {
+            teamId?: string;
+            evaluatorStaffId: string;
+            phase?: string | null;
+            scores: Record<string, number[]>;
+            createdAt?: string | null;
+          }[],
+        ),
+      )
       .then((list) => {
         if (cancelled) return;
         const evals = Array.isArray(list) ? list : [];
@@ -152,13 +187,68 @@ function StatsContent() {
     return () => { cancelled = true; };
   }, [playerId]);
 
+  const filteredEvaluations = useMemo(() => {
+    if (periodPreset === "all") return evaluations;
+
+    const now = new Date();
+    let from: Date | null = null;
+    let to: Date | null = null;
+
+    if (periodPreset === "30d") {
+      to = now;
+      from = new Date(now);
+      from.setDate(from.getDate() - 30);
+    } else {
+      if (dateFrom) {
+        const f = new Date(dateFrom);
+        if (!Number.isNaN(f.getTime())) {
+          f.setHours(0, 0, 0, 0);
+          from = f;
+        }
+      }
+      if (dateTo) {
+        const t = new Date(dateTo);
+        if (!Number.isNaN(t.getTime())) {
+          t.setHours(23, 59, 59, 999);
+          to = t;
+        }
+      }
+    }
+
+    return evaluations.filter((e) => {
+      const raw = e.createdAt ?? null;
+      if (!raw) return true;
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return true;
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    });
+  }, [evaluations, periodPreset, dateFrom, dateTo]);
+
+  const compareEvaluations = useMemo(() => {
+    if (!showCompare || !compareFrom || !compareTo) return [];
+    const from = new Date(compareFrom);
+    const to = new Date(compareTo);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return [];
+    from.setHours(0, 0, 0, 0);
+    to.setHours(23, 59, 59, 999);
+    return evaluations.filter((e) => {
+      const raw = e.createdAt ?? null;
+      if (!raw) return false;
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return false;
+      return d >= from && d <= to;
+    });
+  }, [evaluations, showCompare, compareFrom, compareTo]);
+
   const aggregated = useMemo(() => {
-    if (evaluations.length === 0) return null;
+    if (filteredEvaluations.length === 0) return null;
     const byCat: Record<string, { sum: number; count: number }> = {};
     def.categories.forEach((c) => {
       byCat[c.id] = { sum: 0, count: 0 };
     });
-    evaluations.forEach((e) => {
+    filteredEvaluations.forEach((e) => {
       def.categories.forEach((c) => {
         const arr = e.scores[c.id];
         if (Array.isArray(arr) && arr.length > 0) {
@@ -176,7 +266,107 @@ function StatsContent() {
     });
     result._overall = getWeightedOverall(result, def);
     return result;
-  }, [evaluations, def]);
+  }, [filteredEvaluations, def]);
+
+  const phaseAggregated = useMemo(
+    () =>
+      aggregatePhaseScores(
+        filteredEvaluations.map((e) => ({
+          subjectPlayerId: playerId,
+          phase: e.phase,
+          scores: e.scores,
+        })),
+        def.categories.map((c) => c.id),
+      ),
+    [filteredEvaluations, playerId, def.categories],
+  );
+  const taskTriple = useMemo(
+    () => getTaskScores(phaseAggregated, playerId),
+    [phaseAggregated, playerId],
+  );
+
+  const compareAggregated = useMemo(() => {
+    if (compareEvaluations.length === 0) return null;
+    const byCat: Record<string, { sum: number; count: number }> = {};
+    def.categories.forEach((c) => {
+      byCat[c.id] = { sum: 0, count: 0 };
+    });
+    compareEvaluations.forEach((e) => {
+      def.categories.forEach((c) => {
+        const arr = e.scores[c.id];
+        if (Array.isArray(arr) && arr.length > 0) {
+          const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+          byCat[c.id].sum += avg;
+          byCat[c.id].count += 1;
+        }
+      });
+    });
+    const result: Record<string, number> = {};
+    def.categories.forEach((c) => {
+      const d = byCat[c.id];
+      const avg = d.count ? d.sum / d.count : 0;
+      result[c.id] = Math.round(avg * 10) / 10;
+    });
+    result._overall = getWeightedOverall(result, def);
+    return result;
+  }, [compareEvaluations, def]);
+
+  // 스냅샷 불러오기/저장
+  useEffect(() => {
+    if (!playerId) return;
+    try {
+      const raw =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem(`tmt:player-stats-snapshots:${playerId}`)
+          : null;
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as PlayerSnapshot[];
+      if (Array.isArray(parsed)) setSnapshots(parsed);
+    } catch {
+      // ignore
+    }
+  }, [playerId]);
+
+  const handleSaveSnapshot = () => {
+    if (!playerId) return;
+    const id = `${Date.now()}`;
+    const now = new Date();
+    const nameParts: string[] = [];
+    if (periodPreset === "all") nameParts.push("전체");
+    else if (periodPreset === "30d") nameParts.push("최근 30일");
+    else nameParts.push("사용자 지정");
+    if (dateFrom) nameParts.push(dateFrom);
+    if (dateTo) nameParts.push(`~ ${dateTo}`);
+    const name = nameParts.join(" ") || "스냅샷";
+    const snap: PlayerSnapshot = {
+      id,
+      name,
+      periodPreset,
+      dateFrom,
+      dateTo,
+      createdAt: now.toISOString(),
+    };
+    setSnapshots((prev) => {
+      const next = [snap, ...prev].slice(0, 8);
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(
+            `tmt:player-stats-snapshots:${playerId}`,
+            JSON.stringify(next),
+          );
+        }
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const handleApplySnapshot = (snap: PlayerSnapshot) => {
+    setPeriodPreset(snap.periodPreset);
+    setDateFrom(snap.dateFrom);
+    setDateTo(snap.dateTo);
+  };
 
   const strengthsWeaknesses = useMemo(() => {
     if (!aggregated || def.categories.length === 0) return { strengths: [], weaknesses: [] };
@@ -208,10 +398,88 @@ function StatsContent() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold text-slate-100">내 스탯</h2>
-        <div className="flex gap-2">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold text-slate-100">내 스탯</h2>
+          <p className="text-xs text-slate-400">
+            선수가 받은 코치 평가와 자기평가를 기간별로 모아 볼 수 있습니다.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+              <div className="flex items-center gap-1">
+                <span>기준 기간</span>
+                <select
+                  value={periodPreset}
+                  onChange={(e) =>
+                    setPeriodPreset(e.target.value as "all" | "30d" | "custom")
+                  }
+                  className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-emerald-400"
+                >
+                  <option value="all">전체</option>
+                  <option value="30d">최근 30일</option>
+                  <option value="custom">직접 선택</option>
+                </select>
+                {periodPreset === "custom" && (
+                  <>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-emerald-400"
+                    />
+                    <span>~</span>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-emerald-400"
+                    />
+                  </>
+                )}
+              </div>
+              <div className="h-4 w-px bg-slate-700/60" />
+              <div className="flex items-center gap-1">
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={showCompare}
+                    onChange={(e) => setShowCompare(e.target.checked)}
+                    className="h-3 w-3 rounded border-slate-600 bg-slate-900"
+                  />
+                  <span>비교 기간</span>
+                </label>
+                {showCompare && (
+                  <>
+                    <input
+                      type="date"
+                      value={compareFrom}
+                      onChange={(e) => setCompareFrom(e.target.value)}
+                      className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-emerald-400"
+                    />
+                    <span>~</span>
+                    <input
+                      type="date"
+                      value={compareTo}
+                      onChange={(e) => setCompareTo(e.target.value)}
+                      className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-emerald-400"
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleSaveSnapshot}
+              className="rounded-full border border-slate-600 px-2.5 py-1 text-[11px] text-slate-200 hover:border-emerald-500 hover:text-emerald-300"
+            >
+              현재 설정 스냅샷 저장
+            </button>
           <Link
-            href={playerId ? `/player/self-evaluate?playerId=${encodeURIComponent(playerId)}` : "/player"}
+            href={
+              playerId
+                ? `/player/self-evaluate?playerId=${encodeURIComponent(playerId)}`
+                : "/player"
+            }
             className="rounded-lg border border-emerald-600/70 bg-emerald-900/30 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-800/40"
           >
             자기평가
@@ -224,7 +492,33 @@ function StatsContent() {
           </Link>
         </div>
       </div>
-      <p className="text-xs text-slate-400">선수는 스탯 조회와 자기평가만 가능합니다. 코치 평가·측정 입력은 코치 화면에서만 가능합니다.</p>
+      <p className="text-xs text-slate-400">
+        코치 평가·측정 입력은 코치 화면에서만 가능합니다.
+      </p>
+
+      {snapshots.length > 0 && (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 text-[11px] text-slate-300">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="font-semibold text-slate-200">저장된 스냅샷</span>
+            <span className="text-slate-500">최대 8개까지 저장됩니다.</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {snapshots.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => handleApplySnapshot(s)}
+                className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-left hover:border-emerald-500 hover:text-emerald-300"
+              >
+                <span className="font-medium">{s.name}</span>
+                <span className="ml-1 text-slate-500">
+                  ({s.createdAt.slice(0, 10)})
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {evaluations.length === 0 ? (
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-center">
@@ -233,16 +527,58 @@ function StatsContent() {
       ) : (
         <>
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-            <p className="mb-2 text-xs text-slate-400">평가 반영: {evaluations.length}건</p>
+            <p className="mb-2 text-xs text-slate-400">
+              평가 반영: {filteredEvaluations.length}건 / 전체 {evaluations.length}건
+            </p>
             <p className="text-2xl font-bold text-emerald-400">
               전체 평균 {aggregated?._overall?.toFixed(1) ?? "-"}점
             </p>
+            {showCompare && compareAggregated && (
+              <p className="mt-1 text-xs text-slate-400">
+                비교 기간 평균: {compareAggregated._overall?.toFixed(1) ?? "-"}점 (
+                <span
+                  className={
+                    aggregated && compareAggregated._overall != null
+                      ? aggregated._overall - compareAggregated._overall > 0
+                        ? "text-emerald-400"
+                        : aggregated._overall - compareAggregated._overall < 0
+                          ? "text-rose-400"
+                          : "text-slate-300"
+                      : "text-slate-300"
+                  }
+                >
+                  {aggregated && compareAggregated._overall != null
+                    ? `${
+                        aggregated._overall - compareAggregated._overall > 0 ? "+" : ""
+                      }${(aggregated._overall - compareAggregated._overall).toFixed(1)}`
+                    : "±0.0"}
+                </span>
+                )
+              </p>
+            )}
             {aggregated?._overall != null && (
-              <div className="mt-3">
-                <TaskScoreBar
-                  label="과제 평가 점수"
-                  score={Math.max(0, Math.min(100, ((aggregated._overall as number) / 5) * 100))}
-                />
+              <div className="mt-3 space-y-2">
+                <TaskScoreBar label="이해 (선수 사전)" score={taskTriple.understanding} />
+                <TaskScoreBar label="달성 (선수 사후)" score={taskTriple.achievement} />
+                {(() => {
+                  const improvement = getImprovement(phaseAggregated, playerId);
+                  return improvement != null ? (
+                    <div className="flex items-center justify-between text-[11px] text-slate-300">
+                      <span>개선 (달성−이해)</span>
+                      <span
+                        className={
+                          improvement >= 0
+                            ? "font-semibold text-emerald-400"
+                            : "font-semibold text-amber-400"
+                        }
+                      >
+                        {improvement >= 0 ? "+" : ""}
+                        {improvement.toFixed(0)}점
+                      </span>
+                    </div>
+                  ) : null;
+                })()}
+                <TaskScoreBar label="평가 (코치 사후)" score={taskTriple.evaluation || Math.max(0, Math.min(100, ((aggregated._overall as number) / 5) * 100))} />
               </div>
             )}
           </div>

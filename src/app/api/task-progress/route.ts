@@ -4,10 +4,18 @@ import { prisma } from "@/lib/prisma";
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const playerId = searchParams.get("playerId");
+  const taskId = searchParams.get("taskId");
+
+  if (taskId) {
+    const items = await prisma.taskProgress.findMany({
+      where: { taskId },
+    });
+    return NextResponse.json(items);
+  }
 
   if (!playerId) {
     return NextResponse.json(
-      { error: "playerId는 필수입니다." },
+      { error: "playerId 또는 taskId 중 하나는 필수입니다." },
       { status: 400 },
     );
   }

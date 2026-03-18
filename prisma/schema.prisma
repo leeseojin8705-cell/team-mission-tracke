@@ -9,15 +9,35 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String   // "owner" | "coach"
+  createdAt    DateTime @default(now())
+  organizations Organization[] @relation("OwnerOrganizations")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  owner     User     @relation("OwnerOrganizations", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId   String
+  teams     Team[]
+  createdAt DateTime @default(now())
 }
 
 model Team {
-  id             String            @id @default(cuid())
+  id             String             @id @default(cuid())
   name           String
   season         String
-  organization   String?           // JSON: { front: string[], coaching: string[], player: string[] } 팀 조직 직책
-  statDefinition String?           // JSON: 스탯 평가 카테고리/항목 정의
+  organization   String? // JSON: { front: string[], coaching: string[], player: string[] } 팀 조직 직책
+  statDefinition String? // JSON: 스탯 평가 카테고리/항목 정의
+  organizationRef Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
   players        Player[]
   schedules      Schedule[]
   tasks          Task[]
@@ -25,77 +45,125 @@ model Team {
   staff          TeamStaff[]
   staffEvals     StaffEvaluation[]
   playerEvals    PlayerEvaluation[]
+  announcements  Announcement[]
 }
 
 model StaffEvaluation {
   id               String   @id @default(cuid())
   teamId           String
-  evaluatorStaffId String   // 평가한 지도진(코치) ID
-  subjectStaffId   String   // 평가 대상 스태프 ID
-  scores           String   // JSON: { categoryId: number[] } 항목별 1~5 점수
+  evaluatorStaffId String // 평가한 지도진(코치) ID
+  subjectStaffId   String // 평가 대상 스태프 ID
+  scores           String // JSON: { categoryId: number[] } 항목별 1~5 점수
   createdAt        DateTime @default(now())
   team             Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 }
 
 model TeamStaff {
-  id        String   @id @default(cuid())
-  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  teamId    String
-  role      String   // 조직에 저장된 직책명 (프론트·코칭)
-  name      String
-  phone     String?
-  email     String?
-  guidance  Boolean? @default(false) // 지도 여부
+  id       String   @id @default(cuid())
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId   String
+  role     String // 조직에 저장된 직책명 (프론트·코칭)
+  name     String
+  phone    String?
+  email    String?
+  guidance Boolean? @default(false) // 지도 여부
+  userId   String?  // 연결된 User(코치) ID
+}
+
+enum EvalPhase {
+  PLAYER_PRE // 선수 사전 평가
+  PLAYER_POST // 선수 사후 평가
+  COACH_POST // 코치 사후 평가
 }
 
 model PlayerEvaluation {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   teamId           String
-  evaluatorStaffId String   // 평가한 지도진(코치) ID
-  subjectPlayerId  String   // 평가 대상 선수 ID
-  scores           String   // JSON: { categoryId: number[] } 항목별 1~5 점수
-  createdAt        DateTime @default(now())
-  team             Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  evaluatorStaffId String // 평가한 지도진(코치) ID
+  subjectPlayerId  String // 평가 대상 선수 ID
+  phase            EvalPhase @default(COACH_POST)
+  scores           String // JSON: { categoryId: number[] } 항목별 1~5 점수
+  createdAt        DateTime  @default(now())
+  taskId           String? // 어느 과제(Task)에 대한 평가인지 (없으면 일반 평가)
+  team             Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
 }
 
 model Player {
-  id            String         @id @default(cuid())
-  name          String
-  team          Team           @relation(fields: [teamId], references: [id])
-  teamId        String
-  position      String?
-  height        String?        // 키 (예: 180, 180cm)
-  weight        String?        // 체중 (예: 70, 70kg)
-  dateOfBirth   String?        // 생년월일 (예: 2000-01-15)
-  gender        String?        // 성별 (예: M/F, 남/여)
-  photo         String?        // 사진 URL
-  phone         String?        // 전화번호
-  tasks         Task[]         @relation("PlayerTasks")
-  taskProgress  TaskProgress[]
+  id               String            @id @default(cuid())
+  name             String
+  team             Team              @relation(fields: [teamId], references: [id])
+  teamId           String
+  position         String?
+  height           String? // 키 (예: 180, 180cm)
+  weight           String? // 체중 (예: 70, 70kg)
+  dateOfBirth      String? // 생년월일 (예: 2000-01-15)
+  gender           String? // 성별 (예: M/F, 남/여)
+  photo            String? // 사진 URL
+  phone            String? // 전화번호
+  parentPhone      String? // 학부모 전화번호
+  address          String? // 주소
+  school           String? // 학교/소속
+  loginId          String?           @unique // 개인 번호/로그인 ID (관리자 부여)
+  passwordHash     String? // bcrypt 해시 (관리자 설정)
+  tasks            Task[]            @relation("PlayerTasks")
+  taskProgress     TaskProgress[]
+  scheduleAbsences ScheduleAbsence[]
+  matchRecords     PlayerMatchRecord[]
 }
 
 model Schedule {
-  id         String          @id @default(cuid())
-  title      String
-  date       DateTime
-  team       Team            @relation(fields: [teamId], references: [id])
-  teamId     String
-  analyses   MatchAnalysis[]
+  id       String            @id @default(cuid())
+  title    String
+  date     DateTime
+  team     Team              @relation(fields: [teamId], references: [id])
+  teamId   String
+  analyses MatchAnalysis[]
+  absences ScheduleAbsence[]
+}
+
+model ScheduleAbsence {
+  id         String   @id @default(cuid())
+  schedule   Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId String
+  player     Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId   String
+  reasons    String // JSON: string[] 불참 사유 코드 목록
+  reasonText String? // 추가 사유 텍스트
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([scheduleId, playerId])
 }
 
 model MatchAnalysis {
-  id         String    @id @default(cuid())
-  schedule   Schedule? @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
-  scheduleId String?
-  team       Team?     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  teamId     String?
-  opponent   String?   // 상대 팀명 (기존 호환)
-  matchDate  DateTime? // 날짜 (저장 시 입력)
-  matchName  String?   // 이름 (경기명/상대)
-  result       String?   // 결과 (예: 2-1 승)
-  events       String    // JSON: 코치가 기록한 { atk: [], def: [], pass: [], gk: [] }
-  playerEvents String?   // JSON: 선수별 제출 { [playerId]: { atk, def, pass, gk } }
+  id           String    @id @default(cuid())
+  schedule     Schedule? @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId   String?
+  team         Team?     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId       String?
+  opponent     String? // 상대 팀명 (기존 호환)
+  matchDate    DateTime? // 날짜 (저장 시 입력)
+  matchName    String? // 이름 (경기명/상대)
+  result       String? // 결과 (예: 2-1 승)
+  events       String // JSON: 코치가 기록한 { atk: [], def: [], pass: [], gk: [] }
+  playerEvents String? // JSON: 선수별 제출 { [playerId]: { atk, def, pass, gk } }
   updatedAt    DateTime  @updatedAt
+  playerRecords PlayerMatchRecord[]
+}
+
+model PlayerMatchRecord {
+  id              String         @id @default(cuid())
+  player          Player         @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId        String
+  matchAnalysis   MatchAnalysis? @relation(fields: [matchAnalysisId], references: [id], onDelete: Cascade)
+  matchAnalysisId String?
+  goals           Int            @default(0)
+  assists         Int            @default(0)
+  starterType     String? // "starter" | "sub"
+  injured         Boolean        @default(false)
+  matchResult     String? // "win" | "draw" | "loss"
+  events          String? // JSON: { atk, def, pass, gk }
+  createdAt       DateTime       @default(now())
 }
 
 enum TaskCategory {
@@ -106,27 +174,67 @@ enum TaskCategory {
 }
 
 model Task {
-  id            String         @id @default(cuid())
-  title         String
-  category      TaskCategory
-  dueDate       DateTime?
-  details       String?        // JSON: 과제 내부 항목들 { htmlTaskType, htmlCategory, contents, goal, weekdays, ... }
-  team          Team?          @relation(fields: [teamId], references: [id])
-  teamId        String?
-  player        Player?        @relation("PlayerTasks", fields: [playerId], references: [id])
-  playerId      String?
-  taskProgress  TaskProgress[]
+  id           String         @id @default(cuid())
+  title        String
+  category     TaskCategory
+  dueDate      DateTime?
+  details      String? // JSON: 과제 내부 항목들 { htmlTaskType, htmlCategory, contents, goal, weekdays, ... }
+  team         Team?          @relation(fields: [teamId], references: [id])
+  teamId       String?
+  player       Player?        @relation("PlayerTasks", fields: [playerId], references: [id])
+  playerId     String?
+  taskProgress TaskProgress[]
 }
 
 model TaskProgress {
-  id        String  @id @default(cuid())
-  task      Task    @relation(fields: [taskId], references: [id])
+  id        String   @id @default(cuid())
+  task      Task     @relation(fields: [taskId], references: [id])
   taskId    String
-  player    Player  @relation(fields: [playerId], references: [id])
+  player    Player   @relation(fields: [playerId], references: [id])
   playerId  String
-  completed Boolean @default(false)
-  note      String? @default("")
+  completed Boolean  @default(false)
+  note      String?  @default("")
   updatedAt DateTime @updatedAt
 
   @@unique([taskId, playerId])
+}
+
+enum AnnouncementCategory {
+  DAILY // 일상 등록 (게시판)
+  SCHEDULE // 일정 등록 (캘린더)
+}
+
+enum AnnouncementType {
+  GAME // 경기
+  PRACTICE // 연습
+  REST // 휴식
+  EDUCATION // 교육
+  OFFICIAL // 공식
+  OTHER // 기타
+}
+
+model Announcement {
+  id        String               @id @default(cuid())
+  team      Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId    String
+  category  AnnouncementCategory // 일상 등록 / 일정 등록
+  type      AnnouncementType // 경기/연습/휴식/교육/공식/기타
+  title     String
+  content   String? // 공지 내용
+  startAt   DateTime // 시작일시 (하루 선택 시에도 사용)
+  endAt     DateTime? // 종료일시 (기간 선택 시)
+  target    String? // JSON: 공지 대상
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+}
+
+model CoachInvitation {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  email     String?
+  roleLabel String   // 예: "coach", "staff"
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId    String?
+  createdAt DateTime @default(now())
+  usedAt    DateTime?
 }

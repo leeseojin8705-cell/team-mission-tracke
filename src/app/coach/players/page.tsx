@@ -11,6 +11,22 @@ const RADAR_CX = RADAR_SIZE / 2;
 const RADAR_CY = RADAR_SIZE / 2;
 const RADAR_R = (RADAR_SIZE / 2) * 0.85;
 
+function generatePlayerLoginId(name: string, index: number): string {
+  const base = name.replace(/\s+/g, "").slice(0, 3).toUpperCase() || "P";
+  const num = String(100 + (index % 900));
+  return `${base}${num}`;
+}
+
+function generatePlayerPassword(): string {
+  const digits = "0123456789";
+  let out = "";
+  for (let i = 0; i < 6; i += 1) {
+    const idx = Math.floor(Math.random() * digits.length);
+    out += digits[idx];
+  }
+  return out;
+}
+
 function StackRadarChart({ categories, values }: { categories: StatCategory[]; values: Record<string, number> }) {
   const n = categories.length;
   if (n === 0) return null;
@@ -68,6 +84,8 @@ export default function CoachPlayersPage() {
   const playerFormRef = useRef<HTMLFormElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterTeamId, setFilterTeamId] = useState<string>("all");
+  const [playerSearchQuery, setPlayerSearchQuery] = useState("");
+  const [playerSortOrder, setPlayerSortOrder] = useState<"name" | "team">("name");
   const [name, setName] = useState("");
   const [teamId, setTeamId] = useState("");
   const [position, setPosition] = useState("");
@@ -82,6 +100,11 @@ export default function CoachPlayersPage() {
   const [profileForm, setProfileForm] = useState({ name: "", position: "", height: "", weight: "", dateOfBirth: "", gender: "", photo: "", phone: "" });
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [credentialLoginId, setCredentialLoginId] = useState("");
+  const [credentialPassword, setCredentialPassword] = useState("");
+  const [credentialsSaving, setCredentialsSaving] = useState(false);
+  const [credentialsError, setCredentialsError] = useState<string | null>(null);
+  const [lastCreatedCredential, setLastCreatedCredential] = useState<{ playerName: string; loginId: string; password: string } | null>(null);
 
   const teamOptions = useMemo(
     () => teams.map((t) => ({ id: t.id, name: t.name })),
@@ -101,18 +124,17 @@ export default function CoachPlayersPage() {
           fetch("/api/players"),
         ]);
 
-        if (!teamsRes.ok || !playersRes.ok) {
-          throw new Error("데이터를 불러오지 못했습니다.");
-        }
-
-        const [teamsData, playersData]: [Team[], Player[]] =
-          await Promise.all([teamsRes.json(), playersRes.json()]);
+        const teamsData: Team[] = teamsRes.ok ? await teamsRes.json() : [];
+        const playersData: Player[] = playersRes.ok ? await playersRes.json() : [];
 
         if (!cancelled) {
           setTeams(teamsData);
           setPlayers(playersData);
           if (!teamId && teamsData[0]) {
             setTeamId(teamsData[0].id);
+          }
+          if (!teamsRes.ok || !playersRes.ok) {
+            setError("일부 데이터를 불러오지 못했습니다. 팀과 선수를 다시 확인해 주세요.");
           }
         }
       } catch (e) {
@@ -189,7 +211,29 @@ export default function CoachPlayersPage() {
         }
 
         const created: Player = await res.json();
-        setPlayers((prev) => [...prev, created]);
+
+        // 선수용 로그인 ID/임시 비밀번호 자동 생성
+        const loginId = generatePlayerLoginId(created.name ?? name, players.length);
+        const tempPassword = generatePlayerPassword();
+        try {
+          const credRes = await fetch(`/api/players/${created.id}/credentials`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ loginId, password: tempPassword }),
+          });
+          if (credRes.ok) {
+            setLastCreatedCredential({
+              playerName: created.name ?? name,
+              loginId,
+              password: tempPassword,
+            });
+            setPlayers((prev) => [...prev, { ...created, loginId }]);
+          } else {
+            setPlayers((prev) => [...prev, created]);
+          }
+        } catch {
+          setPlayers((prev) => [...prev, created]);
+        }
       }
 
       resetForm();
@@ -232,13 +276,30 @@ export default function CoachPlayersPage() {
     }
   }
 
-  const visiblePlayers = useMemo(
-    () =>
+  const visiblePlayers = useMemo(() => {
+    let list =
       filterTeamId === "all"
         ? players
-        : players.filter((p) => p.teamId === filterTeamId),
-    [players, filterTeamId],
-  );
+        : players.filter((p) => p.teamId === filterTeamId);
+    const q = playerSearchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (p) =>
+          (p.name ?? "").toLowerCase().includes(q) ||
+          (p.position ?? "").toLowerCase().includes(q),
+      );
+    }
+    const sorted = [...list].sort((a, b) => {
+      if (playerSortOrder === "team") {
+        const teamA = teams.find((t) => t.id === a.teamId)?.name ?? "";
+        const teamB = teams.find((t) => t.id === b.teamId)?.name ?? "";
+        const cmp = teamA.localeCompare(teamB, "ko");
+        if (cmp !== 0) return cmp;
+      }
+      return (a.name ?? "").localeCompare(b.name ?? "", "ko");
+    });
+    return sorted;
+  }, [players, filterTeamId, playerSearchQuery, playerSortOrder, teams]);
 
   useEffect(() => {
     if (!stackTeam) {
@@ -387,6 +448,9 @@ export default function CoachPlayersPage() {
       photo: profilePlayer.photo ?? "",
       phone: profilePlayer.phone ?? "",
     });
+    setCredentialLoginId(profilePlayer.loginId ?? "");
+    setCredentialPassword("");
+    setCredentialsError(null);
   }, [profilePlayer]);
 
   async function handleSaveProfile(e: FormEvent) {
@@ -399,34 +463,67 @@ export default function CoachPlayersPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: profileForm.name,
-          position: profileForm.position || null,
-          height: profileForm.height || null,
-          weight: profileForm.weight || null,
+          name: profileForm.name.trim() || profilePlayer.name,
+          position: profileForm.position?.trim() || null,
+          height: profileForm.height?.trim() || null,
+          weight: profileForm.weight?.trim() || null,
           dateOfBirth: profileForm.dateOfBirth || null,
           gender: profileForm.gender || null,
-          photo: profileForm.photo || null,
-          phone: profileForm.phone || null,
+          photo: profileForm.photo?.trim() || null,
+          phone: profileForm.phone?.trim() || null,
         }),
       });
+      const text = await res.text();
       if (!res.ok) {
-        const text = await res.text();
         let message = "저장에 실패했습니다.";
         try {
-          const data = JSON.parse(text) as { error?: string };
+          const data = text ? (JSON.parse(text) as { error?: string }) : {};
           if (data.error) message = data.error;
         } catch {
-          if (text) message = text;
+          if (text && text.length < 200) message = text;
         }
         throw new Error(message);
       }
-      const updated = (await res.json()) as Player;
-      setPlayers((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-      setProfilePlayer(null);
+      const updated = text ? (JSON.parse(text) as Player) : null;
+      if (updated) {
+        setPlayers((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        setProfilePlayer(null);
+      }
     } catch (err) {
       setProfileError(err instanceof Error ? err.message : "저장에 실패했습니다.");
     } finally {
       setProfileSaving(false);
+    }
+  }
+
+  async function handleSaveCredentials() {
+    if (!profilePlayer) return;
+    setCredentialsSaving(true);
+    setCredentialsError(null);
+    try {
+      const body: { loginId?: string; password?: string } = {};
+      if (credentialLoginId.trim() !== (profilePlayer.loginId ?? "")) body.loginId = credentialLoginId.trim();
+      if (credentialPassword.length > 0) body.password = credentialPassword;
+      if (Object.keys(body).length === 0) {
+        setCredentialsSaving(false);
+        return;
+      }
+      const res = await fetch(`/api/players/${profilePlayer.id}/credentials`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) {
+        throw new Error(data.error ?? "저장에 실패했습니다.");
+      }
+      setPlayers((prev) => prev.map((p) => (p.id === profilePlayer.id ? { ...p, loginId: body.loginId ?? p.loginId } : p)));
+      setProfilePlayer((prev) => prev ? { ...prev, loginId: body.loginId ?? prev.loginId } : null);
+      setCredentialPassword("");
+    } catch (err) {
+      setCredentialsError(err instanceof Error ? err.message : "저장에 실패했습니다.");
+    } finally {
+      setCredentialsSaving(false);
     }
   }
 
@@ -440,7 +537,7 @@ export default function CoachPlayersPage() {
       </header>
 
       <div className="flex items-center justify-between gap-3 text-xs text-slate-300 flex-wrap">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px]">팀 필터</span>
           <select
             value={filterTeamId}
@@ -453,6 +550,21 @@ export default function CoachPlayersPage() {
                 {t.name}
               </option>
             ))}
+          </select>
+          <input
+            type="text"
+            value={playerSearchQuery}
+            onChange={(e) => setPlayerSearchQuery(e.target.value)}
+            placeholder="이름·포지션 검색"
+            className="w-32 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400 placeholder:text-slate-500"
+          />
+          <select
+            value={playerSortOrder}
+            onChange={(e) => setPlayerSortOrder(e.target.value as "name" | "team")}
+            className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+          >
+            <option value="name">이름 순</option>
+            <option value="team">팀 순</option>
           </select>
         </div>
         <span className="text-[11px] text-slate-400">
@@ -541,8 +653,61 @@ export default function CoachPlayersPage() {
         </div>
       </form>
 
+      {lastCreatedCredential && (
+        <div className="mt-3 rounded-xl border border-emerald-700 bg-emerald-950/60 px-4 py-3 text-xs text-emerald-100 space-y-1">
+          <p className="font-semibold">
+            새 선수 로그인 정보 — {lastCreatedCredential.playerName}
+          </p>
+          <div className="flex items-center gap-2">
+            <p>
+              개인 번호(ID):{" "}
+              <span className="font-mono font-semibold">
+                {lastCreatedCredential.loginId}
+              </span>
+            </p>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(lastCreatedCredential.loginId);
+                } catch {
+                  // ignore
+                }
+              }}
+              className="rounded border border-emerald-500 px-2 py-0.5 text-[11px] text-emerald-200 hover:bg-emerald-700/40"
+            >
+              복사
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <p>
+              임시 비밀번호:{" "}
+              <span className="font-mono font-semibold">
+                {lastCreatedCredential.password}
+              </span>
+            </p>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(lastCreatedCredential.password);
+                } catch {
+                  // ignore
+                }
+              }}
+              className="rounded border border-emerald-500 px-2 py-0.5 text-[11px] text-emerald-200 hover:bg-emerald-700/40"
+            >
+              복사
+            </button>
+          </div>
+          <p className="text-[11px] text-emerald-300">
+            위 정보를 선수에게 전달하면, 로그인 화면에서 입력해 본인 화면에 접속할 수 있습니다.
+          </p>
+        </div>
+      )}
+
       {error && (
-        <p className="text-sm text-rose-300">
+        <p className="mt-3 text-sm text-rose-300">
           {error}
         </p>
       )}
@@ -837,6 +1002,41 @@ export default function CoachPlayersPage() {
                     />
                   </div>
                 )}
+              </div>
+              <div className="border-t border-slate-700 pt-4 mt-4">
+                <h4 className="text-sm font-medium text-slate-200 mb-2">로그인 설정 (개인 번호·비밀번호)</h4>
+                <p className="text-xs text-slate-400 mb-3">선수에게 부여할 개인 번호와 비밀번호를 설정하면, 선수가 로그인 페이지에서 입력해 본인만의 화면을 볼 수 있습니다.</p>
+                <div className="space-y-3">
+                  {credentialsError && <p className="text-sm text-rose-400">{credentialsError}</p>}
+                  <div className="space-y-1">
+                    <label className="text-xs text-slate-400">개인 번호 (로그인 ID)</label>
+                    <input
+                      type="text"
+                      value={credentialLoginId}
+                      onChange={(e) => setCredentialLoginId(e.target.value)}
+                      placeholder="예: 7번, P001"
+                      className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-slate-400">비밀번호 (변경 시에만 입력)</label>
+                    <input
+                      type="password"
+                      value={credentialPassword}
+                      onChange={(e) => setCredentialPassword(e.target.value)}
+                      placeholder="비워두면 기존 유지"
+                      className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSaveCredentials}
+                    disabled={credentialsSaving}
+                    className="rounded-lg bg-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-500 disabled:opacity-60"
+                  >
+                    {credentialsSaving ? "저장 중…" : "로그인 설정 저장"}
+                  </button>
+                </div>
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button

@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/session";
+import { getAccessibleTeamIds } from "@/lib/coachAccess";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const session = await getSession();
+  let where: { teamId?: { in: string[] } } | undefined;
+
+  if (session && session.role === "coach") {
+    const ids = await getAccessibleTeamIds(session);
+    where = { teamId: { in: ids } };
+  }
+
   const schedules = await prisma.schedule.findMany({
+    where,
     orderBy: { date: "asc" },
   });
   return NextResponse.json(schedules);

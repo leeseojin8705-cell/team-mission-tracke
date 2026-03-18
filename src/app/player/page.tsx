@@ -1,10 +1,108 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import type { Player, Schedule, Task, Team, TaskProgress } from "@/lib/types";
+import type {
+  Player,
+  Schedule,
+  Task,
+  TaskDetails,
+  Team,
+  TaskProgress,
+  StatCategory,
+  StatDefinition,
+} from "@/lib/types";
+import { DEFAULT_STAT_DEFINITION, isMeasurementCategory } from "@/lib/statDefinition";
+
+function getPlayerIdFromInput(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    return url.searchParams.get("playerId");
+  } catch {
+    return trimmed;
+  }
+}
+
+function parseTaskDetails(t: Task): TaskDetails | null {
+  const raw = t.details;
+  if (raw == null) return null;
+  if (typeof raw === "object" && raw !== null) return raw as TaskDetails;
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as TaskDetails;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+const RADAR_SIZE = 180;
+const RADAR_CX = RADAR_SIZE / 2;
+const RADAR_CY = RADAR_SIZE / 2;
+const RADAR_R = (RADAR_SIZE / 2) * 0.8;
+
+function MiniPlayerRadar({
+  categories,
+  values,
+}: {
+  categories: StatCategory[];
+  values: Record<string, number>;
+}) {
+  const n = categories.length;
+  if (n === 0) return null;
+  const angleStep = (2 * Math.PI) / n;
+  const getPoint = (value: number, index: number) => {
+    const angle = angleStep * index - Math.PI / 2;
+    const r = (Math.max(0, Math.min(5, value)) / 5) * RADAR_R;
+    return {
+      x: RADAR_CX + r * Math.cos(angle),
+      y: RADAR_CY + r * Math.sin(angle),
+    };
+  };
+  const polygonPoints = categories
+    .map((c, i) => getPoint(values[c.id] ?? 0, i))
+    .map((p) => `${p.x},${p.y}`)
+    .join(" ");
+
+  return (
+    <div className="flex justify-center">
+      <svg width={RADAR_SIZE} height={RADAR_SIZE} className="overflow-visible">
+        {[1, 3, 5].map((level) => {
+          const r = (level / 5) * RADAR_R;
+          const pts = categories
+            .map((_, i) => {
+              const angle = angleStep * i - Math.PI / 2;
+              return `${RADAR_CX + r * Math.cos(angle)},${RADAR_CY + r * Math.sin(angle)}`;
+            })
+            .join(" ");
+          return (
+            <polygon
+              key={level}
+              points={pts}
+              fill="none"
+              stroke="rgba(148,163,184,0.25)"
+              strokeWidth="1"
+            />
+          );
+        })}
+        <polygon
+          points={polygonPoints}
+          fill="rgba(56,189,248,0.25)"
+          stroke="rgba(56,189,248,0.9)"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
+}
 
 export default function PlayerHome() {
+  const searchParams = useSearchParams();
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -12,11 +110,53 @@ export default function PlayerHome() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [announcementCount, setAnnouncementCount] = useState<number | null>(null);
 
   const [currentPlayerId, setCurrentPlayerId] = useState<string>("");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [accessCodeInput, setAccessCodeInput] = useState("");
 
   const [completedMap, setCompletedMap] = useState<Record<string, boolean>>({});
   const [noteMap, setNoteMap] = useState<Record<string, string>>({});
+
+  const [absenceModalSchedule, setAbsenceModalSchedule] = useState<Schedule | null>(null);
+  const [absenceReasons, setAbsenceReasons] = useState<Set<string>>(new Set());
+  const [absenceReasonText, setAbsenceReasonText] = useState("");
+  const [absenceSaving, setAbsenceSaving] = useState(false);
+  const [absenceSubmittedIds, setAbsenceSubmittedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/session")
+      .then((r) => r.ok ? r.json() : { session: null })
+      .then((data: { session?: { role: string; playerId: string } | null }) => {
+        if (cancelled) return;
+        if (data.session?.role === "player" && data.session.playerId) {
+          setCurrentPlayerId(data.session.playerId);
+          setIsLoggedIn(true);
+          return;
+        }
+        setIsLoggedIn(false);
+        const fromUrl = searchParams.get("playerId");
+        if (fromUrl) {
+          setCurrentPlayerId(fromUrl);
+          try {
+            window.localStorage.setItem("tmt:lastRole", "player");
+            window.localStorage.setItem("tmt:lastPlayerId", fromUrl);
+          } catch {
+            // ignore
+          }
+        } else {
+          try {
+            const stored = window.localStorage.getItem("tmt:lastPlayerId");
+            if (stored) setCurrentPlayerId(stored);
+          } catch {
+            // ignore
+          }
+        }
+      });
+    return () => { cancelled = true; };
+  }, [searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,21 +217,6 @@ export default function PlayerHome() {
                   : t.dueDate,
             })),
           );
-
-          if (!currentPlayerId && playersData[0]) {
-            let initialId: string | null = null;
-            try {
-              initialId =
-                window.localStorage.getItem("tmt:lastPlayerId") ?? null;
-            } catch {
-              initialId = null;
-            }
-            const exists =
-              initialId && playersData.some((p) => p.id === initialId);
-            setCurrentPlayerId(
-              exists ? (initialId as string) : playersData[0].id,
-            );
-          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -151,6 +276,63 @@ export default function PlayerHome() {
     };
   }, [currentPlayerId]);
 
+  useEffect(() => {
+    if (!currentPlayerId) return;
+    let cancelled = false;
+    const player = players.find((p) => p.id === currentPlayerId);
+    if (player?.teamId) {
+      fetch(`/api/announcements?teamId=${encodeURIComponent(player.teamId)}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((arr: unknown[]) => {
+          if (!cancelled && Array.isArray(arr)) setAnnouncementCount(arr.length);
+        })
+        .catch(() => {
+          if (!cancelled) setAnnouncementCount(0);
+        });
+    } else {
+      setAnnouncementCount(0);
+    }
+    return () => { cancelled = true; };
+  }, [currentPlayerId, players]);
+
+  useEffect(() => {
+    if (!currentPlayerId) return;
+    let cancelled = false;
+    fetch(`/api/schedule-absence?playerId=${encodeURIComponent(currentPlayerId)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((arr: { scheduleId?: string }[]) => {
+        if (!cancelled && Array.isArray(arr))
+          setAbsenceSubmittedIds(new Set(arr.map((a) => a.scheduleId).filter(Boolean) as string[]));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [currentPlayerId]);
+
+  useEffect(() => {
+    if (!absenceModalSchedule || !currentPlayerId) return;
+    let cancelled = false;
+    fetch(
+      `/api/schedule-absence?scheduleId=${encodeURIComponent(absenceModalSchedule.id)}&playerId=${encodeURIComponent(currentPlayerId)}`,
+    )
+      .then((r) => (r.ok ? r.json() : []))
+      .then((arr: { reasons?: string[]; reasonText?: string | null }[]) => {
+        if (!cancelled && Array.isArray(arr) && arr.length > 0) {
+          setAbsenceReasons(new Set(arr[0].reasons ?? []));
+          setAbsenceReasonText(arr[0].reasonText ?? "");
+        } else {
+          setAbsenceReasons(new Set());
+          setAbsenceReasonText("");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAbsenceReasons(new Set());
+          setAbsenceReasonText("");
+        }
+      });
+    return () => { cancelled = true; };
+  }, [absenceModalSchedule?.id, currentPlayerId]);
+
   const me = players.find((p) => p.id === currentPlayerId);
   const myTeam = me ? teams.find((t) => t.id === me.teamId) : undefined;
 
@@ -176,6 +358,11 @@ export default function PlayerHome() {
     "all",
   );
   const [overdueOnly, setOverdueOnly] = useState(false);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [statDef, setStatDef] = useState<StatDefinition | null>(null);
+  const [statValues, setStatValues] = useState<Record<string, number> | null>(null);
 
   const filteredTasks = useMemo(() => {
     const now = new Date();
@@ -199,6 +386,87 @@ export default function PlayerHome() {
   const totalCount = myTasks.length;
   const progressRate =
     totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
+
+  // 내 스탯 레이더: 최근 30일 평가 기준
+  useEffect(() => {
+    let cancelled = false;
+    async function loadStats() {
+      if (!currentPlayerId) return;
+      try {
+        const res = await fetch(
+          `/api/players/${encodeURIComponent(currentPlayerId)}/evaluations`,
+        );
+        if (!res.ok) return;
+        const evals = (await res.json()) as {
+          teamId?: string;
+          scores: Record<string, number[]>;
+          createdAt?: string | null;
+        }[];
+        if (cancelled || !Array.isArray(evals) || evals.length === 0) {
+          setStatDef(null);
+          setStatValues(null);
+          return;
+        }
+        const teamId = evals[0]?.teamId;
+        let def: StatDefinition = DEFAULT_STAT_DEFINITION;
+        if (teamId) {
+          const teamRes = await fetch(`/api/teams/${encodeURIComponent(teamId)}`);
+          if (teamRes.ok) {
+            const teamData = (await teamRes.json()) as Team & {
+              statDefinition?: StatDefinition | null;
+            };
+            if (teamData.statDefinition) def = teamData.statDefinition;
+          }
+        }
+        const now = new Date();
+        const to = new Date(now);
+        const from = new Date(now);
+        from.setDate(from.getDate() - 30);
+        from.setHours(0, 0, 0, 0);
+        to.setHours(23, 59, 59, 999);
+        const filtered = evals.filter((e) => {
+          if (!e.createdAt) return true;
+          const d = new Date(e.createdAt);
+          if (Number.isNaN(d.getTime())) return true;
+          return d >= from && d <= to;
+        });
+        if (filtered.length === 0) {
+          setStatDef(null);
+          setStatValues(null);
+          return;
+        }
+        const sums: Record<string, number> = {};
+        const counts: Record<string, number> = {};
+        for (const e of filtered) {
+          for (const [catId, arr] of Object.entries(e.scores)) {
+            if (!Array.isArray(arr) || arr.length === 0) continue;
+            const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+            sums[catId] = (sums[catId] ?? 0) + avg;
+            counts[catId] = (counts[catId] ?? 0) + 1;
+          }
+        }
+        const byCat: Record<string, number> = {};
+        def.categories.forEach((c) => {
+          const sum = sums[c.id] ?? 0;
+          const cnt = counts[c.id] ?? 0;
+          byCat[c.id] = cnt > 0 ? Math.round((sum / cnt) * 10) / 10 : 0;
+        });
+        if (!cancelled) {
+          setStatDef(def);
+          setStatValues(byCat);
+        }
+      } catch {
+        if (!cancelled) {
+          setStatDef(null);
+          setStatValues(null);
+        }
+      }
+    }
+    loadStats();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPlayerId]);
 
   async function toggleCompleted(id: string) {
     if (!currentPlayerId) return;
@@ -245,6 +513,45 @@ export default function PlayerHome() {
     }
   }
 
+  const ABSENCE_REASON_OPTIONS = [
+    { value: "injury", label: "부상" },
+    { value: "personal", label: "개인사유" },
+    { value: "study", label: "학업" },
+    { value: "other", label: "기타" },
+  ];
+
+  async function submitAbsence() {
+    if (!absenceModalSchedule || !currentPlayerId) return;
+    setAbsenceSaving(true);
+    try {
+      const res = await fetch("/api/schedule-absence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scheduleId: absenceModalSchedule.id,
+          playerId: currentPlayerId,
+          reasons: Array.from(absenceReasons),
+          reasonText: absenceReasonText.trim() || null,
+        }),
+      });
+      if (res.ok) {
+        setAbsenceSubmittedIds((prev) => new Set([...prev, absenceModalSchedule.id]));
+        setAbsenceModalSchedule(null);
+      }
+    } finally {
+      setAbsenceSaving(false);
+    }
+  }
+
+  function toggleAbsenceReason(value: string) {
+    setAbsenceReasons((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 px-4 py-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row">
@@ -257,32 +564,9 @@ export default function PlayerHome() {
             </p>
           )}
 
-          <div className="space-y-1 text-sm">
-            <p className="text-slate-300">어떤 선수의 화면인지 선택해 보세요.</p>
-            <select
-              value={currentPlayerId}
-              onChange={(e) => {
-                const nextId = e.target.value;
-                setCurrentPlayerId(nextId);
-                try {
-                  window.localStorage.setItem("tmt:lastRole", "player");
-                  window.localStorage.setItem("tmt:lastPlayerId", nextId);
-                } catch {
-                  // localStorage 실패는 무시
-                }
-              }}
-              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-emerald-400"
-              disabled={players.length === 0}
-            >
-              {players.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          {me && (
+          {me ? (
             <div className="rounded-xl border border-slate-700 bg-slate-900/80 p-3 text-sm space-y-1">
+              <p className="text-xs text-slate-400">내 정보</p>
               <p className="font-semibold">{me.name}</p>
               <p className="text-slate-300">
                 팀: <span className="text-slate-100">{myTeam?.name}</span>
@@ -293,19 +577,82 @@ export default function PlayerHome() {
                 </p>
               )}
             </div>
+          ) : (
+            <div className="space-y-2 text-sm">
+              <p className="text-slate-400">
+                선수 전용입니다. 코치에게 받은 접속 링크를 입력하세요.
+              </p>
+              <input
+                type="text"
+                value={accessCodeInput}
+                onChange={(e) => setAccessCodeInput(e.target.value)}
+                placeholder="접속 링크 또는 선수 코드"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-emerald-400"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const id = getPlayerIdFromInput(accessCodeInput);
+                  if (id) {
+                    setCurrentPlayerId(id);
+                    setAccessCodeInput("");
+                    try {
+                      window.localStorage.setItem("tmt:lastRole", "player");
+                      window.localStorage.setItem("tmt:lastPlayerId", id);
+                    } catch {
+                      // ignore
+                    }
+                    window.history.replaceState(null, "", `/player?playerId=${encodeURIComponent(id)}`);
+                  }
+                }}
+                className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400"
+              >
+                접속하기
+              </button>
+            </div>
           )}
           <nav className="pt-2 border-t border-slate-800 space-y-1">
             <Link
-              href={currentPlayerId ? `/player/stats?playerId=${encodeURIComponent(currentPlayerId)}` : "/player"}
+              href="/player/profile"
+              className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+            >
+              내 정보
+            </Link>
+            <Link
+              href={
+                currentPlayerId
+                  ? `/player/stats?playerId=${encodeURIComponent(currentPlayerId)}`
+                  : "/player"
+              }
               className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
             >
               내 스탯
             </Link>
             <Link
-              href={currentPlayerId ? `/player/self-evaluate?playerId=${encodeURIComponent(currentPlayerId)}` : "/player"}
+              href={
+                currentPlayerId
+                  ? `/player/report?playerId=${encodeURIComponent(currentPlayerId)}`
+                  : "/player"
+              }
+              className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+            >
+              리포트 (인쇄용)
+            </Link>
+            <Link
+              href={
+                currentPlayerId
+                  ? `/player/self-evaluate?playerId=${encodeURIComponent(currentPlayerId)}`
+                  : "/player"
+              }
               className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
             >
               자기평가
+            </Link>
+            <Link
+              href="/player/tasks"
+              className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+            >
+              내 과제
             </Link>
             <Link
               href="/player/analysis"
@@ -319,6 +666,26 @@ export default function PlayerHome() {
             >
               기록관
             </Link>
+            {isLoggedIn && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await fetch("/api/auth/logout", { method: "POST" });
+                  setIsLoggedIn(false);
+                  setCurrentPlayerId("");
+                  window.location.href = "/login";
+                }}
+                className="mt-2 block w-full rounded-lg px-3 py-2 text-xs text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-t border-slate-800 pt-2 text-left"
+              >
+                로그아웃
+              </button>
+            )}
+            <Link
+              href="/"
+              className="mt-2 block rounded-lg px-3 py-2 text-xs text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-t border-slate-800 pt-2"
+            >
+              ← 역할 선택
+            </Link>
           </nav>
         </aside>
 
@@ -326,13 +693,17 @@ export default function PlayerHome() {
           {loading ? (
             <p className="text-sm text-slate-400">데이터를 불러오는 중입니다...</p>
           ) : !me ? (
-            <p className="text-sm text-slate-400">
-              선택할 수 있는 선수가 없습니다. 코치 화면에서 선수를 먼저 등록해
-              주세요.
-            </p>
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-center space-y-2">
+              <p className="text-slate-300">
+                등록된 선수는 본인만 볼 수 있습니다.
+              </p>
+              <p className="text-sm text-slate-500">
+                왼쪽에서 코치에게 받은 접속 링크 또는 선수 코드를 입력해 주세요.
+              </p>
+            </div>
           ) : (
             <>
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-2 sm:grid-cols-4">
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
                   <p className="text-xs text-slate-400 mb-1">다가오는 일정</p>
                   <p className="text-2xl font-semibold">{mySchedule.length}</p>
@@ -351,12 +722,66 @@ export default function PlayerHome() {
                   </div>
                   <div className="mt-2 h-2 w-full rounded-full bg-slate-800 overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-emerald-400 transition-all"
+                      className="h-full rounded-full bg-emerald-500 transition-all"
                       style={{ width: `${progressRate}%` }}
                     />
                   </div>
                 </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                  <p className="text-xs text-slate-400 mb-1">팀 공지</p>
+                  <p className="text-2xl font-semibold">{announcementCount ?? "…"}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">건</p>
+                </div>
               </div>
+
+              {statDef && statValues && (
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs text-slate-400 mb-1">내 스탯 레이더 (최근 30일)</p>
+                      <p className="text-[11px] text-slate-500">
+                        코치 평가 기반으로, 내 강점/약점 카테고리를 1~5점 다각형으로 표시합니다.
+                      </p>
+                    </div>
+                    <Link
+                      href={
+                        currentPlayerId
+                          ? `/player/report?playerId=${encodeURIComponent(currentPlayerId)}`
+                          : "/player"
+                      }
+                      className="rounded-full border border-slate-600 px-3 py-1 text-[11px] text-slate-200 hover:border-emerald-500 hover:text-emerald-300"
+                    >
+                      리포트 보기
+                    </Link>
+                  </div>
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                    <div className="md:w-1/2">
+                      <MiniPlayerRadar
+                        categories={statDef.categories.filter((c) =>
+                          !isMeasurementCategory(statDef, c.id),
+                        )}
+                        values={statValues}
+                      />
+                    </div>
+                    <div className="md:w-1/2 space-y-1 text-[11px] text-slate-300">
+                      {statDef.categories
+                        .filter((c) => !isMeasurementCategory(statDef, c.id))
+                        .map((c) => {
+                          const v = statValues[c.id] ?? 0;
+                          return (
+                            <div
+                              key={c.id}
+                              className="flex items-center justify-between gap-2"
+                            >
+                              <span style={{ color: c.color }}>{c.label}</span>
+                              <span className="text-slate-100">{v.toFixed(1)} / 5.0</span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
@@ -370,10 +795,22 @@ export default function PlayerHome() {
                       {mySchedule.map((s) => (
                         <li
                           key={s.id}
-                          className="rounded-lg bg-slate-900 px-3 py-2"
+                          className="rounded-lg bg-slate-900 px-3 py-2 flex items-start justify-between gap-2"
                         >
-                          <p className="font-medium">{s.title}</p>
-                          <p className="text-xs text-slate-300">{s.date}</p>
+                          <div>
+                            <p className="font-medium">{s.title}</p>
+                            <p className="text-xs text-slate-300">{s.date}</p>
+                            {absenceSubmittedIds.has(s.id) && (
+                              <span className="mt-1 inline-block text-[10px] text-amber-400">불참 신청함</span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setAbsenceModalSchedule(s)}
+                            className="shrink-0 rounded border border-slate-600 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+                          >
+                            불참 의사
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -418,40 +855,103 @@ export default function PlayerHome() {
                     </p>
                   ) : (
                     <ul className="space-y-3 text-sm">
-                      {filteredTasks.map((t) => (
-                        <li
-                          key={t.id}
-                          className="rounded-lg bg-slate-900 px-3 py-2 space-y-2"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="font-medium">{t.title}</p>
-                              <p className="text-xs text-slate-300">
-                                카테고리: {t.category}
-                                {t.dueDate && ` · 마감일: ${t.dueDate}`}
-                              </p>
+                      {filteredTasks.map((t) => {
+                        const details = parseTaskDetails(t);
+                        const isExpanded = expandedTaskId === t.id;
+                        const hasDetails =
+                          details &&
+                          (details.detailText?.trim() ||
+                            details.goalText?.trim() ||
+                            (details.contents && details.contents.length > 0) ||
+                            details.singleDate ||
+                            (details.dailyStart && details.dailyEnd));
+                        return (
+                          <li
+                            key={t.id}
+                            className="rounded-lg bg-slate-900 px-3 py-2 space-y-2"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-medium">{t.title}</p>
+                                <p className="text-xs text-slate-300">
+                                  카테고리: {t.category}
+                                  {t.dueDate && ` · 마감일: ${String(t.dueDate).slice(0, 10)}`}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {hasDetails && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedTaskId(isExpanded ? null : t.id)
+                                    }
+                                    className="text-xs text-slate-400 hover:text-emerald-400"
+                                  >
+                                    {isExpanded ? "접기" : "상세 보기"}
+                                  </button>
+                                )}
+                                <label className="flex items-center gap-1 text-xs text-emerald-300">
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-slate-600 bg-slate-900"
+                                    checked={!!completedMap[t.id]}
+                                    onChange={() => toggleCompleted(t.id)}
+                                  />
+                                  완료
+                                </label>
+                              </div>
                             </div>
-                            <label className="flex items-center gap-1 text-xs text-emerald-300">
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-slate-600 bg-slate-900"
-                                checked={!!completedMap[t.id]}
-                                onChange={() => toggleCompleted(t.id)}
+                            {isExpanded && hasDetails && details && (
+                              <div className="rounded-lg border border-slate-700 bg-slate-950/80 p-3 text-xs space-y-2">
+                                {details.detailText?.trim() && (
+                                  <div>
+                                    <p className="text-slate-500 mb-0.5">세부 과제</p>
+                                    <p className="text-slate-200 whitespace-pre-wrap">
+                                      {details.detailText}
+                                    </p>
+                                  </div>
+                                )}
+                                {details.goalText?.trim() && (
+                                  <div>
+                                    <p className="text-slate-500 mb-0.5">과제 목표</p>
+                                    <p className="text-slate-200 whitespace-pre-wrap">
+                                      {details.goalText}
+                                    </p>
+                                  </div>
+                                )}
+                                {details.contents && details.contents.length > 0 && (
+                                  <div>
+                                    <p className="text-slate-500 mb-0.5">평가 항목</p>
+                                    <p className="text-slate-200">
+                                      {details.contents.join(", ")}
+                                    </p>
+                                  </div>
+                                )}
+                                {(details.singleDate ||
+                                  (details.dailyStart && details.dailyEnd)) && (
+                                  <div>
+                                    <p className="text-slate-500 mb-0.5">일정</p>
+                                    <p className="text-slate-200">
+                                      {details.singleDate
+                                        ? `단일: ${details.singleDate}`
+                                        : `${details.dailyStart} ~ ${details.dailyEnd}`}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <div>
+                              <textarea
+                                value={noteMap[t.id] ?? ""}
+                                onChange={(e) => updateNote(t.id, e.target.value)}
+                                placeholder="오늘 과제를 하면서 느낀 점이나 기록을 간단히 적어보세요."
+                                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs outline-none focus:border-emerald-400"
+                                rows={2}
                               />
-                              완료
-                            </label>
-                          </div>
-                          <div>
-                            <textarea
-                              value={noteMap[t.id] ?? ""}
-                              onChange={(e) => updateNote(t.id, e.target.value)}
-                              placeholder="오늘 과제를 하면서 느낀 점이나 기록을 간단히 적어보세요."
-                              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs outline-none focus:border-emerald-400"
-                              rows={2}
-                            />
-                          </div>
-                        </li>
-                      ))}
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
@@ -460,6 +960,71 @@ export default function PlayerHome() {
           )}
         </section>
       </div>
+
+      {absenceModalSchedule && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setAbsenceModalSchedule(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-2 text-lg font-semibold text-slate-100">
+              불참 의사 — {absenceModalSchedule.title}
+            </h3>
+            <p className="mb-4 text-xs text-slate-400">
+              불참 사유를 선택하고 추가 설명을 입력할 수 있습니다.
+            </p>
+            <div className="space-y-3">
+              <p className="text-xs font-medium text-slate-400">불참 사유 (중복 선택 가능)</p>
+              <div className="flex flex-wrap gap-2">
+                {ABSENCE_REASON_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.value}
+                    className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm cursor-pointer hover:bg-slate-700"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={absenceReasons.has(opt.value)}
+                      onChange={() => toggleAbsenceReason(opt.value)}
+                      className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-emerald-500"
+                    />
+                    <span className="text-slate-200">{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-400">추가 사유 (선택)</label>
+                <textarea
+                  value={absenceReasonText}
+                  onChange={(e) => setAbsenceReasonText(e.target.value)}
+                  placeholder="기타 사유를 입력하세요"
+                  rows={2}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setAbsenceModalSchedule(null)}
+                className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
+              >
+                닫기
+              </button>
+              <button
+                type="button"
+                onClick={submitAbsence}
+                disabled={absenceSaving}
+                className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
+              >
+                {absenceSaving ? "저장 중…" : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

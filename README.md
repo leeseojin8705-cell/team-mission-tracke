@@ -1,36 +1,136 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## 팀 미션 트래커 (코치/선수 과제·기록 관리)
 
-## Getting Started
+Next.js(App Router) + Prisma(SQLite) 기반의 **축구 팀 과제·평가·기록/스탯 관리 서비스**입니다.
 
-First, run the development server:
+- 코치: 과제 생성·배포, 선수 평가, 팀/선수 스탯, 리포트(인쇄용)
+- 선수: 내 과제 확인/진행, 자기평가, 개인 전술 기록, 개인 기록관, 개인 리포트(인쇄용)
+
+---
+
+## 1. 요구 사항
+
+- Node.js 20 이상
+- npm (또는 pnpm/yarn – 기본은 npm 기준으로 설명)
+
+데이터베이스는 **로컬 SQLite 파일(`dev.db`)** 을 사용합니다.
+
+---
+
+## 2. 환경 변수 설정
+
+프로젝트 루트에 `.env` 파일을 만들고, 예시 파일을 복사해서 사용합니다.
+
+```bash
+cp .env.example .env
+```
+
+`.env` 기본값:
+
+```env
+DATABASE_URL="file:./dev.db"
+SESSION_SECRET="change-this-in-production"
+```
+
+- **DATABASE_URL**: Prisma가 사용하는 SQLite 파일 경로입니다. 기본값(`dev.db`)이면 그대로 사용해도 됩니다.
+- **SESSION_SECRET**: 세션 쿠키 서명을 위한 비밀키입니다. 실제 서비스 환경에서는 충분히 긴 랜덤 문자열로 변경해야 합니다.
+
+---
+
+## 3. 설치 & 초기 설정
+
+### 3-1. 의존성 설치
+
+```bash
+npm install
+```
+
+### 3-2. Prisma 스키마 반영 (SQLite DB 생성/업데이트)
+
+```bash
+npx prisma db push
+```
+
+위 명령은 `prisma/schema.prisma` 를 기준으로 `dev.db` 파일에 테이블 구조를 만듭니다.
+
+---
+
+## 4. 실행 방법
+
+### 개발 서버
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+브라우저에서 `http://localhost:3000` 에 접속합니다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- 초기 진입: `/` (역할 선택 화면)
+- 관리자/개발 편의를 위한 **관리자 모드 토글** 이 존재합니다. 개발 시에는 관리자 모드를 ON으로 두면 코치 화면을 세션 없이 바로 확인할 수 있습니다.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 프로덕션 빌드 & 실행
 
-## Learn More
+```bash
+npm run build
+npm run start
+```
 
-To learn more about Next.js, take a look at the following resources:
+기본 포트는 `3000` 이며, 필요 시 `PORT` 환경 변수를 지정할 수 있습니다.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 5. 주요 경로 요약
 
-## Deploy on Vercel
+### 공통 / 인증
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `/` : 역할 선택 (코치 / 선수, 관리자 모드 토글)
+- `/signup` : 조직 Owner 회원가입 (조직 + 초기 팀 생성)
+- `/login/coach` : 코치 로그인 (초대 토큰 연동 포함)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 코치 영역 (`/coach/**`)
+
+- `/coach` : 코치 대시보드 (팀 스탯 레이더, 조직 정보)
+- `/coach/tasks` : 팀/선수 과제 관리
+- `/coach/tasks/evaluations` : 과제 평가 대시보드
+- `/coach/personal-tasks` : 선수 개인 과제 중 코치에게 평가 요청된 과제 리스트
+- `/coach/teams/[teamId]/stats` : 팀 스탯 상세 (기간 필터, 비교, 스냅샷)
+- `/coach/teams/[teamId]/report` : 팀 리포트 (인쇄용)
+- `/coach/invitations` : 코치 초대 관리
+- `/coach/settings` : 조직/팀 설정 조회
+
+### 선수 영역 (`/player/**`)
+
+- `/player` : 선수 대시보드
+- `/player/tasks` : 내 과제(팀 과제 + 개인 과제)
+- `/player/self-evaluate` : 자기평가
+- `/player/stats` : 내 스탯 (기간 필터, 비교, 스냅샷)
+- `/player/report` : 선수 개인 리포트 (인쇄용)
+- `/player/analysis` : 개인 전술 데이터 입력
+- `/player/archive` : 개인 기록관 (개인 전술 데이터에서 저장한 기록 모아보기)
+
+---
+
+## 6. 데이터베이스 및 Prisma
+
+- Prisma 설정 파일: `prisma/schema.prisma`
+- 마이그레이션 디렉터리: `prisma/migrations/`
+- 로컬 개발 DB 파일: `dev.db` (프로젝트 루트에 생성/사용)
+
+스키마 변경 후에는 다음을 실행합니다.
+
+```bash
+npx prisma db push
+```
+
+이미 생성된 데이터베이스를 마이그레이션 기반으로 관리하고 싶다면, 필요 시 `npx prisma migrate dev` 를 사용할 수 있습니다.
+
+---
+
+## 7. 배포 시 권장 사항
+
+1. **SESSION_SECRET** 를 충분히 긴 랜덤 문자열로 설정
+2. `.env` 파일은 절대 Git에 커밋하지 말고, 서버 환경 변수로 관리
+3. 프로덕션 환경에서 `NODE_ENV=production` 으로 실행 (`npm run build && npm run start`)
+4. 백업이 필요한 경우 `dev.db` 파일을 정기적으로 스냅샷/백업
+
+이 정도 설정으로, 로컬 개발 환경과 단일 서버 배포 환경에서 안정적으로 서비스를 구동할 수 있습니다.
+

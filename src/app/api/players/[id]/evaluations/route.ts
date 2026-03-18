@@ -36,6 +36,7 @@ export async function GET(
     teamId: row.teamId,
     evaluatorStaffId: row.evaluatorStaffId,
     subjectPlayerId: row.subjectPlayerId,
+    phase: row.phase,
     scores: parseScores(row.scores),
     createdAt: row.createdAt?.toISOString?.(),
   }));

@@ -91,15 +91,27 @@ function EvaluateContent() {
     let cancelled = false;
     fetch(`/api/teams/${teamId}/player-evaluations`)
       .then((r) => r.json())
-      .then((list: { evaluatorStaffId: string; subjectPlayerId: string; scores: Record<string, number[]> }[]) => {
-        if (!cancelled) {
-          const one = list.find(
-            (e) => e.evaluatorStaffId === evaluatorStaffId && e.subjectPlayerId === subjectPlayerId
-          );
-          if (one?.scores) setScores(one.scores);
-          else setScores({});
-        }
-      })
+      .then(
+        (
+          list: {
+            evaluatorStaffId: string;
+            subjectPlayerId: string;
+            phase?: string | null;
+            scores: Record<string, number[]>;
+          }[],
+        ) => {
+          if (!cancelled) {
+            const coachEval = list.find(
+              (e) =>
+                e.evaluatorStaffId === evaluatorStaffId &&
+                e.subjectPlayerId === subjectPlayerId &&
+                (e.phase === "COACH_POST" || e.phase == null),
+            );
+            if (coachEval?.scores) setScores(coachEval.scores);
+            else setScores({});
+          }
+        },
+      )
       .catch(() => {
         if (!cancelled) setScores({});
       });
@@ -122,6 +134,7 @@ function EvaluateContent() {
         body: JSON.stringify({
           evaluatorStaffId,
           subjectPlayerId,
+          phase: "COACH_POST",
           scores: scores && typeof scores === "object" ? scores : {},
         }),
       });
@@ -160,7 +173,8 @@ function EvaluateContent() {
   return (
     <div className="min-h-screen bg-slate-950 p-4">
       <div className="mx-auto max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 p-5">
-        <h1 className="mb-4 text-lg font-semibold text-slate-100">선수 스탯 평가</h1>
+        <h1 className="mb-1 text-lg font-semibold text-slate-100">선수 스탯 평가</h1>
+        <p className="mb-4 text-xs text-slate-400">코치 사후 평가입니다. 선수의 사전·사후 자기평가는 선수 대시보드에서 입력합니다.</p>
 
         {loading ? (
           <p className="text-sm text-slate-500">불러오는 중…</p>

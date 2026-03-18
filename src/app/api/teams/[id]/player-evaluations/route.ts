@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { EvalPhase } from "@/lib/prismaEnums";
 
 function parseScores(raw: string): Record<string, number[]> {
   try {
@@ -14,14 +15,20 @@ function parseScores(raw: string): Record<string, number[]> {
   }
 }
 
-/** GET: 팀 내 모든 선수 평가 목록 (팀 스탯 집계용) */
+/** GET: 팀 내 선수 평가 목록 (팀/과제 스탯 집계용) */
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: teamId } = await params;
+  const url = new URL(req.url);
+  const taskId = url.searchParams.get("taskId");
+
   const list = await prisma.playerEvaluation.findMany({
-    where: { teamId },
+    where: {
+      teamId,
+      ...(taskId ? { taskId } : {}),
+    },
     orderBy: { createdAt: "desc" },
   });
   const body = list.map((row) => ({
@@ -29,8 +36,10 @@ export async function GET(
     teamId: row.teamId,
     evaluatorStaffId: row.evaluatorStaffId,
     subjectPlayerId: row.subjectPlayerId,
+    phase: row.phase,
     scores: parseScores(row.scores),
     createdAt: row.createdAt?.toISOString?.(),
+    taskId: row.taskId ?? null,
   }));
   return NextResponse.json(body);
 }
@@ -43,10 +52,12 @@ export async function POST(
   try {
     const { id: teamId } = await params;
     const body = await req.json();
-    const { evaluatorStaffId, subjectPlayerId, scores } = body as {
+    const { evaluatorStaffId, subjectPlayerId, scores, phase: phaseRaw, taskId } = body as {
       evaluatorStaffId?: string;
       subjectPlayerId?: string;
       scores?: Record<string, number[]>;
+      phase?: string;
+      taskId?: string | null;
     };
     if (!evaluatorStaffId || !subjectPlayerId || scores === undefined || scores === null || typeof scores !== "object") {
       return NextResponse.json(
@@ -55,22 +66,36 @@ export async function POST(
       );
     }
     const scoresJson = JSON.stringify(scores);
+    const phase: (typeof EvalPhase)[keyof typeof EvalPhase] =
+      phaseRaw === "PLAYER_PRE"
+        ? EvalPhase.PLAYER_PRE
+        : phaseRaw === "PLAYER_POST"
+          ? EvalPhase.PLAYER_POST
+          : EvalPhase.COACH_POST;
 
     const existing = await prisma.playerEvaluation.findFirst({
-      where: { teamId, evaluatorStaffId, subjectPlayerId },
+      where: {
+        teamId,
+        evaluatorStaffId,
+        subjectPlayerId,
+        phase,
+        taskId: taskId ?? null,
+      },
     });
 
     if (existing) {
       await prisma.playerEvaluation.update({
         where: { id: existing.id },
-        data: { scores: scoresJson },
+        data: { scores: scoresJson, phase, taskId: taskId ?? null },
       });
       return NextResponse.json({
         id: existing.id,
         teamId,
         evaluatorStaffId,
         subjectPlayerId,
+        phase,
         scores: parseScores(scoresJson),
+        taskId: taskId ?? null,
       });
     }
 
@@ -79,7 +104,9 @@ export async function POST(
         teamId,
         evaluatorStaffId,
         subjectPlayerId,
+        phase,
         scores: scoresJson,
+        taskId: taskId ?? null,
       },
     });
     return NextResponse.json({
@@ -87,6 +114,7 @@ export async function POST(
       teamId: created.teamId,
       evaluatorStaffId: created.evaluatorStaffId,
       subjectPlayerId: created.subjectPlayerId,
+      phase: created.phase,
       scores: parseScores(created.scores),
       createdAt: created.createdAt?.toISOString?.(),
     });

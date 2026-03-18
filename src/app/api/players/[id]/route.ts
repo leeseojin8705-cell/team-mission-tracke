@@ -1,54 +1,94 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-function getIdFromRequest(req: Request): string | null {
-  try {
-    const url = new URL(req.url);
-    const segments = url.pathname.split("/").filter(Boolean);
-    const id = segments[segments.length - 1];
-    return id || null;
-  } catch {
-    return null;
-  }
-}
-
-export async function GET(req: Request) {
-  const id = getIdFromRequest(req);
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
   if (!id) {
     return NextResponse.json({ error: "잘못된 요청입니다. (id 없음)" }, { status: 400 });
   }
   const player = await prisma.player.findUnique({
     where: { id },
+    select: {
+      id: true,
+      name: true,
+      teamId: true,
+      position: true,
+      height: true,
+      weight: true,
+      dateOfBirth: true,
+      gender: true,
+      photo: true,
+      phone: true,
+      loginId: true,
+    },
   });
   if (!player) return NextResponse.json(null, { status: 404 });
   return NextResponse.json(player);
 }
 
-export async function PATCH(req: Request) {
-  const id = getIdFromRequest(req);
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
   if (!id) {
     return NextResponse.json({ error: "잘못된 요청입니다. (id 없음)" }, { status: 400 });
   }
   try {
     const body = await req.json();
 
-    // Prisma Client가 최신 스키마를 반영하지 못하는 문제를 피하기 위해 raw SQL 사용
+    const name = body.name != null ? String(body.name) : null;
+    const position = body.position != null ? String(body.position) : null;
+    const height = body.height != null ? String(body.height) : null;
+    const weight = body.weight != null ? String(body.weight) : null;
+    const dateOfBirth = body.dateOfBirth != null ? String(body.dateOfBirth) : null;
+    const gender = body.gender != null ? String(body.gender) : null;
+    const photo = body.photo != null ? String(body.photo) : null;
+    const phone = body.phone != null ? String(body.phone) : null;
+    const parentPhone = body.parentPhone != null ? String(body.parentPhone) : null;
+    const address = body.address != null ? String(body.address) : null;
+    const school = body.school != null ? String(body.school) : null;
+
     await prisma.$executeRawUnsafe(
       `UPDATE Player
-       SET name = ?, position = ?, height = ?, weight = ?, dateOfBirth = ?, gender = ?, photo = ?, phone = ?
+       SET name = ?, position = ?, height = ?, weight = ?, dateOfBirth = ?, gender = ?, photo = ?, phone = ?, parentPhone = ?, address = ?, school = ?
        WHERE id = ?`,
-      body.name ?? null,
-      body.position ?? null,
-      body.height ?? null,
-      body.weight ?? null,
-      body.dateOfBirth ?? null,
-      body.gender ?? null,
-      body.photo ?? null,
-      body.phone ?? null,
+      name,
+      position,
+      height,
+      weight,
+      dateOfBirth,
+      gender,
+      photo,
+      phone,
+      parentPhone,
+      address,
+      school,
       id,
     );
 
-    const updated = await prisma.player.findUnique({ where: { id } });
+    const updated = await prisma.player.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        teamId: true,
+        position: true,
+        height: true,
+        weight: true,
+        dateOfBirth: true,
+        gender: true,
+        photo: true,
+        phone: true,
+      parentPhone: true,
+      address: true,
+      school: true,
+        loginId: true,
+      },
+    });
     return NextResponse.json(updated);
   } catch (error) {
     console.error("PATCH /api/players/[id] error", error);
@@ -57,18 +97,16 @@ export async function PATCH(req: Request) {
         ? error.message
         : typeof error === "string"
           ? error
-          : "Unknown error";
-    return NextResponse.json(
-      { error: message || "선수 정보를 저장하는 중 오류가 발생했습니다." },
-      { status: 500 },
-    );
+          : "선수 정보를 저장하는 중 오류가 발생했습니다.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
 export async function DELETE(
-  req: Request,
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const id = getIdFromRequest(req);
+  const { id } = await params;
   if (!id) {
     return NextResponse.json({ error: "잘못된 요청입니다. (id 없음)" }, { status: 400 });
   }

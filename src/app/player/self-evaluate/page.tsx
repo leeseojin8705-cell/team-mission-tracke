@@ -8,13 +8,17 @@ import { DEFAULT_STAT_DEFINITION, isMeasurementCategory } from "@/lib/statDefini
 
 const SELF_EVALUATOR_ID = "self";
 
+type EvalPhaseSelf = "PLAYER_PRE" | "PLAYER_POST";
+
 function SelfEvaluateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const playerId = searchParams.get("playerId") ?? "";
+  const taskId = searchParams.get("taskId") ?? undefined;
 
   const [player, setPlayer] = useState<Player | null>(null);
   const [def, setDef] = useState<StatDefinition>(DEFAULT_STAT_DEFINITION);
+  const [phase, setPhase] = useState<EvalPhaseSelf>("PLAYER_POST");
   const [scores, setScores] = useState<Record<string, number[]>>({});
   const [loading, setLoading] = useState(!!playerId);
   const [submitting, setSubmitting] = useState(false);
@@ -59,17 +63,37 @@ function SelfEvaluateContent() {
     let cancelled = false;
     fetch(`/api/teams/${player.teamId}/player-evaluations`)
       .then((r) => r.json())
-      .then((list: { evaluatorStaffId: string; subjectPlayerId: string; scores: Record<string, number[]> }[]) => {
-        if (!cancelled) {
-          const selfEval = list.find(
-            (e) => e.evaluatorStaffId === SELF_EVALUATOR_ID && e.subjectPlayerId === playerId,
-          );
-          if (selfEval?.scores) setScores(selfEval.scores);
-        }
-      })
+      .then(
+        (
+          list: {
+            evaluatorStaffId: string;
+            subjectPlayerId: string;
+            phase?: string | null;
+            scores: Record<string, number[]>;
+          }[],
+        ) => {
+          if (!cancelled) {
+            const selfEval = list.find((e: any) => {
+              const isSelf =
+                e.evaluatorStaffId === SELF_EVALUATOR_ID &&
+                e.subjectPlayerId === playerId &&
+                (e.phase === "PLAYER_PRE" || e.phase === "PLAYER_POST") &&
+                e.phase === phase;
+              if (!isSelf) return false;
+              // taskId 가 있으면 같은 taskId 것만, 없으면 taskId 없는 평가만 사용
+              if (taskId) return e.taskId === taskId;
+              return !e.taskId;
+            });
+            if (selfEval?.scores) setScores(selfEval.scores);
+            else setScores({});
+          }
+        },
+      )
       .catch(() => {});
-    return () => { cancelled = true; };
-  }, [player?.teamId, playerId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [player?.teamId, playerId, phase]);
 
   async function handleSave() {
     if (!player?.teamId || !playerId) return;
@@ -82,7 +106,9 @@ function SelfEvaluateContent() {
         body: JSON.stringify({
           evaluatorStaffId: SELF_EVALUATOR_ID,
           subjectPlayerId: playerId,
+          phase,
           scores,
+          taskId,
         }),
       });
       if (!res.ok) throw new Error("저장 실패");
@@ -117,7 +143,43 @@ function SelfEvaluateContent() {
             ← 내 스탯
           </Link>
         </div>
-        <p className="mb-4 text-xs text-slate-400">본인 스탯 항목에 대해 1~5점 또는 측정값을 입력하세요. 코치 평가와 함께 반영됩니다.</p>
+        <p className="mb-4 text-xs text-slate-400">
+          본인 스탯 항목에 대해 1~5점 또는 측정값을 입력하세요. 코치 평가와 함께 반영됩니다.
+        </p>
+
+        <div className="mb-4 flex gap-2 rounded-lg border border-slate-700/80 bg-slate-800/40 p-2">
+          <button
+            type="button"
+            onClick={() => setPhase("PLAYER_PRE")}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
+              phase === "PLAYER_PRE"
+                ? "bg-emerald-600 text-white"
+                : "text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+            }`}
+          >
+            사전 (과제 전 이해도)
+          </button>
+          <button
+            type="button"
+            onClick={() => setPhase("PLAYER_POST")}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
+              phase === "PLAYER_POST"
+                ? "bg-emerald-600 text-white"
+                : "text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+            }`}
+          >
+            사후 (과제 후 달성도)
+          </button>
+        </div>
+
+        <div className="mb-4 rounded-lg border border-slate-700/70 bg-slate-900/50 p-3 text-[11px] text-slate-300 space-y-1">
+          <p className="font-semibold text-slate-200">리커트 5점 척도 안내</p>
+          <p>1점: 전혀 아니다 / 매우 낮다</p>
+          <p>2점: 그렇지 않은 편이다</p>
+          <p>3점: 보통이다</p>
+          <p>4점: 그런 편이다</p>
+          <p>5점: 매우 그렇다 / 매우 높다</p>
+        </div>
 
         {loading ? (
           <p className="text-sm text-slate-500">불러오는 중…</p>
@@ -163,21 +225,29 @@ function SelfEvaluateContent() {
                               {unit && <span className="text-xs text-slate-500">{unit}</span>}
                             </div>
                           ) : (
-                            <div className="flex gap-0">
-                              {[1, 2, 3, 4, 5].map((n) => (
-                                <button
-                                  key={n}
-                                  type="button"
-                                  onClick={() => setScore(cat.id, i, n)}
-                                  className={`h-9 w-10 border border-slate-600 text-sm font-semibold transition first:rounded-l-md last:rounded-r-md last:border-r ${
-                                    val === n
-                                      ? "border-emerald-500 bg-emerald-500/20 text-emerald-400"
-                                      : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                                  }`}
-                                >
-                                  {n}
-                                </button>
-                              ))}
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-[11px] text-slate-400">
+                                {[1, 2, 3, 4, 5].map((n) => (
+                                  <span key={n}>{n}</span>
+                                ))}
+                              </div>
+                              <input
+                                type="range"
+                                min={1}
+                                max={5}
+                                step={1}
+                                value={val || 0}
+                                onChange={(e) =>
+                                  setScore(cat.id, i, Number(e.target.value) || 0)
+                                }
+                                className="w-full accent-emerald-500"
+                              />
+                              <div className="flex justify-between text-[11px] text-slate-300">
+                                <span>
+                                  선택:{" "}
+                                  {val ? `${val}점` : "아직 선택하지 않았습니다 (1~5점)"}
+                                </span>
+                              </div>
                             </div>
                           )}
                         </div>

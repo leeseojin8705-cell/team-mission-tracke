@@ -4,9 +4,16 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { Player, StatDefinition, Team } from "@/lib/types";
 import type { StatCategory } from "@/lib/types";
+import { aggregatePhaseScores, getImprovement, getTaskScores } from "@/lib/taskScore";
 import { DEFAULT_STAT_DEFINITION, formatCategoryValue, isMeasurementCategory } from "@/lib/statDefinition";
 
-type PlayerEvalRow = { evaluatorStaffId: string; subjectPlayerId: string; scores: Record<string, number[]> };
+type PlayerEvalRow = {
+  evaluatorStaffId: string;
+  subjectPlayerId: string;
+  phase?: string | null;
+  scores: Record<string, number[]>;
+  createdAt?: string | null;
+};
 
 const RADAR_SIZE = 280;
 const RADAR_CX = RADAR_SIZE / 2;
@@ -112,6 +119,15 @@ function TaskScoreBar({ label, score }: { label: string; score: number }) {
   );
 }
 
+type Snapshot = {
+  id: string;
+  name: string;
+  periodPreset: "all" | "30d" | "custom";
+  dateFrom: string;
+  dateTo: string;
+  createdAt: string;
+};
+
 export default function CoachTeamStatsPage() {
   const params = useParams();
   const router = useRouter();
@@ -120,6 +136,29 @@ export default function CoachTeamStatsPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [evaluations, setEvaluations] = useState<PlayerEvalRow[]>([]);
   const [loading, setLoading] = useState(!!teamId);
+  const [periodPreset, setPeriodPreset] = useState<"all" | "30d" | "custom">("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [compareFrom, setCompareFrom] = useState("");
+  const [compareTo, setCompareTo] = useState("");
+  const [showCompare, setShowCompare] = useState(false);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+
+  // 스냅샷 불러오기
+  useEffect(() => {
+    if (!teamId) return;
+    try {
+      const raw =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem(`tmt:team-stats-snapshots:${teamId}`)
+          : null;
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Snapshot[];
+      if (Array.isArray(parsed)) setSnapshots(parsed);
+    } catch {
+      // ignore
+    }
+  }, [teamId]);
 
   useEffect(() => {
     if (!teamId) return;
@@ -153,9 +192,65 @@ export default function CoachTeamStatsPage() {
 
   const def: StatDefinition = team?.statDefinition ?? DEFAULT_STAT_DEFINITION;
 
+  const filteredEvaluations = useMemo(() => {
+    if (periodPreset === "all") return evaluations;
+
+    const now = new Date();
+    let from: Date | null = null;
+    let to: Date | null = null;
+
+    if (periodPreset === "30d") {
+      to = now;
+      from = new Date(now);
+      from.setDate(from.getDate() - 30);
+    } else {
+      if (dateFrom) {
+        from = new Date(dateFrom);
+        if (!Number.isNaN(from.getTime())) {
+          from.setHours(0, 0, 0, 0);
+        } else {
+          from = null;
+        }
+      }
+      if (dateTo) {
+        to = new Date(dateTo);
+        if (!Number.isNaN(to.getTime())) {
+          to.setHours(23, 59, 59, 999);
+        } else {
+          to = null;
+        }
+      }
+    }
+
+    return evaluations.filter((e) => {
+      if (!e.createdAt) return true; // createdAt 이 없으면 일단 포함
+      const d = new Date(e.createdAt);
+      if (Number.isNaN(d.getTime())) return true;
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    });
+  }, [evaluations, periodPreset, dateFrom, dateTo]);
+
+  // 비교용 기간 집계 (선택 시)
+  const compareEvaluations = useMemo(() => {
+    if (!showCompare || !compareFrom || !compareTo) return [];
+    const from = new Date(compareFrom);
+    const to = new Date(compareTo);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return [];
+    from.setHours(0, 0, 0, 0);
+    to.setHours(23, 59, 59, 999);
+    return evaluations.filter((e) => {
+      if (!e.createdAt) return false;
+      const d = new Date(e.createdAt);
+      if (Number.isNaN(d.getTime())) return false;
+      return d >= from && d <= to;
+    });
+  }, [evaluations, showCompare, compareFrom, compareTo]);
+
   const aggregated = useMemo(() => {
     const bySubject: Record<string, { sumByCat: Record<string, number>; countByCat: Record<string, number> }> = {};
-    for (const e of evaluations) {
+    for (const e of filteredEvaluations) {
       if (!bySubject[e.subjectPlayerId]) {
         bySubject[e.subjectPlayerId] = { sumByCat: {}, countByCat: {} };
       }
@@ -179,13 +274,26 @@ export default function CoachTeamStatsPage() {
       result.push({ subjectPlayerId, byCat, overall: mean });
     }
     return result;
-  }, [evaluations, def.categories]);
+  }, [filteredEvaluations, def.categories]);
 
   const playerById = useMemo(() => {
     const m: Record<string, Player> = {};
     players.forEach((p) => { m[p.id] = p; });
     return m;
   }, [players]);
+
+  const phaseAggregated = useMemo(
+    () =>
+      aggregatePhaseScores(
+        filteredEvaluations.map((e) => ({
+          subjectPlayerId: e.subjectPlayerId,
+          phase: e.phase,
+          scores: e.scores,
+        })),
+        def.categories.map((c) => c.id),
+      ),
+    [filteredEvaluations, def.categories],
+  );
 
   const topBottomByCategory = useMemo(() => {
     const out: { catId: string; label: string; color: string; top: { id: string; name: string; avg: number }[]; bottom: { id: string; name: string; avg: number }[] }[] = [];
@@ -214,6 +322,77 @@ export default function CoachTeamStatsPage() {
     return byCat;
   }, [def.categories, aggregated]);
 
+  const compareTeamAvgByCategory = useMemo(() => {
+    if (compareEvaluations.length === 0) return null;
+    const bySubject: Record<string, { sumByCat: Record<string, number>; countByCat: Record<string, number> }> = {};
+    for (const e of compareEvaluations) {
+      if (!bySubject[e.subjectPlayerId]) {
+        bySubject[e.subjectPlayerId] = { sumByCat: {}, countByCat: {} };
+      }
+      const sub = bySubject[e.subjectPlayerId];
+      for (const [catId, arr] of Object.entries(e.scores)) {
+        if (!Array.isArray(arr) || arr.length === 0) continue;
+        const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+        sub.sumByCat[catId] = (sub.sumByCat[catId] ?? 0) + avg;
+        sub.countByCat[catId] = (sub.countByCat[catId] ?? 0) + 1;
+      }
+    }
+    const byCat: Record<string, number> = {};
+    def.categories.forEach((c) => {
+      let sum = 0;
+      let cnt = 0;
+      for (const data of Object.values(bySubject)) {
+        if (data.countByCat[c.id]) {
+          sum += data.sumByCat[c.id]!;
+          cnt += data.countByCat[c.id]!;
+        }
+      }
+      byCat[c.id] = cnt > 0 ? Math.round((sum / cnt) * 10) / 10 : 0;
+    });
+    return byCat;
+  }, [compareEvaluations, def.categories]);
+
+  const handleSaveSnapshot = () => {
+    if (!teamId) return;
+    const id = `${Date.now()}`;
+    const now = new Date();
+    const nameParts: string[] = [];
+    if (periodPreset === "all") nameParts.push("전체");
+    else if (periodPreset === "30d") nameParts.push("최근 30일");
+    else nameParts.push("사용자 지정");
+    if (dateFrom) nameParts.push(dateFrom);
+    if (dateTo) nameParts.push(`~ ${dateTo}`);
+    const name = nameParts.join(" ") || "스냅샷";
+    const snap: Snapshot = {
+      id,
+      name,
+      periodPreset,
+      dateFrom,
+      dateTo,
+      createdAt: now.toISOString(),
+    };
+    setSnapshots((prev) => {
+      const next = [snap, ...prev].slice(0, 8);
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(
+            `tmt:team-stats-snapshots:${teamId}`,
+            JSON.stringify(next),
+          );
+        }
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const handleApplySnapshot = (snap: Snapshot) => {
+    setPeriodPreset(snap.periodPreset);
+    setDateFrom(snap.dateFrom);
+    setDateTo(snap.dateTo);
+  };
+
   if (!teamId) {
     return (
       <div className="p-4">
@@ -232,14 +411,23 @@ export default function CoachTeamStatsPage() {
   return (
     <div className="p-4">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-100">팀 스탯</h2>
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="rounded border border-slate-600 px-2 py-1 text-sm text-slate-300 hover:bg-slate-800"
-        >
-          팀 관리로 돌아가기
-        </button>
+        <h2 className="text-lg font-semibold text-slate-100">팀 스탯 (선수)</h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => router.push(`/coach/teams/${encodeURIComponent(teamId)}/report`)}
+            className="rounded border border-emerald-500 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-500/10"
+          >
+            리포트 (인쇄용)
+          </button>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="rounded border border-slate-600 px-2 py-1 text-sm text-slate-300 hover:bg-slate-800"
+          >
+            팀 관리로 돌아가기
+          </button>
+        </div>
       </div>
       {loading ? (
         <p className="text-slate-500">불러오는 중…</p>
@@ -247,28 +435,189 @@ export default function CoachTeamStatsPage() {
         <p className="text-slate-400">팀을 찾을 수 없습니다.</p>
       ) : (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-            <p className="mb-2 font-medium text-slate-200">{team.name}</p>
-            <p className="text-sm text-slate-400">시즌: {team.season}</p>
-            <p className="mt-2 text-xs text-slate-500">선수 평가 {evaluations.length}건 · 집계 대상 {aggregated.length}명</p>
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="mb-1 font-medium text-slate-200">{team.name}</p>
+                <p className="text-sm text-slate-400">시즌: {team.season}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">기준 기간</span>
+                  <select
+                    value={periodPreset}
+                    onChange={(e) => setPeriodPreset(e.target.value as "all" | "30d" | "custom")}
+                    className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                  >
+                    <option value="all">전체</option>
+                    <option value="30d">최근 30일</option>
+                    <option value="custom">직접 선택</option>
+                  </select>
+                  {periodPreset === "custom" && (
+                    <>
+                      <input
+                        type="date"
+                        value={dateFrom}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                        className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                      />
+                      <span className="text-slate-500">~</span>
+                      <input
+                        type="date"
+                        value={dateTo}
+                        onChange={(e) => setDateTo(e.target.value)}
+                        className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                      />
+                    </>
+                  )}
+                </div>
+                <div className="h-5 w-px bg-slate-700/60" />
+                <div className="flex items-center gap-2">
+                  <label className="inline-flex items-center gap-1 text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={showCompare}
+                      onChange={(e) => setShowCompare(e.target.checked)}
+                      className="h-3 w-3 rounded border-slate-600 bg-slate-900"
+                    />
+                    비교 기간
+                  </label>
+                  {showCompare && (
+                    <>
+                      <input
+                        type="date"
+                        value={compareFrom}
+                        onChange={(e) => setCompareFrom(e.target.value)}
+                        className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                      />
+                      <span className="text-slate-500">~</span>
+                      <input
+                        type="date"
+                        value={compareTo}
+                        onChange={(e) => setCompareTo(e.target.value)}
+                        className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                      />
+                    </>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveSnapshot}
+                  className="rounded-full border border-slate-600 px-2.5 py-1 text-[11px] text-slate-200 hover:border-emerald-500 hover:text-emerald-300"
+                >
+                  현재 설정 스냅샷 저장
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500">
+              평가 {filteredEvaluations.length}건 / 전체 {evaluations.length}건 · 집계 대상{" "}
+              {aggregated.length}명
+            </p>
           </div>
+
+          {snapshots.length > 0 && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 text-[11px] text-slate-300">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="font-semibold text-slate-200">저장된 스냅샷</span>
+                <span className="text-slate-500">최대 8개까지 저장됩니다.</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {snapshots.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => handleApplySnapshot(s)}
+                    className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-left hover:border-emerald-500 hover:text-emerald-300"
+                  >
+                    <span className="font-medium">{s.name}</span>
+                    <span className="ml-1 text-slate-500">
+                      ({s.createdAt.slice(0, 10)})
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {def.categories.length > 0 && (() => {
             const ratingCategories = def.categories.filter((c) => !isMeasurementCategory(def, c.id));
             return ratingCategories.length > 0 ? (
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-                <h3 className="mb-3 text-base font-semibold text-slate-100">전체 통계 (레이더 차트)</h3>
-                <p className="mb-4 text-xs text-slate-400">팀 전체 카테고리별 평균을 다각형으로 표시합니다. (기입 1~5점만, 측정 제외)</p>
-                <TeamRadarChart categories={ratingCategories} values={teamAvgByCategory} />
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="mb-1 text-base font-semibold text-slate-100">전체 통계 (레이더 차트)</h3>
+                    <p className="text-xs text-slate-400">
+                      팀 전체 카테고리별 평균을 다각형으로 표시합니다. (기입 1~5점만, 측정 제외)
+                    </p>
+                  </div>
+                  {showCompare && compareTeamAvgByCategory && (
+                    <p className="text-[11px] text-slate-400">
+                      초록: 기준 기간 / 회색 점선: 비교 기간
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-col gap-4 md:flex-row md:items-start">
+                  <div className="flex-1">
+                    <TeamRadarChart categories={ratingCategories} values={teamAvgByCategory} />
+                  </div>
+                  {showCompare && compareTeamAvgByCategory && (
+                    <div className="flex-1 space-y-2 rounded-xl border border-slate-700 bg-slate-900/70 p-3 text-xs">
+                      <p className="mb-1 text-[11px] font-semibold text-slate-300">
+                        카테고리별 평균 비교 (기준 − 비교)
+                      </p>
+                      <div className="space-y-1.5">
+                        {ratingCategories.map((c) => {
+                          const baseVal = teamAvgByCategory[c.id] ?? 0;
+                          const cmpVal = compareTeamAvgByCategory[c.id] ?? 0;
+                          const diff = baseVal - cmpVal;
+                          const pct = Math.min(100, Math.abs(diff) * 20);
+                          return (
+                            <div key={c.id}>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px]" style={{ color: c.color }}>
+                                  {c.label}
+                                </span>
+                                <span className="text-[11px] text-slate-200">
+                                  {baseVal.toFixed(1)} / {cmpVal.toFixed(1)} (
+                                  <span
+                                    className={
+                                      diff > 0
+                                        ? "text-emerald-400"
+                                        : diff < 0
+                                          ? "text-rose-400"
+                                          : "text-slate-300"
+                                    }
+                                  >
+                                    {diff > 0 ? "+" : ""}
+                                    {diff.toFixed(1)}
+                                  </span>
+                                  )
+                                </span>
+                              </div>
+                              <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-slate-800">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    diff >= 0 ? "bg-emerald-500" : "bg-rose-500"
+                                  }`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : null;
           })()}
 
-          {/* 선수별 과제 평가 점수 (막대) */}
+          {/* 선수별 과제 평가 점수 (이해/달성/평가 막대) */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
             <h3 className="mb-3 text-base font-semibold text-slate-100">선수별 과제 평가 점수</h3>
             <p className="mb-4 text-xs text-slate-400">
-              코치가 기록한 전체 평가 점수를 0~100점으로 환산한 과제 평가 점수입니다. (1~5점 평균 → 0~100점)
+              이해(선수 사전)·달성(선수 사후)·평가(코치 사후)를 0~100점으로 환산합니다. 해당 단계 데이터가 없으면 0점으로 표시됩니다.
             </p>
             {aggregated.length === 0 ? (
               <p className="text-sm text-slate-500">평가 데이터가 없습니다.</p>
@@ -276,11 +625,13 @@ export default function CoachTeamStatsPage() {
               <div className="space-y-3">
                 {aggregated.map((row) => {
                   const player = playerById[row.subjectPlayerId];
-                  const score = row.overall ? Math.max(0, Math.min(100, (row.overall / 5) * 100)) : 0;
+                  const triple = getTaskScores(phaseAggregated, row.subjectPlayerId);
+                  const improvement = getImprovement(phaseAggregated, row.subjectPlayerId);
+                  const score = row.overall ? Math.max(0, Math.min(100, (row.overall / 5) * 100)) : triple.evaluation;
                   return (
                     <div
                       key={row.subjectPlayerId}
-                      className="flex flex-col gap-1 rounded-xl border border-slate-700/70 bg-slate-800/50 p-3 text-xs"
+                      className="flex flex-col gap-2 rounded-xl border border-slate-700/70 bg-slate-800/50 p-3 text-xs"
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-slate-100">
@@ -290,10 +641,25 @@ export default function CoachTeamStatsPage() {
                           )}
                         </span>
                         <span className="text-[11px] text-slate-400">
-                          평균 점수 {row.overall.toFixed(1)} / 5.0
+                          평균 {row.overall.toFixed(1)} / 5.0
                         </span>
                       </div>
-                      <TaskScoreBar label="과제 평가 점수" score={score} />
+                      <TaskScoreBar label="이해 (선수 사전)" score={triple.understanding} />
+                      <TaskScoreBar label="달성 (선수 사후)" score={triple.achievement} />
+                      {improvement != null && (
+                        <div className="flex items-center justify-between text-[11px] text-slate-300">
+                          <span>개선 (달성−이해)</span>
+                          <span
+                            className={
+                              improvement >= 0 ? "font-semibold text-emerald-400" : "font-semibold text-amber-400"
+                            }
+                          >
+                            {improvement >= 0 ? "+" : ""}
+                            {improvement.toFixed(0)}점
+                          </span>
+                        </div>
+                      )}
+                      <TaskScoreBar label="평가 (코치 사후)" score={triple.evaluation || score} />
                     </div>
                   );
                 })}

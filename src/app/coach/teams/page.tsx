@@ -1152,6 +1152,18 @@ export default function CoachTeamsPage() {
                                         </button>
                                         <button
                                           type="button"
+                                          onClick={() => {
+                                            const params = new URLSearchParams({
+                                              staffId: s.id,
+                                            });
+                                            router.push(`/coach/personal-tasks?${params.toString()}`);
+                                          }}
+                                          className="rounded border border-emerald-600/70 bg-emerald-900/40 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-800/60"
+                                        >
+                                          개인 요청함
+                                        </button>
+                                        <button
+                                          type="button"
                                           onClick={() => handleRemoveStaff(s.id, s.teamId)}
                                           className="rounded border border-rose-600/70 bg-rose-950/50 px-2 py-1 text-xs text-rose-300 hover:bg-rose-900/50"
                                         >

@@ -14,27 +14,28 @@ const PAD = { l: 28, r: 28, t: 28, b: 28 };
 const FW = FIELD_W - PAD.l - PAD.r;
 const FH = FIELD_H - PAD.t - PAD.b;
 
+/* 경기장 포인트 색상: 서로 구분되도록 색조 분리 (빨강·분홍·주황·청록·파랑·보라·초록·호박·인디고 등) */
 const ATK_TYPES = [
-  { id: "shot_on", label: "유효슈팅", color: "#E24B4A" },
-  { id: "shot_off", label: "슈팅(빗나감)", color: "#F09595" },
-  { id: "keypass", label: "키패스", color: "#EF9F27" },
-  { id: "cross", label: "크로스", color: "#1D9E75" },
-  { id: "dribble", label: "드리블", color: "#378ADD" },
+  { id: "shot_on", label: "유효슈팅", color: "#DC2626" },
+  { id: "shot_off", label: "슈팅(빗나감)", color: "#DB2777" },
+  { id: "keypass", label: "키패스", color: "#EA580C" },
+  { id: "cross", label: "크로스", color: "#0D9488" },
+  { id: "dribble", label: "드리블", color: "#2563EB" },
 ];
 const DEF_TYPES = [
-  { id: "tackle", label: "태클", color: "#7F77DD" },
-  { id: "intercept", label: "인터셉트", color: "#1D9E75" },
-  { id: "clearance", label: "클리어런스", color: "#EF9F27" },
-  { id: "block", label: "블록", color: "#378ADD" },
-  { id: "press", label: "압박", color: "#D85A30" },
+  { id: "tackle", label: "태클", color: "#7C3AED" },
+  { id: "intercept", label: "인터셉트", color: "#059669" },
+  { id: "clearance", label: "클리어런스", color: "#B45309" },
+  { id: "block", label: "블록", color: "#4F46E5" },
+  { id: "press", label: "압박", color: "#BE123C" },
 ];
 const GK_TYPES = [
-  { id: "save", label: "세이브", color: "#1D9E75" },
-  { id: "goal_in", label: "실점", color: "#E24B4A" },
-  { id: "punch", label: "펀칭", color: "#EF9F27" },
-  { id: "catch", label: "캐치", color: "#378ADD" },
-  { id: "dist_long", label: "롱킥 배급", color: "#7F77DD" },
-  { id: "dist_short", label: "숏 배급", color: "#5DCAA5" },
+  { id: "save", label: "세이브", color: "#06B6D4" },
+  { id: "goal_in", label: "실점", color: "#B91C1C" },
+  { id: "punch", label: "펀칭", color: "#CA8A04" },
+  { id: "catch", label: "캐치", color: "#0284C7" },
+  { id: "dist_long", label: "롱킥 배급", color: "#6D28D9" },
+  { id: "dist_short", label: "숏 배급", color: "#14B8A6" },
 ];
 
 const GK_ZONES = [
@@ -365,7 +366,7 @@ export default function FootballTacticsAnalyzer({
         ctx.restore();
       });
       passView.forEach((ev) => {
-        const c = ev.success ? "#1D9E75" : "#E24B4A";
+        const c = ev.success ? "#047857" : "#B91C1C";
         ctx.beginPath();
         ctx.moveTo(ev.sx, ev.sy);
         ctx.lineTo(ev.ex, ev.ey);
@@ -394,9 +395,9 @@ export default function FootballTacticsAnalyzer({
       if (passState) {
         ctx.beginPath();
         ctx.arc(passState.sx, passState.sy, 6, 0, Math.PI * 2);
-        ctx.fillStyle = "#EF9F27cc";
+        ctx.fillStyle = "#EA580Ccc";
         ctx.fill();
-        ctx.strokeStyle = "#EF9F27";
+        ctx.strokeStyle = "#EA580C";
         ctx.lineWidth = 2;
         ctx.stroke();
       }
@@ -447,7 +448,7 @@ export default function FootballTacticsAnalyzer({
           ctx.restore();
         });
         passO.forEach((ev) => {
-          ctx.strokeStyle = (ev.success ? "#1D9E75" : "#E24B4A") + "99";
+          ctx.strokeStyle = (ev.success ? "#047857" : "#B91C1C") + "99";
           ctx.lineWidth = 1.5;
           ctx.beginPath();
           ctx.moveTo(ev.sx, ev.sy);
@@ -459,13 +460,14 @@ export default function FootballTacticsAnalyzer({
     });
   }, [mode, selectedGkType, atkView, defView, passView, gkView, passState, overlayLayers, visibleOverlayIds, viewFilter]);
 
+  const hasInitializedRef = useRef(false);
   useEffect(() => {
-    if (initialData) {
-      setAtkEvents((initialData.atk ?? []).map(ensureHalf));
-      setDefEvents((initialData.def ?? []).map(ensureHalf));
-      setPassEvents((initialData.pass ?? []).map(ensureHalf));
-      setGkEvents((initialData.gk ?? []).map(ensureHalf));
-    }
+    if (!initialData || hasInitializedRef.current) return;
+    setAtkEvents((initialData.atk ?? []).map(ensureHalf));
+    setDefEvents((initialData.def ?? []).map(ensureHalf));
+    setPassEvents((initialData.pass ?? []).map(ensureHalf));
+    setGkEvents((initialData.gk ?? []).map(ensureHalf));
+    hasInitializedRef.current = true;
   }, [initialData]);
 
   useEffect(() => {
@@ -623,9 +625,20 @@ export default function FootballTacticsAnalyzer({
     goalkeeper: isGkDistHint ? "경기장에서 배급 방향을 클릭하세요  |  우클릭 → 마지막 삭제" : "골문 구역 클릭 → 기록  |  우클릭 → 마지막 삭제",
   };
 
-  const btnBase = "rounded-lg px-2.5 py-1.5 text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:ring-offset-1 focus:ring-offset-slate-900";
-  const btnActive = "bg-emerald-500/20 text-emerald-300 border-emerald-500/50";
+  const btnBase = "rounded-lg px-2.5 py-1.5 text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-slate-900";
   const btnInactive = "border border-slate-600 bg-slate-800/50 text-slate-300 hover:bg-slate-700 hover:border-slate-500";
+
+  const modeActiveClasses: Record<string, string> = {
+    attack: "bg-amber-500/20 text-amber-300 border-amber-500/50 focus:ring-amber-500/40",
+    defense: "bg-violet-500/20 text-violet-300 border-violet-500/50 focus:ring-violet-500/40",
+    pass_start: "bg-sky-500/20 text-sky-300 border-sky-500/50 focus:ring-sky-500/40",
+    goalkeeper: "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 focus:ring-emerald-500/40",
+  };
+  const viewFilterActiveClasses: Record<string, string> = {
+    first: "bg-amber-500/20 text-amber-300 border-amber-500/50 focus:ring-amber-500/40",
+    second: "bg-sky-500/20 text-sky-300 border-sky-500/50 focus:ring-sky-500/40",
+    all: "bg-slate-500/20 text-slate-200 border-slate-500/50 focus:ring-slate-500/40",
+  };
 
   return (
     <div className="flex flex-nowrap gap-0 overflow-x-auto overflow-y-hidden rounded-2xl border border-slate-800 bg-slate-900/50">
@@ -648,7 +661,7 @@ export default function FootballTacticsAnalyzer({
                 else if (m === "pass_start" || m === "pass_end") setCurrentTab("pass");
                 else setCurrentTab("goalkeeper");
               }}
-              className={`border ${btnBase} ${mode === m ? btnActive : btnInactive}`}
+              className={`border ${btnBase} ${mode === m ? modeActiveClasses[m] ?? modeActiveClasses.attack : btnInactive}`}
             >
               {label}
             </button>
@@ -673,7 +686,7 @@ export default function FootballTacticsAnalyzer({
                     setViewFilter(v as ViewFilter);
                   }
                 }}
-                className={`border ${btnBase} ${viewFilter === v ? btnActive : btnInactive}`}
+                className={`border ${btnBase} ${viewFilter === v ? viewFilterActiveClasses[v] : btnInactive}`}
               >
                 {label}
               </button>
@@ -682,47 +695,92 @@ export default function FootballTacticsAnalyzer({
         )}
         {mode === "attack" && (
           <div className="flex flex-wrap gap-1.5">
-            {ATK_TYPES.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setSelectedAtkType(t.id)}
-                className={`border ${btnBase} ${selectedAtkType === t.id ? btnActive : btnInactive}`}
-                style={{ borderLeftWidth: 3, borderLeftColor: t.color }}
-              >
-                {t.label}
-              </button>
-            ))}
+            {ATK_TYPES.map((t) => {
+              const isActive = selectedAtkType === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setSelectedAtkType(t.id)}
+                  className={`border ${btnBase} ${isActive ? "" : btnInactive}`}
+                  style={
+                    isActive
+                      ? {
+                          borderLeftWidth: 3,
+                          borderTopColor: t.color,
+                          borderRightColor: t.color,
+                          borderBottomColor: t.color,
+                          borderLeftColor: t.color,
+                          backgroundColor: `${t.color}20`,
+                          color: t.color,
+                        }
+                      : { borderLeftWidth: 3, borderLeftColor: t.color }
+                  }
+                >
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
         )}
         {mode === "defense" && (
           <div className="flex flex-wrap gap-1.5">
-            {DEF_TYPES.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setSelectedDefType(t.id)}
-                className={`border ${btnBase} ${selectedDefType === t.id ? btnActive : btnInactive}`}
-                style={{ borderLeftWidth: 3, borderLeftColor: t.color }}
-              >
-                {t.label}
-              </button>
-            ))}
+            {DEF_TYPES.map((t) => {
+              const isActive = selectedDefType === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setSelectedDefType(t.id)}
+                  className={`border ${btnBase} ${isActive ? "" : btnInactive}`}
+                  style={
+                    isActive
+                      ? {
+                          borderLeftWidth: 3,
+                          borderTopColor: t.color,
+                          borderRightColor: t.color,
+                          borderBottomColor: t.color,
+                          borderLeftColor: t.color,
+                          backgroundColor: `${t.color}20`,
+                          color: t.color,
+                        }
+                      : { borderLeftWidth: 3, borderLeftColor: t.color }
+                  }
+                >
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
         )}
         {mode === "goalkeeper" && (
           <div className="flex flex-wrap gap-1.5">
-            {GK_TYPES.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setSelectedGkType(t.id)}
-                className={`border ${btnBase} ${selectedGkType === t.id ? btnActive : btnInactive}`}
-                style={{ borderLeftWidth: 3, borderLeftColor: t.color }}
-              >
-                {t.label}
-              </button>
-            ))}
+            {GK_TYPES.map((t) => {
+              const isActive = selectedGkType === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setSelectedGkType(t.id)}
+                  className={`border ${btnBase} ${isActive ? "" : btnInactive}`}
+                  style={
+                    isActive
+                      ? {
+                          borderLeftWidth: 3,
+                          borderTopColor: t.color,
+                          borderRightColor: t.color,
+                          borderBottomColor: t.color,
+                          borderLeftColor: t.color,
+                          backgroundColor: `${t.color}20`,
+                          color: t.color,
+                        }
+                      : { borderLeftWidth: 3, borderLeftColor: t.color }
+                  }
+                >
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
         )}
         {(mode === "pass_start" || mode === "pass_end") && (

@@ -66,6 +66,10 @@ export interface Player {
   gender?: string | null;
   photo?: string | null;
   phone?: string | null;
+  parentPhone?: string | null;
+  address?: string | null;
+  school?: string | null;
+  loginId?: string | null;
 }
 
 export type TaskCategory = "기술" | "체력" | "멘탈" | "전술";
@@ -83,6 +87,10 @@ export interface Task {
 export interface TaskDetails {
   htmlTaskType?: "daily" | "single";
   htmlCategory?: "selfcare" | "practice" | "practice_game" | "official";
+  /** 과제 분류: 자기관리 / 연습 및 훈련 / 연습 경기 / 정식 경기 */
+  taskType?: "자기관리" | "연습 및 훈련" | "연습 경기" | "정식 경기";
+  /** 과제 내용 축: 기술 / 신체 / 전술 / 심리 / 인지 / 태도 */
+  contentCategory?: "기술" | "신체" | "전술" | "심리" | "인지" | "태도";
   contents?: string[]; // 선택된 태그 value 목록
   detailText?: string; // 세부 과제
   goalText?: string; // 과제 목표
@@ -90,8 +98,10 @@ export interface TaskDetails {
   dailyEnd?: string;
   singleDate?: string;
   weekdays?: string[]; // "0"~"6"
-   positions?: string[]; // ["GK","DF","MF","FW"] 또는 ["ALL"]
-   positionWeights?: Record<string, number>; // 포지션별 중요도 %
+  timeStart?: string;
+  timeEnd?: string;
+  positions?: string[]; // ["GK","DF","MF","FW"] 또는 ["ALL"]
+  positionWeights?: Record<string, number>; // 포지션별 중요도 %
   players?: string[]; // 과제에 포함된 선수 id 목록 (대표 대상은 별도 targetId로 저장)
   evaluators?: string[]; // 평가자(코칭 스텝) id 목록
 }
