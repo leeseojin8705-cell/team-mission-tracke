@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { AnnouncementCategory, AnnouncementType } from "@/generated/prisma/enums";
 
 const CATEGORIES = ["DAILY", "SCHEDULE"] as const;
 const TYPES = ["GAME", "PRACTICE", "REST", "EDUCATION", "OFFICIAL", "OTHER"] as const;
@@ -50,16 +51,18 @@ export async function PATCH(
   try {
     const body = await req.json();
 
-    const category =
+    const category: AnnouncementCategory | undefined =
       body.category && CATEGORIES.includes(body.category)
-        ? body.category
+        ? (body.category as AnnouncementCategory)
         : undefined;
-    const type =
-      body.type && TYPES.includes(body.type) ? body.type : undefined;
+    const type: AnnouncementType | undefined =
+      body.type && TYPES.includes(body.type)
+        ? (body.type as AnnouncementType)
+        : undefined;
 
     const data: {
-      category?: string;
-      type?: string;
+      category?: AnnouncementCategory;
+      type?: AnnouncementType;
       title?: string;
       content?: string | null;
       startAt?: Date;

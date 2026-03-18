@@ -29,7 +29,7 @@ export async function PATCH(
       return NextResponse.json({ error: "선수를 찾을 수 없습니다." }, { status: 404 });
     }
 
-    const data: { loginId?: string; passwordHash?: string } = {};
+    const data: { loginId?: string | null; passwordHash?: string } = {};
     if (loginId !== undefined) {
       if (loginId.length > 0) {
         const existing = await prisma.player.findFirst({

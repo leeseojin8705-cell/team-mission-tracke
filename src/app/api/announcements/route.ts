@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { AnnouncementCategory, AnnouncementType } from "@/generated/prisma/enums";
 
 const CATEGORIES = ["DAILY", "SCHEDULE"] as const;
 const TYPES = ["GAME", "PRACTICE", "REST", "EDUCATION", "OFFICIAL", "OTHER"] as const;
@@ -18,10 +19,10 @@ export async function GET(req: Request) {
     const teamId = searchParams.get("teamId");
     const category = searchParams.get("category");
 
-    const where: { teamId?: string; category?: string } = {};
+    const where: { teamId?: string; category?: AnnouncementCategory } = {};
     if (teamId) where.teamId = teamId;
     if (category && CATEGORIES.includes(category as (typeof CATEGORIES)[number]))
-      where.category = category;
+      where.category = category as AnnouncementCategory;
 
     const list = await prisma.announcement.findMany({
       where,
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json(
-      list.map((a) => ({
+      list.map((a: (typeof list)[number]) => ({
         id: a.id,
         teamId: a.teamId,
         category: a.category,
@@ -62,12 +63,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const category =
+    const category: AnnouncementCategory =
       body.category && CATEGORIES.includes(body.category)
-        ? body.category
-        : "DAILY";
-    const type =
-      body.type && TYPES.includes(body.type) ? body.type : "OTHER";
+        ? (body.category as AnnouncementCategory)
+        : AnnouncementCategory.DAILY;
+    const type: AnnouncementType =
+      body.type && TYPES.includes(body.type)
+        ? (body.type as AnnouncementType)
+        : AnnouncementType.OTHER;
 
     const startAt = new Date(body.startAt);
     const endAt = body.endAt ? new Date(body.endAt) : null;

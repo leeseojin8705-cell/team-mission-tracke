@@ -9,7 +9,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
 
 model User {
@@ -46,6 +46,7 @@ model Team {
   staffEvals     StaffEvaluation[]
   playerEvals    PlayerEvaluation[]
   announcements  Announcement[]
+  coachInvitations CoachInvitation[]
 }
 
 model StaffEvaluation {

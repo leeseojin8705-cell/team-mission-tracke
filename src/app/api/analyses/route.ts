@@ -19,7 +19,7 @@ export async function GET(req: Request) {
     },
   });
 
-  const items = list.map((a) => ({
+  const items = list.map((a: (typeof list)[number]) => ({
     id: a.id,
     scheduleId: a.scheduleId ?? null,
     teamId: a.teamId ?? null,

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import type {
   Player,
   Schedule,
@@ -101,7 +101,7 @@ function MiniPlayerRadar({
   );
 }
 
-export default function PlayerHome() {
+function PlayerHomeInner() {
   const searchParams = useSearchParams();
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -1026,6 +1026,22 @@ export default function PlayerHome() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function PlayerHome() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-slate-950 text-slate-50 px-4 py-8">
+          <div className="mx-auto max-w-4xl">
+            <p className="text-sm text-slate-400">불러오는 중…</p>
+          </div>
+        </main>
+      }
+    >
+      <PlayerHomeInner />
+    </Suspense>
   );
 }
 
