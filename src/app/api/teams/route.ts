@@ -69,30 +69,38 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json();
-  const organizationJson =
-    body.organization != null ? JSON.stringify(body.organization) : null;
-  const team = await prisma.team.create({
-    data: {
-      name: body.name,
-      season: body.season ?? "",
-    },
-  });
-  if (organizationJson !== null) {
-    await (prisma as unknown as { $executeRawUnsafe: (query: string, ...args: unknown[]) => Promise<unknown> }).$executeRawUnsafe(
-      "UPDATE Team SET organization = ? WHERE id = ?",
-      organizationJson,
-      team.id,
+  try {
+    const session = await getSession();
+    if (!session || session.role !== "coach") {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const organizationJson = body.organization != null ? JSON.stringify(body.organization) : null;
+    const statDefinitionJson = body.statDefinition != null ? JSON.stringify(body.statDefinition) : null;
+
+    const team = await prisma.team.create({
+      data: {
+        name: body.name,
+        season: body.season ?? "",
+        organization: organizationJson,
+        statDefinition: statDefinitionJson,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        id: team.id,
+        name: team.name,
+        season: team.season,
+        organization: parseOrganization(team.organization ?? null),
+        statDefinition: parseStatDefinition(team.statDefinition ?? null),
+      },
+      { status: 201 },
     );
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "팀 생성 실패";
+    console.error("[POST /api/teams]", e);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-  const raw = organizationJson;
-  return NextResponse.json(
-    {
-      id: team.id,
-      name: team.name,
-      season: team.season,
-      organization: parseOrganization(raw),
-    },
-    { status: 201 },
-  );
 }
