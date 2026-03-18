@@ -12,6 +12,25 @@ if (!connectionString) {
   throw new Error("DATABASE_URL is required");
 }
 
+function stripSslQueryParams(raw: string): string {
+  try {
+    const u = new URL(raw);
+    // We'll control TLS via Pool.ssl config to avoid libpq-style params overriding behavior.
+    u.searchParams.delete("sslmode");
+    u.searchParams.delete("sslrootcert");
+    u.searchParams.delete("sslcert");
+    u.searchParams.delete("sslkey");
+    u.searchParams.delete("sslpassword");
+    u.searchParams.delete("sslaccept");
+    u.searchParams.delete("uselibpqcompat");
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
+const sanitizedConnectionString = stripSslQueryParams(connectionString);
+
 const sslCaRaw = process.env.SUPABASE_SSL_CA;
 const sslCa = (() => {
   if (!sslCaRaw) return undefined;
@@ -48,7 +67,7 @@ const sslConfig =
     : undefined;
 
 const pool = new Pool({
-  connectionString,
+  connectionString: sanitizedConnectionString,
   ssl: sslConfig,
 });
 const adapter = new PrismaPg(pool);
