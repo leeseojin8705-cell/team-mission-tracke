@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 
 const SALT_ROUNDS = 10;
 
@@ -83,6 +84,19 @@ export async function POST(req: Request) {
     );
   } catch (e) {
     console.error("[POST /api/auth/signup]", e);
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      // P2002: Unique constraint failed
+      if (e.code === "P2002") {
+        return NextResponse.json(
+          { error: "이미 가입된 이메일입니다.", code: e.code },
+          { status: 400 },
+        );
+      }
+      return NextResponse.json(
+        { error: "회원가입 처리 중 DB 오류가 발생했습니다.", code: e.code, meta: e.meta ?? null },
+        { status: 500 },
+      );
+    }
     return NextResponse.json(
       { error: "회원가입 처리 중 오류가 발생했습니다." },
       { status: 500 },
