@@ -21,7 +21,18 @@ const sslCa = (() => {
   // - accidental surrounding quotes
   const unquoted = sslCaRaw.replace(/^"+|"+$/g, "").trim();
   const withNewlines = unquoted.includes("\\n") ? unquoted.replace(/\\n/g, "\n") : unquoted;
-  return withNewlines.replace(/\r\n/g, "\n").trim();
+  const normalized = withNewlines.replace(/\r\n/g, "\n").trim();
+
+  // Extract the first PEM block even if extra characters were pasted.
+  const begin = "-----BEGIN CERTIFICATE-----";
+  const end = "-----END CERTIFICATE-----";
+  const bi = normalized.indexOf(begin);
+  const ei = normalized.indexOf(end);
+  if (bi !== -1 && ei !== -1 && ei > bi) {
+    return normalized.slice(bi, ei + end.length).trim();
+  }
+
+  return normalized;
 })();
 
 // Tiny runtime signal for debugging (does not print secrets)
