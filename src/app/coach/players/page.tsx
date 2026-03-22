@@ -95,6 +95,7 @@ export default function CoachPlayersPage() {
   const [stackEvaluations, setStackEvaluations] = useState<{ evaluatorStaffId: string; subjectPlayerId: string; scores: Record<string, number[]> }[]>([]);
   const [stackSelectedEvaluators, setStackSelectedEvaluators] = useState<Set<string>>(new Set());
   const [stackLoading, setStackLoading] = useState(false);
+  const [stackFetchError, setStackFetchError] = useState<string | null>(null);
 
   const [profilePlayer, setProfilePlayer] = useState<Player | null>(null);
   const [profileForm, setProfileForm] = useState({ name: "", position: "", height: "", weight: "", dateOfBirth: "", gender: "", photo: "", phone: "" });
@@ -306,40 +307,78 @@ export default function CoachPlayersPage() {
       setStackStaff([]);
       setStackEvaluations([]);
       setStackSelectedEvaluators(new Set());
+      setStackFetchError(null);
       return;
     }
     let cancelled = false;
     setStackLoading(true);
+    setStackFetchError(null);
     const tid = stackTeam.id;
-    const safeJson = async <T,>(r: Response, fallback: T): Promise<T> => {
-      const text = await r.text();
-      if (!text.trim()) return fallback;
+
+    (async () => {
       try {
-        return JSON.parse(text) as T;
-      } catch {
-        return fallback;
-      }
-    };
-    Promise.all([
-      fetch(`/api/teams/${tid}/staff`).then((r) => safeJson(r, [] as TeamStaff[])),
-      fetch(`/api/teams/${tid}/player-evaluations`).then((r) =>
-        safeJson(r, [] as { evaluatorStaffId: string; subjectPlayerId: string; scores: Record<string, number[]> }[]),
-      ),
-    ])
-      .then(([staffListRes, evalsRes]) => {
-        if (!cancelled) {
-          const staff = Array.isArray(staffListRes) ? staffListRes : [];
-          const evals = Array.isArray(evalsRes) ? evalsRes : [];
-          setStackStaff(staff);
-          setStackEvaluations(evals);
-          const guidanceIds = staff.filter((s) => s.guidance).map((s) => s.id);
-          setStackSelectedEvaluators(new Set(guidanceIds.length > 0 ? guidanceIds : staff.map((s) => s.id)));
+        const [staffRes, evalRes] = await Promise.all([
+          fetch(`/api/teams/${tid}/staff`),
+          fetch(`/api/teams/${tid}/player-evaluations`),
+        ]);
+        if (cancelled) return;
+        if (!staffRes.ok || !evalRes.ok) {
+          let detail = "";
+          try {
+            const j = (await staffRes.json().catch(() => null)) as { error?: string } | null;
+            if (j?.error) detail = j.error;
+          } catch {
+            /* ignore */
+          }
+          if (!detail) {
+            try {
+              const j = (await evalRes.json().catch(() => null)) as { error?: string } | null;
+              if (j?.error) detail = j.error;
+            } catch {
+              /* ignore */
+            }
+          }
+          setStackFetchError(
+            detail || `스태프·평가 데이터를 불러오지 못했습니다. (${!staffRes.ok ? staffRes.status : evalRes.status})`,
+          );
+          setStackStaff([]);
+          setStackEvaluations([]);
+          return;
         }
-      })
-      .finally(() => {
+        const staffListRes = (await staffRes.json()) as unknown;
+        const evalsRes = (await evalRes.json()) as unknown;
+        const staff = Array.isArray(staffListRes) ? staffListRes : [];
+        const evals = Array.isArray(evalsRes) ? evalsRes : [];
+        setStackStaff(staff as TeamStaff[]);
+        setStackEvaluations(
+          evals as {
+            evaluatorStaffId: string;
+            subjectPlayerId: string;
+            scores: Record<string, number[]>;
+          }[],
+        );
+        const guidanceIds = (staff as TeamStaff[]).filter((s) => s.guidance).map((s) => s.id);
+        setStackSelectedEvaluators(
+          new Set(
+            guidanceIds.length > 0 ? guidanceIds : (staff as TeamStaff[]).map((s) => s.id),
+          ),
+        );
+      } catch (e) {
+        if (!cancelled) {
+          setStackFetchError(
+            e instanceof Error ? e.message : "스태프·평가 데이터를 불러오지 못했습니다.",
+          );
+          setStackStaff([]);
+          setStackEvaluations([]);
+        }
+      } finally {
         if (!cancelled) setStackLoading(false);
-      });
-    return () => { cancelled = true; };
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [stackTeam]);
 
   const stackCoaches = useMemo(() => stackStaff.filter((s) => s.guidance), [stackStaff]);
@@ -808,6 +847,11 @@ export default function CoachPlayersPage() {
           >
             <h3 className="mb-1 text-xl font-semibold text-slate-100">팀 스탯 (선수) — {stackTeam.name}</h3>
             <p className="mb-5 text-sm text-slate-400">합쳐질 코치를 선택하면 해당 코치들의 선수 평가만 모아 자동 계산됩니다.</p>
+            {stackFetchError && (
+              <p className="mb-4 rounded-lg border border-rose-800/60 bg-rose-950/40 px-3 py-2 text-sm text-rose-200">
+                {stackFetchError}
+              </p>
+            )}
 
             {stackLoading ? (
               <p className="text-sm text-slate-500">불러오는 중…</p>

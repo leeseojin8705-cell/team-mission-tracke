@@ -31,6 +31,11 @@ function stripSslQueryParams(raw: string): string {
 
 const sanitizedConnectionString = stripSslQueryParams(connectionString);
 
+/** 로컬 Postgres는 SSL 없이, Supabase 등 원격은 TLS 필요 */
+const isLikelyLocalPostgres =
+  /localhost|127\.0\.0\.1/.test(sanitizedConnectionString) ||
+  /localhost|127\.0\.0\.1/.test(connectionString);
+
 const sslCaRaw = process.env.SUPABASE_SSL_CA;
 const sslCa = (() => {
   if (!sslCaRaw) return undefined;
@@ -59,12 +64,19 @@ if (process.env.NODE_ENV === "production") {
   console.log("[prisma] ssl ca present:", Boolean(sslCa), "len:", sslCa ? sslCa.length : 0);
 }
 
-const sslConfig =
-  process.env.NODE_ENV === "production"
-    ? sslCa
-      ? { ca: sslCa, rejectUnauthorized: true }
-      : { rejectUnauthorized: true }
-    : undefined;
+/**
+ * Supabase/Neon 등은 TLS 필수. dev에서 sslmode를 URL에서 뺐으므로 Pool에 명시해야 함.
+ * - production: CA 있으면 검증, 없으면 호스트 검증
+ * - dev + 원격: CA 있으면 사용, 없으면 rejectUnauthorized: false (로컬 개발 편의)
+ * - dev + localhost: SSL 끔
+ */
+const sslConfig = isLikelyLocalPostgres
+  ? undefined
+  : sslCa
+    ? { ca: sslCa, rejectUnauthorized: true }
+    : process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: true }
+      : { rejectUnauthorized: false };
 
 const pool = new Pool({
   connectionString: sanitizedConnectionString,

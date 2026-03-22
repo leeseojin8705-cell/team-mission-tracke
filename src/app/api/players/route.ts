@@ -4,27 +4,31 @@ import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const teamId = searchParams.get("teamId");
-  const session = await getSession();
+  try {
+    const { searchParams } = new URL(req.url);
+    const teamId = searchParams.get("teamId");
+    const session = await getSession();
 
-  let where: { teamId?: string | { in: string[] } } = {};
+    const where: { teamId?: string | { in: string[] } } = {};
 
-  if (session && (session.role === "coach" || session.role === "owner")) {
-    const ids = await getAccessibleTeamIds(session);
-    if (teamId) {
-      if (!ids.includes(teamId)) {
+    if (session && (session.role === "coach" || session.role === "owner")) {
+      const ids = await getAccessibleTeamIds(session);
+      if (ids.length === 0) {
         return NextResponse.json([]);
       }
+      if (teamId) {
+        if (!ids.includes(teamId)) {
+          return NextResponse.json([]);
+        }
+        where.teamId = teamId;
+      } else {
+        where.teamId = { in: ids };
+      }
+    } else if (teamId) {
       where.teamId = teamId;
-    } else {
-      where.teamId = { in: ids };
     }
-  } else if (teamId) {
-    where.teamId = teamId;
-  }
 
-  const players = await prisma.player.findMany({
+    const players = await prisma.player.findMany({
     where,
     orderBy: { name: "asc" },
     select: {
@@ -44,7 +48,12 @@ export async function GET(req: Request) {
       loginId: true,
     },
   });
-  return NextResponse.json(players);
+    return NextResponse.json(players);
+  } catch (e) {
+    console.error("[GET /api/players]", e);
+    const message = e instanceof Error ? e.message : "선수 목록 조회 실패";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {

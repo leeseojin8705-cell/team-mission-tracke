@@ -22,29 +22,19 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json();
 
-  const updatedBase = await prisma.task.update({
+  const task = await prisma.task.update({
     where: { id },
     data: {
       title: body.title,
       category: body.category,
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
+      teamId: body.targetType === "team" ? body.targetId : null,
+      playerId: body.targetType === "player" ? body.targetId : null,
+      details: body.details ? JSON.stringify(body.details) : null,
     },
   });
 
-  // teamId / playerId / details 는 raw SQL 로 업데이트 (Prisma Client 스키마 불일치 회피)
-  await prisma.$executeRawUnsafe(
-    `UPDATE Task
-     SET teamId = ?, playerId = ?, details = ?
-     WHERE id = ?`,
-    body.targetType === "team" ? body.targetId : null,
-    body.targetType === "player" ? body.targetId : null,
-    body.details ? JSON.stringify(body.details) : null,
-    id,
-  );
-
-  const task = await prisma.task.findUnique({ where: { id } });
-
-  return NextResponse.json(task ?? updatedBase);
+  return NextResponse.json(task);
 }
 
 export async function DELETE(

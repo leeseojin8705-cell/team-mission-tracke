@@ -1,9 +1,9 @@
-// @ts-nocheck
 "use client";
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { TaskCoachBlueprintView } from "@/components/TaskCoachBlueprintView";
 import type { Task, Player, TeamStaff } from "@/lib/types";
 import {
   aggregatePhaseScores,
@@ -82,7 +82,7 @@ export default function PlayerTaskDetailPage() {
         setTask(parsedTask);
 
         // 팀 기반 추가 정보 (평가 요약, 엔트리 선수, 평가자)
-        const teamId = (parsedTask as any).teamId as string | undefined;
+        const teamId = parsedTask.teamId ?? undefined;
         if (teamId) {
           const [evalRes, playersRes, staffRes] = await Promise.all([
             fetch(
@@ -308,6 +308,8 @@ export default function PlayerTaskDetailPage() {
               </p>
             </header>
 
+            {d && <TaskCoachBlueprintView details={d} />}
+
             <section className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-sm">
               <h2 className="text-sm font-semibold text-slate-100">과제 정보</h2>
               <div className="text-xs text-slate-400 space-y-1">
@@ -339,6 +341,8 @@ export default function PlayerTaskDetailPage() {
                     시간: {d.timeStart ?? "00:00"} ~ {d.timeEnd ?? "23:59"}
                   </p>
                 )}
+                {d?.preCheckTime && <p>사전 점검: {d.preCheckTime}</p>}
+                {d?.subFocus && <p>세부 초점: {d.subFocus}</p>}
                 {Array.isArray(d?.positions) && d.positions.length > 0 && (
                   <p>
                     포지션 대상:{" "}
@@ -410,7 +414,7 @@ export default function PlayerTaskDetailPage() {
               </div>
             </section>
 
-            {playerId && (
+            {playerId && id && (
               <section className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-sm">
                 <h2 className="text-sm font-semibold text-slate-100">평가 바로가기</h2>
                 <p className="text-xs text-slate-400">

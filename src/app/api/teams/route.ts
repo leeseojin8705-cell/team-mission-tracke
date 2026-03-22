@@ -42,6 +42,9 @@ export async function GET(req: Request) {
     let where: { id?: { in: string[] } } | undefined;
     if (session && (session.role === "coach" || session.role === "owner")) {
       const ids = await getAccessibleTeamIds(session);
+      if (ids.length === 0) {
+        return NextResponse.json([]);
+      }
       where = { id: { in: ids } };
     }
     const teams = await prisma.team.findMany({

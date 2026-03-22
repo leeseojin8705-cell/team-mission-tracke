@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  TaskBlueprintEditor,
+  type TaskBlueprintDraft,
+} from "@/components/TaskBlueprintEditor";
 import type { TaskCategory, TeamStaff } from "@/lib/types";
 
 type PlayerSession = {
@@ -34,6 +38,11 @@ export default function NewPlayerTaskPage() {
   const [selectedEvaluatorIds, setSelectedEvaluatorIds] = useState<Set<string>>(
     new Set(),
   );
+
+  const blueprintDraftRef = useRef<TaskBlueprintDraft>({});
+  const onBlueprintDraft = useCallback((d: TaskBlueprintDraft) => {
+    blueprintDraftRef.current = d;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,6 +88,8 @@ export default function NewPlayerTaskPage() {
         sessionData.session?.role === "player" ? sessionData.session.playerId ?? null : null;
       if (!playerId) throw new Error("선수 로그인 정보가 없습니다. 다시 로그인해 주세요.");
 
+      const bp = blueprintDraftRef.current;
+
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,6 +130,8 @@ export default function NewPlayerTaskPage() {
               selectedEvaluatorIds.size > 0
                 ? Array.from(selectedEvaluatorIds)
                 : undefined,
+            // 전술·포메이션·미니 필드·과제 줄 (코치 과제와 동일 스키마)
+            ...bp,
           },
         }),
       });
@@ -444,6 +457,8 @@ export default function NewPlayerTaskPage() {
               placeholder="이 과제를 통해 달성하고 싶은 목표를 적어 보세요."
             />
           </div>
+
+          <TaskBlueprintEditor onDraftChange={onBlueprintDraft} />
 
           <div className="pt-2">
             <button

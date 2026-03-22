@@ -1,28 +1,39 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
 
 export async function GET() {
-  const session = await getSession();
-  let where: { teamId?: { in: string[] | null }; OR?: any[] } | undefined;
+  try {
+    const session = await getSession();
+    let where: Prisma.TaskWhereInput | undefined;
 
-  if (session && (session.role === "coach" || session.role === "owner")) {
-    const ids = await getAccessibleTeamIds(session);
-    // 팀 과제는 접근 가능한 팀만, 개인 과제는 모두(선수/자신) 허용
-    where = {
-      OR: [
-        { teamId: { in: ids } },
-        { teamId: null },
-      ],
-    };
+    if (session && (session.role === "coach" || session.role === "owner")) {
+      const ids = await getAccessibleTeamIds(session);
+      // 접근 가능한 팀이 없으면 팀 미배정 과제만 (in: [] 는 Prisma/DB에서 오류 유발 가능)
+      if (ids.length === 0) {
+        where = { teamId: null };
+      } else {
+        where = {
+          OR: [
+            { teamId: { in: ids } },
+            { teamId: null },
+          ],
+        };
+      }
+    }
+
+    const tasks = await prisma.task.findMany({
+      where,
+      orderBy: { title: "asc" },
+    });
+    return NextResponse.json(tasks);
+  } catch (e) {
+    console.error("[GET /api/tasks]", e);
+    const message = e instanceof Error ? e.message : "과제 목록 조회 실패";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const tasks = await prisma.task.findMany({
-    where,
-    orderBy: { title: "asc" },
-  });
-  return NextResponse.json(tasks);
 }
 
 export async function POST(req: Request) {
@@ -41,23 +52,13 @@ export async function POST(req: Request) {
         title: body.title,
         category: body.category,
         dueDate: body.dueDate ? new Date(body.dueDate) : null,
+        teamId: body.targetType === "team" ? body.targetId : null,
+        playerId: body.targetType === "player" ? body.targetId : null,
+        details: body.details ? JSON.stringify(body.details) : null,
       },
     });
 
-    // Prisma Client 스키마 불일치 문제를 피하기 위해 raw SQL로 teamId / playerId / details 업데이트
-    await prisma.$executeRawUnsafe(
-      `UPDATE Task
-       SET teamId = ?, playerId = ?, details = ?
-       WHERE id = ?`,
-      body.targetType === "team" ? body.targetId : null,
-      body.targetType === "player" ? body.targetId : null,
-      body.details ? JSON.stringify(body.details) : null,
-      created.id,
-    );
-
-    const updated = await prisma.task.findUnique({ where: { id: created.id } });
-
-    return NextResponse.json(updated, { status: 201 });
+    return NextResponse.json(created, { status: 201 });
   } catch (error) {
     console.error("POST /api/tasks error", error);
     const message =

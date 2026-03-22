@@ -70,10 +70,10 @@ export default function PlayerProfilePage() {
           });
           setNewLoginId(p.loginId ?? "");
 
-          fetch(`/api/teams?teamId=${encodeURIComponent(p.teamId)}`)
-            .then((r) => (r.ok ? r.json() : []))
-            .then((ts: Team[]) => {
-              if (!cancelled) setTeam(ts[0] ?? null);
+          fetch(`/api/teams/${encodeURIComponent(p.teamId)}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((t: Team | null) => {
+              if (!cancelled) setTeam(t);
             })
             .catch(() => {});
         }

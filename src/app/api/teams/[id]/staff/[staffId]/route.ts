@@ -10,13 +10,13 @@ export async function PATCH(
   if (body.guidance === undefined) {
     return NextResponse.json({ error: "guidance가 필요합니다." }, { status: 400 });
   }
-  const prismaAny = prisma as unknown as { $executeRawUnsafe: (query: string, ...args: unknown[]) => Promise<unknown> };
-  await prismaAny.$executeRawUnsafe(
-    "UPDATE TeamStaff SET guidance = ? WHERE id = ? AND teamId = ?",
-    body.guidance ? 1 : 0,
-    staffId,
-    teamId,
-  );
+  const result = await prisma.teamStaff.updateMany({
+    where: { id: staffId, teamId },
+    data: { guidance: Boolean(body.guidance) },
+  });
+  if (result.count === 0) {
+    return NextResponse.json({ error: "스태프를 찾을 수 없습니다." }, { status: 404 });
+  }
   return NextResponse.json({ ok: true });
 }
 

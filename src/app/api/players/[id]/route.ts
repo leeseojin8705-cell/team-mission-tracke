@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(
@@ -40,38 +41,42 @@ export async function PATCH(
   try {
     const body = await req.json();
 
-    const name = body.name != null ? String(body.name) : null;
-    const position = body.position != null ? String(body.position) : null;
-    const height = body.height != null ? String(body.height) : null;
-    const weight = body.weight != null ? String(body.weight) : null;
-    const dateOfBirth = body.dateOfBirth != null ? String(body.dateOfBirth) : null;
-    const gender = body.gender != null ? String(body.gender) : null;
-    const photo = body.photo != null ? String(body.photo) : null;
-    const phone = body.phone != null ? String(body.phone) : null;
-    const parentPhone = body.parentPhone != null ? String(body.parentPhone) : null;
-    const address = body.address != null ? String(body.address) : null;
-    const school = body.school != null ? String(body.school) : null;
+    const data: Prisma.PlayerUpdateInput = {};
+    if (body.name !== undefined) data.name = String(body.name);
+    if (body.position !== undefined) {
+      data.position = body.position != null ? String(body.position) : null;
+    }
+    if (body.height !== undefined) {
+      data.height = body.height != null ? String(body.height) : null;
+    }
+    if (body.weight !== undefined) {
+      data.weight = body.weight != null ? String(body.weight) : null;
+    }
+    if (body.dateOfBirth !== undefined) {
+      data.dateOfBirth = body.dateOfBirth != null ? String(body.dateOfBirth) : null;
+    }
+    if (body.gender !== undefined) {
+      data.gender = body.gender != null ? String(body.gender) : null;
+    }
+    if (body.photo !== undefined) {
+      data.photo = body.photo != null ? String(body.photo) : null;
+    }
+    if (body.phone !== undefined) {
+      data.phone = body.phone != null ? String(body.phone) : null;
+    }
+    if (body.parentPhone !== undefined) {
+      data.parentPhone = body.parentPhone != null ? String(body.parentPhone) : null;
+    }
+    if (body.address !== undefined) {
+      data.address = body.address != null ? String(body.address) : null;
+    }
+    if (body.school !== undefined) {
+      data.school = body.school != null ? String(body.school) : null;
+    }
 
-    await prisma.$executeRawUnsafe(
-      `UPDATE Player
-       SET name = ?, position = ?, height = ?, weight = ?, dateOfBirth = ?, gender = ?, photo = ?, phone = ?, parentPhone = ?, address = ?, school = ?
-       WHERE id = ?`,
-      name,
-      position,
-      height,
-      weight,
-      dateOfBirth,
-      gender,
-      photo,
-      phone,
-      parentPhone,
-      address,
-      school,
-      id,
-    );
-
-    const updated = await prisma.player.findUnique({
+    const updated = await prisma.player.update({
       where: { id },
+      data,
       select: {
         id: true,
         name: true,
@@ -83,9 +88,9 @@ export async function PATCH(
         gender: true,
         photo: true,
         phone: true,
-      parentPhone: true,
-      address: true,
-      school: true,
+        parentPhone: true,
+        address: true,
+        school: true,
         loginId: true,
       },
     });

@@ -2,8 +2,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import type { Task, Team, Player, TaskCategory, TeamStaff, TaskProgress } from "@/lib/types";
+import { FORMATION_PRESET_OPTIONS } from "@/lib/formationLayouts";
 import {
   aggregatePhaseScores,
   getTaskScores,
@@ -23,6 +31,153 @@ function mapHtmlCategoryToTaskCategory(cat: HtmlCategory): TaskCategory {
   if (cat === "practice_game") return "체력";
   return "기술";
 }
+
+/** FIFA 규격 비율 viewBox 105×68 (m) — 좌측이 자기 진영, 공격은 오른쪽 */
+const PITCH_VB = { w: 105, h: 68 };
+
+type FormationSlot = { x: number; y: number; label?: string; id?: string };
+
+function newFormationSlotId(): string {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `fs-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function clonePresetToCustomSlots(slots: FormationSlot[]): FormationSlot[] {
+  return slots.map((s) => ({
+    x: s.x,
+    y: s.y,
+    label: s.label,
+    id: newFormationSlotId(),
+  }));
+}
+
+function clampPitch(x: number, y: number) {
+  return {
+    x: Math.min(104.2, Math.max(0.8, x)),
+    y: Math.min(67.2, Math.max(0.8, y)),
+  };
+}
+
+function clientToSvgPoint(
+  svg: SVGSVGElement,
+  clientX: number,
+  clientY: number,
+) {
+  const pt = svg.createSVGPoint();
+  pt.x = clientX;
+  pt.y = clientY;
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return { x: 0, y: 0 };
+  return pt.matrixTransform(ctm.inverse());
+}
+
+const FORMATION_LAYOUTS: Record<string, FormationSlot[]> = {
+  "4-4-2": [
+    { x: 6, y: 34, label: "GK" },
+    { x: 22, y: 11 },
+    { x: 22, y: 25 },
+    { x: 22, y: 43 },
+    { x: 22, y: 57 },
+    { x: 44, y: 12 },
+    { x: 44, y: 28 },
+    { x: 44, y: 40 },
+    { x: 44, y: 56 },
+    { x: 66, y: 26 },
+    { x: 66, y: 42 },
+  ],
+  "4-3-3": [
+    { x: 6, y: 34, label: "GK" },
+    { x: 22, y: 12 },
+    { x: 22, y: 28 },
+    { x: 22, y: 40 },
+    { x: 22, y: 56 },
+    { x: 44, y: 22 },
+    { x: 44, y: 34 },
+    { x: 44, y: 46 },
+    { x: 66, y: 16 },
+    { x: 66, y: 34 },
+    { x: 66, y: 52 },
+  ],
+  "3-5-2": [
+    { x: 6, y: 34, label: "GK" },
+    { x: 22, y: 22 },
+    { x: 22, y: 34 },
+    { x: 22, y: 46 },
+    { x: 42, y: 10 },
+    { x: 42, y: 22 },
+    { x: 42, y: 34 },
+    { x: 42, y: 46 },
+    { x: 42, y: 58 },
+    { x: 66, y: 28 },
+    { x: 66, y: 40 },
+  ],
+  "4-2-3-1": [
+    { x: 6, y: 34, label: "GK" },
+    { x: 22, y: 11 },
+    { x: 22, y: 25 },
+    { x: 22, y: 43 },
+    { x: 22, y: 57 },
+    { x: 38, y: 28 },
+    { x: 38, y: 40 },
+    { x: 54, y: 16 },
+    { x: 54, y: 34 },
+    { x: 54, y: 52 },
+    { x: 70, y: 34 },
+  ],
+  "3-4-3": [
+    { x: 6, y: 34, label: "GK" },
+    { x: 22, y: 22 },
+    { x: 22, y: 34 },
+    { x: 22, y: 46 },
+    { x: 42, y: 14 },
+    { x: 42, y: 28 },
+    { x: 42, y: 40 },
+    { x: 42, y: 54 },
+    { x: 66, y: 22 },
+    { x: 66, y: 34 },
+    { x: 66, y: 46 },
+  ],
+  "4-1-4-1": [
+    { x: 6, y: 34, label: "GK" },
+    { x: 22, y: 11 },
+    { x: 22, y: 26 },
+    { x: 22, y: 42 },
+    { x: 22, y: 57 },
+    { x: 36, y: 34 },
+    { x: 52, y: 12 },
+    { x: 52, y: 28 },
+    { x: 52, y: 40 },
+    { x: 52, y: 56 },
+    { x: 72, y: 34 },
+  ],
+  "5-3-2": [
+    { x: 6, y: 34, label: "GK" },
+    { x: 20, y: 8 },
+    { x: 20, y: 22 },
+    { x: 20, y: 34 },
+    { x: 20, y: 46 },
+    { x: 20, y: 60 },
+    { x: 44, y: 22 },
+    { x: 44, y: 34 },
+    { x: 44, y: 46 },
+    { x: 68, y: 28 },
+    { x: 68, y: 40 },
+  ],
+  "5-4-1": [
+    { x: 6, y: 34, label: "GK" },
+    { x: 20, y: 8 },
+    { x: 20, y: 22 },
+    { x: 20, y: 34 },
+    { x: 20, y: 46 },
+    { x: 20, y: 60 },
+    { x: 44, y: 12 },
+    { x: 44, y: 28 },
+    { x: 44, y: 40 },
+    { x: 44, y: 56 },
+    { x: 70, y: 34 },
+  ],
+};
 
 export default function CoachTasksPage() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -70,6 +225,90 @@ export default function CoachTasksPage() {
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(new Set());
   const [selectedEvaluatorIds, setSelectedEvaluatorIds] = useState<Set<string>>(new Set());
 
+  /** 목업(코치-선수 과제 등록) 확장 필드 */
+  type SubFocusOpt = "이해" | "응용" | "활용" | "전략" | "점검" | "평가";
+  type AssignmentRow = {
+    id: string;
+    text: string;
+    common: boolean;
+    fw: boolean;
+    mf: boolean;
+    df: boolean;
+    gk: boolean;
+    individual: boolean;
+  };
+  const [subFocus, setSubFocus] = useState<SubFocusOpt | null>(null);
+  const [todayStrategy, setTodayStrategy] = useState("");
+  const [formation, setFormation] = useState("");
+  /** 자유 배치 시 이름(예: 3-2-3-2 변형) — details.formationLabel */
+  const [formationNote, setFormationNote] = useState("");
+  const [customFormationSlots, setCustomFormationSlots] = useState<
+    FormationSlot[]
+  >([]);
+  const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
+  const pitchSvgRef = useRef<SVGSVGElement | null>(null);
+  const [preCheckTime, setPreCheckTime] = useState("");
+  const [assignmentRows, setAssignmentRows] = useState<AssignmentRow[]>(() => [
+    {
+      id: typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `r-${Date.now()}`,
+      text: "",
+      common: true,
+      fw: false,
+      mf: false,
+      df: false,
+      gk: false,
+      individual: false,
+    },
+  ]);
+
+  function newAssignmentRow(): AssignmentRow {
+    return {
+      id:
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `r-${Date.now()}-${Math.random()}`,
+      text: "",
+      common: true,
+      fw: false,
+      mf: false,
+      df: false,
+      gk: false,
+      individual: false,
+    };
+  }
+
+  function applyTaskCategoryRow1(label: typeof taskType) {
+    setTaskType(label);
+    const map: Record<string, HtmlCategory> = {
+      자기관리: "selfcare",
+      "연습 및 훈련": "practice",
+      "연습 경기": "practice_game",
+      "정식 경기": "official",
+    };
+    setHtmlCategory(map[label] ?? null);
+    setContentTags([]);
+  }
+
+  const focusAxisOptions: { id: string; label: string }[] = [
+    { id: "skill", label: "기술" },
+    { id: "physical", label: "신체" },
+    { id: "tactical", label: "전술" },
+    { id: "mental", label: "심리" },
+    { id: "cognitive", label: "인지" },
+    { id: "attitude", label: "태도" },
+  ];
+
+  const subFocusOptions: SubFocusOpt[] = [
+    "이해",
+    "응용",
+    "활용",
+    "전략",
+    "점검",
+    "평가",
+  ];
+
   const teamOptions = useMemo(
     () => teams.map((t) => ({ id: t.id, name: t.name })),
     [teams],
@@ -96,6 +335,64 @@ export default function CoachTasksPage() {
     if (!currentTeamIdForTask) return players;
     return players.filter((p) => p.teamId === currentTeamIdForTask);
   }, [currentTeamIdForTask, players]);
+
+  const displayFormationSlots = useMemo(() => {
+    if (formation === "custom") return customFormationSlots;
+    if (!formation) return [] as FormationSlot[];
+    return FORMATION_LAYOUTS[formation] ?? [];
+  }, [formation, customFormationSlots]);
+
+  const isCustomFormation = formation === "custom";
+
+  const handleFormationSelect = useCallback(
+    (next: string) => {
+      if (next === "custom") {
+        const seedKey = formation !== "custom" ? formation : "";
+        setFormation("custom");
+        setCustomFormationSlots((prev) => {
+          if (prev.length > 0) return prev;
+          const seed =
+            seedKey && FORMATION_LAYOUTS[seedKey]
+              ? FORMATION_LAYOUTS[seedKey]
+              : null;
+          if (seed) return clonePresetToCustomSlots(seed);
+          return [{ x: 6, y: 34, label: "GK", id: newFormationSlotId() }];
+        });
+      } else {
+        setFormation(next);
+      }
+    },
+    [formation],
+  );
+
+  const applyPresetToCustomField = useCallback((presetKey: string) => {
+    const seed = FORMATION_LAYOUTS[presetKey];
+    if (!seed) return;
+    setFormation("custom");
+    setCustomFormationSlots(clonePresetToCustomSlots(seed));
+  }, []);
+
+  useEffect(() => {
+    if (!draggingSlotId) return;
+    const move = (e: PointerEvent) => {
+      const svg = pitchSvgRef.current;
+      if (!svg) return;
+      const p = clientToSvgPoint(svg, e.clientX, e.clientY);
+      const c = clampPitch(p.x, p.y);
+      setCustomFormationSlots((prev) =>
+        prev.map((s) =>
+          s.id === draggingSlotId ? { ...s, x: c.x, y: c.y } : s,
+        ),
+      );
+    };
+    const up = () => setDraggingSlotId(null);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }, [draggingSlotId]);
 
   const [filterType, setFilterType] = useState<TargetType | "all">("all");
   const [filterTeamId, setFilterTeamId] = useState<string>("all");
@@ -306,11 +603,39 @@ export default function CoachTasksPage() {
     setPositionWeights({ GK: 25, DF: 25, MF: 25, FW: 25 });
     setSelectedPlayerIds(new Set());
     setSelectedEvaluatorIds(new Set());
+    setSubFocus(null);
+    setTodayStrategy("");
+    setFormation("");
+    setFormationNote("");
+    setCustomFormationSlots([]);
+    setDraggingSlotId(null);
+    setPreCheckTime("");
+    setAssignmentRows([newAssignmentRow()]);
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !targetId) return;
+    if (!targetId) return;
+
+    const assignmentLines = assignmentRows
+      .filter((r) => r.text.trim())
+      .map((r) => ({
+        text: r.text.trim(),
+        scopes: [
+          r.common && "공통과제",
+          r.fw && "FW",
+          r.mf && "MF",
+          r.df && "DF",
+          r.gk && "GK",
+          r.individual && "개인과제",
+        ].filter(Boolean) as string[],
+      }));
+
+    const resolvedTitle =
+      title.trim() ||
+      assignmentLines[0]?.text ||
+      "";
+    if (!resolvedTitle) return;
 
     // HTML 과제 유형/분류 → 기존 Task 필드로 매핑
     const mappedCategory = mapHtmlCategoryToTaskCategory(htmlCategory);
@@ -325,8 +650,8 @@ export default function CoachTasksPage() {
     const details = {
       htmlTaskType,
       htmlCategory,
-    taskType,
-    contentCategory,
+      taskType,
+      contentCategory,
       contents: contentTags.length ? contentTags : undefined,
       detailText: taskDetail || undefined,
       goalText: taskGoal || undefined,
@@ -336,6 +661,20 @@ export default function CoachTasksPage() {
       weekdays: weekdaySet.size ? Array.from(weekdaySet) : undefined,
       timeStart: timeStart || undefined,
       timeEnd: timeEnd || undefined,
+      preCheckTime: preCheckTime || undefined,
+      subFocus: subFocus || undefined,
+      todayStrategy: todayStrategy.trim() || undefined,
+      formation: formation.trim() || undefined,
+      formationLabel: formationNote.trim() || undefined,
+      formationCustomSlots:
+        formation === "custom" && customFormationSlots.length > 0
+          ? customFormationSlots.map(({ x, y, label }) => ({
+              x,
+              y,
+              ...(label ? { label } : {}),
+            }))
+          : undefined,
+      assignmentLines: assignmentLines.length ? assignmentLines : undefined,
       positions: positionSet.size ? Array.from(positionSet) : undefined,
       positionWeights,
       players:
@@ -359,7 +698,7 @@ export default function CoachTasksPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            title: title.trim(),
+            title: resolvedTitle,
             category: finalCategory,
             dueDate: finalDueDate,
             targetType,
@@ -391,7 +730,7 @@ export default function CoachTasksPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            title: title.trim(),
+            title: resolvedTitle,
             category: finalCategory,
             dueDate: finalDueDate,
             targetType,
@@ -480,6 +819,56 @@ export default function CoachTasksPage() {
             : [],
         ),
       );
+      setSubFocus(
+        (task.details as { subFocus?: SubFocusOpt }).subFocus ?? null,
+      );
+      setTodayStrategy(
+        (task.details as { todayStrategy?: string }).todayStrategy ?? "",
+      );
+      setFormation((task.details as { formation?: string }).formation ?? "");
+      setFormationNote(
+        (task.details as { formationLabel?: string }).formationLabel ?? "",
+      );
+      const fc = (task.details as { formationCustomSlots?: unknown })
+        .formationCustomSlots;
+      if (
+        (task.details as { formation?: string }).formation === "custom" &&
+        Array.isArray(fc) &&
+        fc.length > 0
+      ) {
+        setCustomFormationSlots(
+          fc.map((row: { x?: number; y?: number; label?: string }) => ({
+            x: typeof row.x === "number" ? row.x : 0,
+            y: typeof row.y === "number" ? row.y : 34,
+            ...(row.label ? { label: row.label } : {}),
+            id: newFormationSlotId(),
+          })),
+        );
+      } else {
+        setCustomFormationSlots([]);
+      }
+      setPreCheckTime(
+        (task.details as { preCheckTime?: string }).preCheckTime ?? "",
+      );
+      const al = (task.details as { assignmentLines?: unknown })
+        .assignmentLines;
+      if (Array.isArray(al) && al.length > 0) {
+        setAssignmentRows(
+          al.map((row: { text?: string; scopes?: string[] }) => ({
+            id: newAssignmentRow().id,
+            text: typeof row.text === "string" ? row.text : "",
+            common: Array.isArray(row.scopes) && row.scopes.includes("공통과제"),
+            fw: Array.isArray(row.scopes) && row.scopes.includes("FW"),
+            mf: Array.isArray(row.scopes) && row.scopes.includes("MF"),
+            df: Array.isArray(row.scopes) && row.scopes.includes("DF"),
+            gk: Array.isArray(row.scopes) && row.scopes.includes("GK"),
+            individual:
+              Array.isArray(row.scopes) && row.scopes.includes("개인과제"),
+          })),
+        );
+      } else {
+        setAssignmentRows([newAssignmentRow()]);
+      }
     }
 
     if (task.teamId) {
@@ -967,67 +1356,89 @@ export default function CoachTasksPage() {
         </span>
       </div>
 
-      {/* 과제 등록 폼 - task_registration.html 스타일 간단 이식 */}
+      {/* 과제 등록 폼 — 코치-선수 과제 등록(목업) */}
       <form
         onSubmit={handleSubmit}
-        className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-5 text-sm"
+        className="overflow-hidden rounded-2xl border-2 border-lime-400/40 bg-slate-900/90 text-sm shadow-lg shadow-lime-500/5"
       >
-        {/* ① 과제 유형 */}
-        <section className="mb-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
-          <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            과제 유형
+        <div className="bg-gradient-to-r from-lime-400 to-emerald-500 px-4 py-3 text-center">
+          <p className="text-xs font-bold tracking-[0.2em] text-slate-900">
+            TEAM MISSION TRACKER
+          </p>
+          <h2 className="mt-1 text-lg font-extrabold text-slate-950">
+            코치-선수 과제 등록
+          </h2>
+        </div>
+        <div className="space-y-4 p-4 md:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/80 pb-3">
+          <span className="text-xs font-semibold text-slate-300">과제 등록</span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={resetForm}
+              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-700"
+            >
+              새로 작성
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowLoadFromTaskModal(true)}
+              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-700"
+            >
+              불러오기
+            </button>
           </div>
-          <div className="flex flex-col gap-3 md:flex-row">
+        </div>
+
+        {/* ① 반복 / 단일 */}
+        <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+          <div className="mb-2 text-[11px] font-semibold text-slate-400">과제 형태</div>
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => setHtmlTaskType("daily")}
-              className={`flex-1 rounded-lg border px-4 py-3 text-left transition ${
+              className={`rounded-lg border px-4 py-2 text-xs font-medium ${
                 htmlTaskType === "daily"
-                  ? "border-emerald-500 bg-emerald-500/10"
-                  : "border-slate-700 bg-slate-900"
+                  ? "border-lime-400 bg-lime-400/20 text-lime-100"
+                  : "border-slate-600 text-slate-300"
               }`}
             >
-              <div className="text-lg">📅</div>
-              <div className="text-sm font-semibold text-slate-100">매일 과제</div>
-              <div className="mt-1 text-xs text-slate-400">
-                정해진 요일·시간에 반복 평가, 선수는 사후 평가(디폴트)
-              </div>
+              매일 과제
             </button>
             <button
               type="button"
               onClick={() => setHtmlTaskType("single")}
-              className={`flex-1 rounded-lg border px-4 py-3 text-left transition ${
+              className={`rounded-lg border px-4 py-2 text-xs font-medium ${
                 htmlTaskType === "single"
-                  ? "border-emerald-500 bg-emerald-500/10"
-                  : "border-slate-700 bg-slate-900"
+                  ? "border-lime-400 bg-lime-400/20 text-lime-100"
+                  : "border-slate-600 text-slate-300"
               }`}
             >
-              <div className="text-lg">📌</div>
-              <div className="text-sm font-semibold text-slate-100">단일 과제</div>
-              <div className="mt-1 text-xs text-slate-400">
-                특정 날짜·시간 1회 평가, 선수 사전·사후 / 지도자 사후
-              </div>
+              단일 과제
             </button>
           </div>
         </section>
 
-        {/* 과제 분류 (자기관리 / 연습 / 연습경기 / 정식경기) */}
-        <section className="space-y-2 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            과제 분류
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs">
-            {["자기관리", "연습 및 훈련", "연습 경기", "정식 경기"].map((t) => (
+        {/* Row1 유형 */}
+        <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+          <div className="mb-2 text-[11px] font-semibold text-slate-400">유형</div>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                "자기관리",
+                "연습 및 훈련",
+                "연습 경기",
+                "정식 경기",
+              ] as const
+            ).map((t) => (
               <button
                 key={t}
                 type="button"
-                onClick={() => setTaskType(t as typeof taskType)}
-                className={`rounded-full border px-3 py-1.5 font-medium transition ${
+                onClick={() => applyTaskCategoryRow1(t)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
                   taskType === t
-                    ? "border-emerald-500 bg-emerald-500 text-slate-950"
-                    : "border-slate-700 bg-slate-950 text-slate-200 hover:border-emerald-400"
+                    ? "border-lime-400 bg-lime-400 text-slate-950"
+                    : "border-slate-600 text-slate-200 hover:border-lime-500/60"
                 }`}
               >
                 {t}
@@ -1036,42 +1447,91 @@ export default function CoachTasksPage() {
           </div>
         </section>
 
-        {/* 과제 내용 축 (기술 / 신체 / 전술 / 심리 / 인지 / 태도) - 중복 선택 가능 */}
-        <section className="space-y-2 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            과제 내용
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs">
-            {["기술", "신체", "전술", "심리", "인지", "태도"].map((label) => {
-              const id = label; // 한글 라벨 그대로 id로 사용
-              const on = contentTags.includes(id);
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() =>
-                    setContentTags((prev) => {
-                      const next = prev.includes(id)
-                        ? prev.filter((v) => v !== id)
-                        : [...prev, id];
-                      // 대표 contentCategory 는 첫 번째 선택값으로 유지
-                      setContentCategory(
-                        (next[0] as typeof contentCategory) ?? "기술",
-                      );
-                      return next;
-                    })
-                  }
-                  className={`rounded-full border px-3 py-1.5 font-medium transition ${
-                    on
-                      ? "border-emerald-500 bg-emerald-500 text-slate-950"
-                      : "border-slate-700 bg-slate-950 text-slate-200 hover:border-emerald-400"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+        {/* Row2 초점 (목업: 단일 선택 → contentTags + contentCategory) */}
+        <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+          <div className="mb-2 text-[11px] font-semibold text-slate-400">초점</div>
+          {!htmlCategory ? (
+            <p className="text-[11px] text-slate-500">위에서 유형을 먼저 선택하세요.</p>
+          ) : htmlCategory === "selfcare" ? (
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: "routine", label: "루틴" },
+                { id: "nutrition", label: "식단" },
+                { id: "sleep", label: "수면" },
+                { id: "recovery", label: "회복" },
+              ].map((opt) => {
+                const on = contentTags[0] === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setContentTags([opt.id]);
+                      setContentCategory("멘탈");
+                    }}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+                      on
+                        ? "border-lime-400 bg-lime-400 text-slate-950"
+                        : "border-slate-600 text-slate-200"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {focusAxisOptions.map((opt) => {
+                const on = contentTags[0] === opt.id;
+                const mapCat: Record<string, typeof contentCategory> = {
+                  skill: "기술",
+                  physical: "신체",
+                  tactical: "전술",
+                  mental: "심리",
+                  cognitive: "인지",
+                  attitude: "태도",
+                };
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setContentTags([opt.id]);
+                      setContentCategory(mapCat[opt.id] ?? "기술");
+                    }}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+                      on
+                        ? "border-lime-400 bg-lime-400 text-slate-950"
+                        : "border-slate-600 text-slate-200"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Row3 세부 초점 */}
+        <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+          <div className="mb-2 text-[11px] font-semibold text-slate-400">세부 초점</div>
+          <div className="flex flex-wrap gap-2">
+            {subFocusOptions.map((sf) => (
+              <button
+                key={sf}
+                type="button"
+                onClick={() => setSubFocus(subFocus === sf ? null : sf)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+                  subFocus === sf
+                    ? "border-sky-400 bg-sky-500/20 text-sky-100"
+                    : "border-slate-600 text-slate-200"
+                }`}
+              >
+                {sf}
+              </button>
+            ))}
           </div>
         </section>
 
@@ -1154,6 +1614,15 @@ export default function CoachTasksPage() {
                     className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
                   />
                 </label>
+                <label className="flex items-center gap-2">
+                  <span className="text-slate-300">사전 점검</span>
+                  <input
+                    type="time"
+                    value={preCheckTime}
+                    onChange={(e) => setPreCheckTime(e.target.value)}
+                    className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                  />
+                </label>
               </div>
             </>
           ) : (
@@ -1189,135 +1658,620 @@ export default function CoachTasksPage() {
                     className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
                   />
                 </label>
+                <label className="flex items-center gap-2">
+                  <span className="text-slate-300">사전 점검</span>
+                  <input
+                    type="time"
+                    value={preCheckTime}
+                    onChange={(e) => setPreCheckTime(e.target.value)}
+                    className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                  />
+                </label>
               </div>
             </>
           )}
         </section>
 
-        {/* ② 과제 기본 정보 + 분류 */}
+        {/* 전술 · 포메이션 · 미니 필드 · 과제 줄 (목업) */}
+        <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+          <div className="mb-3 text-[11px] font-semibold text-slate-400">
+            전술 · 포메이션 · 대상 선수
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs text-slate-300">오늘의 전술</label>
+                <textarea
+                  value={todayStrategy}
+                  onChange={(e) => setTodayStrategy(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100 outline-none focus:border-lime-400"
+                  placeholder="전술 메모를 입력하세요"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="mb-1 block text-xs text-slate-300">
+                  포메이션 (프리셋 또는 직접 배치)
+                </label>
+                <select
+                  value={formation}
+                  onChange={(e) => handleFormationSelect(e.target.value)}
+                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100 outline-none focus:border-lime-400"
+                >
+                  <option value="">선택 안 함</option>
+                  {FORMATION_PRESET_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                  <option value="custom">직접 배치 (필드에서 편집)</option>
+                </select>
+                {isCustomFormation && (
+                  <>
+                    <input
+                      type="text"
+                      value={formationNote}
+                      onChange={(e) => setFormationNote(e.target.value)}
+                      className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100 outline-none focus:border-lime-400"
+                      placeholder="전술 이름 (선택, 예: 3-2-3-2 변형, 역삼각 미드)"
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] text-slate-500">
+                        프리셋을 불러온 뒤 필드에서 옮기기:
+                      </span>
+                      <select
+                        className="max-w-[10rem] rounded border border-slate-600 bg-slate-950 px-2 py-1 text-[10px] text-slate-200"
+                        defaultValue=""
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v) applyPresetToCustomField(v);
+                          e.target.value = "";
+                        }}
+                      >
+                        <option value="">프리셋 불러오기…</option>
+                        {FORMATION_PRESET_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCustomFormationSlots([
+                            {
+                              x: 6,
+                              y: 34,
+                              label: "GK",
+                              id: newFormationSlotId(),
+                            },
+                          ])
+                        }
+                        className="rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-800"
+                      >
+                        GK만
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustomFormationSlots([])}
+                        className="rounded border border-rose-800/60 px-2 py-1 text-[10px] text-rose-200/90 hover:bg-rose-950/40"
+                      >
+                        마커 전부 삭제
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] text-slate-400">
+                  축소 경기장 (105×68m)
+                  {isCustomFormation
+                    ? " · 직접 배치: 잔디 클릭=추가 · 드래그=이동 · 더블클릭=삭제"
+                    : " · 프리셋 선택 시 배치 · 선수 탭으로 대상 지정"}
+                </p>
+                {formation && (
+                  <span className="max-w-[55%] truncate rounded border border-lime-500/40 bg-lime-500/10 px-2 py-0.5 text-[10px] font-semibold text-lime-200">
+                    {formation === "custom"
+                      ? formationNote.trim() || "직접 배치"
+                      : formation}
+                  </span>
+                )}
+              </div>
+              <div className="relative w-full overflow-hidden rounded-xl border-2 border-emerald-600/70 shadow-inner shadow-black/40 ring-1 ring-white/10">
+                {/* 비율: FIFA 길이·너비 (105:68) */}
+                <div
+                  className="relative w-full"
+                  style={{ aspectRatio: `${PITCH_VB.w} / ${PITCH_VB.h}` }}
+                >
+                  <svg
+                    ref={pitchSvgRef}
+                    className="absolute inset-0 h-full w-full touch-none select-none"
+                    viewBox={`0 0 ${PITCH_VB.w} ${PITCH_VB.h}`}
+                    preserveAspectRatio="xMidYMid meet"
+                    aria-label="포메이션 미니 필드"
+                  >
+                    <defs>
+                      <linearGradient
+                        id="pitchGrassBase"
+                        x1="0%"
+                        y1="0%"
+                        x2="0%"
+                        y2="100%"
+                      >
+                        <stop offset="0%" stopColor="#1a5c3a" />
+                        <stop offset="50%" stopColor="#0f4a2e" />
+                        <stop offset="100%" stopColor="#0d3d28" />
+                      </linearGradient>
+                      <pattern
+                        id="pitchStripes"
+                        width="10.5"
+                        height="68"
+                        patternUnits="userSpaceOnUse"
+                      >
+                        <rect width="5.25" height="68" fill="#14804f" opacity="0.22" />
+                        <rect
+                          x="5.25"
+                          width="5.25"
+                          height="68"
+                          fill="#0f6b42"
+                          opacity="0.12"
+                        />
+                      </pattern>
+                      <filter id="pitchShadow" x="-5%" y="-5%" width="110%" height="110%">
+                        <feDropShadow
+                          dx="0"
+                          dy="1"
+                          stdDeviation="1.2"
+                          floodOpacity="0.35"
+                        />
+                      </filter>
+                    </defs>
+                    {/* 잔디 */}
+                    <rect
+                      x="0"
+                      y="0"
+                      width={PITCH_VB.w}
+                      height={PITCH_VB.h}
+                      fill="url(#pitchGrassBase)"
+                    />
+                    <rect
+                      x="0"
+                      y="0"
+                      width={PITCH_VB.w}
+                      height={PITCH_VB.h}
+                      fill="url(#pitchStripes)"
+                      opacity="0.85"
+                    />
+                    {/* 바깥 터치라인 */}
+                    <rect
+                      x="0.35"
+                      y="0.35"
+                      width={PITCH_VB.w - 0.7}
+                      height={PITCH_VB.h - 0.7}
+                      fill="none"
+                      stroke="rgba(255,255,255,0.88)"
+                      strokeWidth="0.55"
+                      filter="url(#pitchShadow)"
+                    />
+                    {/* 센터 라인 */}
+                    <line
+                      x1="52.5"
+                      y1="0"
+                      x2="52.5"
+                      y2="68"
+                      stroke="rgba(255,255,255,0.88)"
+                      strokeWidth="0.45"
+                    />
+                    {/* 센터 서클 */}
+                    <circle
+                      cx="52.5"
+                      cy="34"
+                      r="9.15"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.88)"
+                      strokeWidth="0.45"
+                    />
+                    <circle
+                      cx="52.5"
+                      cy="34"
+                      r="0.55"
+                      fill="rgba(255,255,255,0.95)"
+                    />
+                    {/* 좌측(자기) 페널티 · 골 에어리어 */}
+                    <rect
+                      x="0"
+                      y="13.84"
+                      width="16.5"
+                      height="40.32"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.88)"
+                      strokeWidth="0.45"
+                    />
+                    <rect
+                      x="0"
+                      y="24.84"
+                      width="5.5"
+                      height="18.32"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.88)"
+                      strokeWidth="0.45"
+                    />
+                    <circle
+                      cx="11"
+                      cy="34"
+                      r="0.5"
+                      fill="rgba(255,255,255,0.95)"
+                    />
+                    {/* 페널티 아크 (페널티 마크 11,34 기준 r=9.15m) */}
+                    <path
+                      d="M 16.5 26.69 A 9.15 9.15 0 0 1 16.5 41.31"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.75)"
+                      strokeWidth="0.4"
+                    />
+                    {/* 우측(상대) 페널티 · 골 에어리어 */}
+                    <rect
+                      x="88.5"
+                      y="13.84"
+                      width="16.5"
+                      height="40.32"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.88)"
+                      strokeWidth="0.45"
+                    />
+                    <rect
+                      x="99.5"
+                      y="24.84"
+                      width="5.5"
+                      height="18.32"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.88)"
+                      strokeWidth="0.45"
+                    />
+                    <circle
+                      cx="94"
+                      cy="34"
+                      r="0.5"
+                      fill="rgba(255,255,255,0.95)"
+                    />
+                    <path
+                      d="M 88.5 26.69 A 9.15 9.15 0 0 0 88.5 41.31"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.75)"
+                      strokeWidth="0.4"
+                    />
+                    {/* 골대(단순화) */}
+                    <line
+                      x1="0"
+                      y1="30.34"
+                      x2="0"
+                      y2="37.66"
+                      stroke="rgba(250,250,250,0.95)"
+                      strokeWidth="1.1"
+                      strokeLinecap="round"
+                    />
+                    <line
+                      x1="105"
+                      y1="30.34"
+                      x2="105"
+                      y2="37.66"
+                      stroke="rgba(250,250,250,0.95)"
+                      strokeWidth="1.1"
+                      strokeLinecap="round"
+                    />
+                    {/* 코너 호 (1m) */}
+                    <path
+                      d="M 0 1 A 1 1 0 0 1 1 0"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.65)"
+                      strokeWidth="0.35"
+                    />
+                    <path
+                      d="M 104 0 A 1 1 0 0 1 105 1"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.65)"
+                      strokeWidth="0.35"
+                    />
+                    <path
+                      d="M 0 67 A 1 1 0 0 0 1 68"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.65)"
+                      strokeWidth="0.35"
+                    />
+                    <path
+                      d="M 105 67 A 1 1 0 0 1 104 68"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.65)"
+                      strokeWidth="0.35"
+                    />
+                    {/* 직접 배치: 빈 영역 클릭 시 마커 추가 (마커는 위 레이어에서 가로챔) */}
+                    {isCustomFormation && (
+                      <rect
+                        x="0"
+                        y="0"
+                        width={PITCH_VB.w}
+                        height={PITCH_VB.h}
+                        fill="transparent"
+                        style={{ cursor: "crosshair" }}
+                        onPointerDown={(e) => {
+                          if (e.button !== 0) return;
+                          const svg = pitchSvgRef.current;
+                          if (!svg) return;
+                          const p = clientToSvgPoint(svg, e.clientX, e.clientY);
+                          const c = clampPitch(p.x, p.y);
+                          setCustomFormationSlots((prev) => [
+                            ...prev,
+                            {
+                              x: Math.round(c.x * 100) / 100,
+                              y: Math.round(c.y * 100) / 100,
+                              id: newFormationSlotId(),
+                            },
+                          ]);
+                        }}
+                      />
+                    )}
+                    {/* 포메이션 슬롯 */}
+                    {displayFormationSlots.map((slot, i) => {
+                      const isGk = slot.label === "GK";
+                      const slotKey =
+                        slot.id ?? `preset-${slot.x}-${slot.y}-${i}`;
+                      const editable = isCustomFormation && Boolean(slot.id);
+                      return (
+                        <g
+                          key={slotKey}
+                          data-formation-marker=""
+                          style={{
+                            cursor: editable
+                              ? draggingSlotId === slot.id
+                                ? "grabbing"
+                                : "grab"
+                              : "default",
+                            pointerEvents: editable ? "auto" : "none",
+                          }}
+                          onPointerDown={(e) => {
+                            if (!editable || !slot.id) return;
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setDraggingSlotId(slot.id);
+                          }}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            if (!editable || !slot.id) return;
+                            setCustomFormationSlots((prev) =>
+                              prev.filter((s) => s.id !== slot.id),
+                            );
+                          }}
+                        >
+                          <circle
+                            cx={slot.x}
+                            cy={slot.y}
+                            r={isGk ? 2.35 : 2.05}
+                            fill={
+                              isGk
+                                ? "rgba(250,204,21,0.35)"
+                                : "rgba(163,230,53,0.28)"
+                            }
+                            stroke={
+                              isGk
+                                ? "rgba(250,204,21,0.95)"
+                                : "rgba(190,242,100,0.95)"
+                            }
+                            strokeWidth="0.45"
+                          />
+                          <text
+                            x={slot.x}
+                            y={slot.y + 0.85}
+                            textAnchor="middle"
+                            fontSize={isGk ? 2.1 : 2.35}
+                            fontWeight="700"
+                            fill="rgba(15,23,42,0.92)"
+                            style={{ fontFamily: "system-ui, sans-serif" }}
+                          >
+                            {isGk ? "GK" : String(i + 1)}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                  {/* 방향 라벨 */}
+                  <div className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 rounded bg-black/35 px-1.5 py-0.5 text-[8px] font-medium text-white/90 backdrop-blur-[2px]">
+                    수비
+                  </div>
+                  <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded bg-black/35 px-1.5 py-0.5 text-[8px] font-medium text-white/90 backdrop-blur-[2px]">
+                    공격 →
+                  </div>
+                </div>
+                <div className="border-t border-slate-700/80 bg-slate-950/85 px-2 py-2">
+                  <p className="mb-1.5 text-[10px] text-slate-500">
+                    대상 선수 (탭으로 다중 선택)
+                  </p>
+                  <div className="flex max-h-[4.5rem] flex-wrap gap-1 overflow-y-auto pr-0.5">
+                    {entryCandidatePlayers.length === 0 ? (
+                      <span className="text-[10px] text-slate-500">
+                        팀/대상을 먼저 선택하면 선수가 표시됩니다.
+                      </span>
+                    ) : (
+                      entryCandidatePlayers.slice(0, 18).map((p) => {
+                        const on = selectedPlayerIds.has(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() =>
+                              setSelectedPlayerIds((prev) => {
+                                const n = new Set(prev);
+                                if (n.has(p.id)) n.delete(p.id);
+                                else n.add(p.id);
+                                return n;
+                              })
+                            }
+                            className={`rounded-md border px-1.5 py-0.5 text-[10px] transition ${
+                              on
+                                ? "border-lime-400 bg-lime-400 font-medium text-slate-950 shadow-sm shadow-lime-500/20"
+                                : "border-slate-600/80 bg-slate-900/95 text-slate-200 hover:border-slate-500"
+                            }`}
+                          >
+                            {p.name}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-500">
+                선택 {selectedPlayerIds.size}명
+                {displayFormationSlots.length > 0
+                  ? ` · 필드 ${displayFormationSlots.length}포지션 표시`
+                  : " · 프리셋 또는 직접 배치를 선택하면 표시됩니다"}
+                {" · 팀 과제는 아래 엔트리에서도 조정 가능"}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+          <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-slate-400">
+            <span>과제 줄 (공통 / 포지션 / 개인)</span>
+            <button
+              type="button"
+              onClick={() =>
+                setAssignmentRows((prev) => [...prev, newAssignmentRow()])
+              }
+              className="rounded border border-slate-500 px-2 py-0.5 text-slate-200 hover:bg-slate-700"
+            >
+              + 줄 추가
+            </button>
+          </div>
+          <div className="space-y-3">
+            {assignmentRows.map((row, idx) => (
+              <div
+                key={row.id}
+                className="rounded-lg border border-slate-600 bg-slate-900/80 p-3"
+              >
+                <div className="flex flex-wrap items-start gap-2">
+                  <input
+                    value={row.text}
+                    onChange={(e) =>
+                      setAssignmentRows((prev) =>
+                        prev.map((r) =>
+                          r.id === row.id ? { ...r, text: e.target.value } : r,
+                        ),
+                      )
+                    }
+                    className="min-w-[200px] flex-1 rounded border border-slate-600 bg-slate-950 px-2 py-1.5 text-xs text-slate-100"
+                    placeholder="예: 볼 뺏기지 않기, 미드 프레싱"
+                  />
+                  <div className="flex flex-wrap gap-1">
+                    {(
+                      [
+                        ["common", "공통", row.common] as const,
+                        ["fw", "FW", row.fw] as const,
+                        ["mf", "MF", row.mf] as const,
+                        ["df", "DF", row.df] as const,
+                        ["gk", "GK", row.gk] as const,
+                        ["individual", "개인", row.individual] as const,
+                      ] as const
+                    ).map(([key, label, on]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() =>
+                          setAssignmentRows((prev) =>
+                            prev.map((r) =>
+                              r.id === row.id
+                                ? {
+                                    ...r,
+                                    [key]: !r[key as keyof AssignmentRow],
+                                  }
+                                : r,
+                            ),
+                          )
+                        }
+                        className={`rounded border px-2 py-0.5 text-[10px] ${
+                          on
+                            ? "border-lime-400 bg-lime-400/20 text-lime-100"
+                            : "border-slate-600 text-slate-400"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {assignmentRows.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAssignmentRows((prev) =>
+                          prev.filter((r) => r.id !== row.id),
+                        )
+                      }
+                      className="rounded border border-rose-700/50 px-2 text-rose-300"
+                    >
+                      −
+                    </button>
+                  )}
+                </div>
+                {idx === 0 && !title.trim() && row.text.trim() && (
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    제목이 비어 있으면 저장 시 첫 줄이 제목으로도 쓰일 수 있게 아래에서 입력하세요.
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ② 과제 기본 정보 (분류는 상단 유형·초점과 연동) */}
         <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
           <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
             <span className="h-2 w-2 rounded-full bg-emerald-400" />
             과제 기본 정보
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs text-slate-300">
-                과제 제목 <span className="text-rose-400">*</span>
-              </label>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
-                placeholder="과제 제목을 입력하세요"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-300">
-                과제 분류 <span className="text-rose-400">*</span>
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { id: "selfcare", label: "자기관리" },
-                  { id: "practice", label: "연습 및 훈련" },
-                  { id: "practice_game", label: "연습 경기" },
-                  { id: "official", label: "정식 경기" },
-                ].map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => {
-                      setHtmlCategory(opt.id as HtmlCategory);
-                      setContentTags([]);
-                    }}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                      htmlCategory === opt.id
-                        ? "border-emerald-500 bg-emerald-500 text-slate-950"
-                        : "border-slate-700 bg-slate-950 text-slate-300 hover:border-emerald-400"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* 과제 내용 / 평가 항목 태그 */}
           <div>
             <label className="mb-1 block text-xs text-slate-300">
-              과제 내용 / 평가 항목 <span className="text-rose-400">*</span>
+              과제 제목 <span className="text-slate-500">(비우면 첫 과제 줄이 제목으로 저장)</span>
             </label>
-            <p className="mb-2 text-[11px] text-slate-500">
-              과제 분류를 선택하면 해당 분류에 맞는 평가 항목을 여러 개 선택할 수 있습니다.
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+              placeholder="목록에 표시될 제목 (선택)"
+            />
+          </div>
+
+          <div className="rounded-lg border border-slate-700/80 bg-slate-950/50 p-3">
+            <p className="text-[11px] text-slate-400">
+              <strong className="text-slate-300">유형 · 초점 · 세부 초점</strong>은 폼 상단에서만
+              설정합니다. (중복 선택 방지)
             </p>
-            <div className="flex flex-wrap gap-2">
-              {(() => {
-                const base: { id: string; label: string; color: string }[] =
-                  htmlCategory === "selfcare"
-                    ? [
-                        { id: "routine", label: "루틴", color: "#3563e9" },
-                        { id: "nutrition", label: "식단", color: "#12b76a" },
-                        { id: "sleep", label: "수면", color: "#7c5cff" },
-                        { id: "recovery", label: "회복", color: "#f79009" },
-                      ]
-                    : htmlCategory === "practice"
-                      ? [
-                          { id: "skill", label: "기술", color: "#3563e9" },
-                          { id: "physical", label: "신체", color: "#12b76a" },
-                          { id: "tactical", label: "전술", color: "#f79009" },
-                          { id: "mental", label: "심리", color: "#f04438" },
-                          { id: "cognitive", label: "인지", color: "#7c5cff" },
-                          { id: "attitude", label: "태도", color: "#00b8d9" },
-                        ]
-                      : htmlCategory === "practice_game" || htmlCategory === "official"
-                        ? [
-                            { id: "skill", label: "기술", color: "#3563e9" },
-                            { id: "physical", label: "신체", color: "#12b76a" },
-                            { id: "tactical", label: "전술", color: "#f79009" },
-                            { id: "mental", label: "심리", color: "#f04438" },
-                            { id: "cognitive", label: "인지", color: "#7c5cff" },
-                            { id: "attitude", label: "태도", color: "#00b8d9" },
-                          ]
-                        : [];
-
-                if (!htmlCategory) {
-                  return (
-                    <span className="text-[11px] text-slate-500">
-                      먼저 위에서 과제 분류를 선택해 주세요.
-                    </span>
-                  );
-                }
-
-                return base.map((item) => {
-                  const on = contentTags.includes(item.id);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() =>
-                        setContentTags((prev) =>
-                          prev.includes(item.id)
-                            ? prev.filter((v) => v !== item.id)
-                            : [...prev, item.id],
-                        )
-                      }
-                      className={`flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                        on
-                          ? "border-emerald-500 bg-emerald-500 text-slate-950"
-                          : "border-slate-700 bg-slate-950 text-slate-200 hover:border-emerald-400"
-                      }`}
-                    >
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span>{item.label}</span>
-                    </button>
-                  );
-                });
-              })()}
-            </div>
+            {htmlCategory ? (
+              <p className="mt-2 text-xs text-slate-200">
+                현재: {taskType}
+                {contentTags[0]
+                  ? ` · 초점: ${
+                      (
+                        {
+                          routine: "루틴",
+                          nutrition: "식단",
+                          sleep: "수면",
+                          recovery: "회복",
+                        } as Record<string, string>
+                      )[contentTags[0]] ??
+                      focusAxisOptions.find((o) => o.id === contentTags[0])
+                        ?.label ??
+                      contentTags[0]
+                    }`
+                  : " · 초점: 미선택"}
+                {subFocus ? ` · 세부 초점: ${subFocus}` : ""}
+              </p>
+            ) : (
+              <p className="mt-2 text-[11px] text-amber-200/90">
+                상단에서 유형을 먼저 선택해 주세요.
+              </p>
+            )}
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -1635,8 +2589,10 @@ export default function CoachTasksPage() {
           </div>
         </section>
 
+        </div>
+
         {/* 하단 버튼 */}
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-slate-700/80 bg-slate-950/40 px-4 py-4 md:px-5">
           <button
             type="button"
             onClick={() => setShowLoadFromTaskModal(true)}
@@ -1655,18 +2611,19 @@ export default function CoachTasksPage() {
             type="submit"
             disabled={
               submitting ||
-              !title.trim() ||
+              (!title.trim() &&
+                !assignmentRows.some((r) => r.text.trim())) ||
               !targetId ||
               (targetType === "team" && teamOptions.length === 0) ||
               (targetType === "player" && playerOptions.length === 0)
             }
-            className="rounded-lg bg-emerald-500 px-5 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
+            className="min-w-[140px] rounded-lg bg-slate-950 px-6 py-2.5 text-sm font-bold text-white shadow-inner ring-1 ring-slate-600 hover:bg-black disabled:opacity-50"
           >
             {submitting
               ? "저장 중..."
               : editingId
-                ? "과제 수정 완료"
-                : "과제 등록 완료"}
+                ? "수정 완료"
+                : "작성 완료"}
           </button>
         </div>
       </form>

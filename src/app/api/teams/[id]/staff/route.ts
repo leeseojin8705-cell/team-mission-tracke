@@ -5,23 +5,28 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id: teamId } = await params;
-  const prismaAny = prisma as unknown as { $queryRawUnsafe: (query: string, ...args: unknown[]) => Promise<{ id: string; teamId: string; role: string; name: string; phone: string | null; email: string | null; guidance: number | null }[]> };
-  const list = await prismaAny.$queryRawUnsafe(
-    "SELECT id, teamId, role, name, phone, email, guidance FROM TeamStaff WHERE teamId = ? ORDER BY role, name",
-    teamId,
-  );
-  return NextResponse.json(
-    list.map((s) => ({
-      id: s.id,
-      teamId: s.teamId,
-      role: s.role,
-      name: s.name,
-      phone: s.phone ?? null,
-      email: s.email ?? null,
-      guidance: s.guidance === 1,
-    })),
-  );
+  try {
+    const { id: teamId } = await params;
+    const list = await prisma.teamStaff.findMany({
+      where: { teamId },
+      orderBy: [{ role: "asc" }, { name: "asc" }],
+    });
+    return NextResponse.json(
+      list.map((s) => ({
+        id: s.id,
+        teamId: s.teamId,
+        role: s.role,
+        name: s.name,
+        phone: s.phone ?? null,
+        email: s.email ?? null,
+        guidance: s.guidance === true,
+      })),
+    );
+  } catch (e) {
+    console.error("[GET /api/teams/[id]/staff]", e);
+    const message = e instanceof Error ? e.message : "스태프 목록 조회 실패";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function POST(
@@ -46,33 +51,31 @@ export async function POST(
   const emailVal = body.email != null ? String(body.email).trim() || null : null;
 
   try {
-    const prismaAny = prisma as unknown as {
-      $queryRawUnsafe: (query: string, ...args: unknown[]) => Promise<unknown[]>;
-    };
-    const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 11)}`;
-    await prismaAny.$queryRawUnsafe(
-      "INSERT INTO TeamStaff (id, teamId, role, name, phone, email, guidance) VALUES (?, ?, ?, ?, ?, ?, 0)",
-      id,
-      teamId,
-      role,
-      name,
-      phoneVal ?? null,
-      emailVal ?? null,
-    );
-    return NextResponse.json(
-      {
-        id,
+    const created = await prisma.teamStaff.create({
+      data: {
         teamId,
         role,
         name,
-        phone: phoneVal ?? null,
-        email: emailVal ?? null,
+        phone: phoneVal,
+        email: emailVal,
         guidance: false,
+      },
+    });
+    return NextResponse.json(
+      {
+        id: created.id,
+        teamId: created.teamId,
+        role: created.role,
+        name: created.name,
+        phone: created.phone ?? null,
+        email: created.email ?? null,
+        guidance: created.guidance === true,
       },
       { status: 201 },
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : "등록에 실패했습니다.";
+    console.error("[POST /api/teams/[id]/staff]", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

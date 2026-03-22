@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import type { Task } from "@/lib/types";
+import { TaskCoachBlueprintView } from "@/components/TaskCoachBlueprintView";
+import type { Task, TaskDetails } from "@/lib/types";
 
 type PlayerSession = {
   session?: {
@@ -14,6 +15,26 @@ type PlayerSession = {
 type TaskWithDetails = Task & {
   teamName?: string | null;
 };
+
+function parseTaskDetails(raw: Task["details"]): TaskDetails | null {
+  if (raw == null) return null;
+  if (typeof raw === "object") return raw as TaskDetails;
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as TaskDetails;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function normalizeTask(t: Task): TaskWithDetails {
+  return {
+    ...t,
+    details: parseTaskDetails(t.details),
+  };
+}
 
 type EvalBadgeStatus = {
   pre: boolean;
@@ -141,9 +162,9 @@ export default function PlayerTasksPage() {
 
         const [tasksRes] = await Promise.all([fetch("/api/tasks")]);
         if (!tasksRes.ok) throw new Error("과제 목록을 불러오지 못했습니다.");
-        const tasksData = (await tasksRes.json()) as TaskWithDetails[];
+        const tasksData = (await tasksRes.json()) as Task[];
         if (cancelled) return;
-        setTasks(tasksData);
+        setTasks(tasksData.map(normalizeTask));
 
         // 과제 진행도 정보
         const progressRes = await fetch(
@@ -320,10 +341,16 @@ export default function PlayerTasksPage() {
             ← 대시보드
           </Link>
         </div>
-        <h1 className="text-xl font-semibold text-slate-100">내 과제</h1>
-        <p className="text-sm text-slate-400">
-          코치가 등록한 과제와 내가 만든 개인 과제 중, 지금 기간·요일·시간대에 해당하는 과제를 볼 수 있습니다.
-        </p>
+        <div className="overflow-hidden rounded-2xl border border-lime-400/25 bg-slate-900/40">
+          <div className="bg-gradient-to-r from-lime-400/90 to-emerald-500/90 px-4 py-2 text-center">
+            <p className="text-[10px] font-bold tracking-[0.2em] text-slate-900">TEAM MISSION TRACKER</p>
+            <h1 className="text-lg font-extrabold text-slate-950">내 과제</h1>
+          </div>
+          <p className="px-4 py-3 text-sm text-slate-400">
+            코치가 등록한 과제와 내가 만든 개인 과제 중, 지금 기간·요일·시간대에 해당하는 과제를 볼 수 있습니다. 코치가
+            입력한 전술·포메이션·과제 줄은 카드에서 함께 확인할 수 있습니다.
+          </p>
+        </div>
 
         {playerId && (
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -575,7 +602,13 @@ export default function PlayerTasksPage() {
                         </p>
                       )}
                       {labelTime && <p>시간: {labelTime}</p>}
+                      {d?.preCheckTime && (
+                        <p className="text-slate-500">사전 점검: {d.preCheckTime}</p>
+                      )}
                     </div>
+                    {d && (
+                      <TaskCoachBlueprintView details={d} compact />
+                    )}
                     <div className="mt-1 space-y-1 text-[10px]">
                       <p className="text-slate-500">진행률</p>
                       <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">

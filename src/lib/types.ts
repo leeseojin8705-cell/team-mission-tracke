@@ -100,6 +100,20 @@ export interface TaskDetails {
   weekdays?: string[]; // "0"~"6"
   timeStart?: string;
   timeEnd?: string;
+  /** 사전 점검 시각 (코치 과제 등록) */
+  preCheckTime?: string;
+  /** 세부 초점: 이해·응용·활용 등 */
+  subFocus?: string;
+  /** 오늘의 전술 메모 */
+  todayStrategy?: string;
+  /** 포메이션 프리셋 키 또는 "custom" */
+  formation?: string;
+  /** 직접 배치 시 전술 이름 */
+  formationLabel?: string;
+  /** 직접 배치 좌표 */
+  formationCustomSlots?: { x: number; y: number; label?: string }[];
+  /** 과제 줄: 텍스트 + 범위 태그 */
+  assignmentLines?: { text: string; scopes?: string[] }[];
   positions?: string[]; // ["GK","DF","MF","FW"] 또는 ["ALL"]
   positionWeights?: Record<string, number>; // 포지션별 중요도 %
   players?: string[]; // 과제에 포함된 선수 id 목록 (대표 대상은 별도 targetId로 저장)

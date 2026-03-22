@@ -50,9 +50,21 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json();
 
-  const data: { name?: string; season?: string } = {};
+  const data: {
+    name?: string;
+    season?: string;
+    organization?: string | null;
+    statDefinition?: string | null;
+  } = {};
   if (body.name !== undefined) data.name = body.name;
   if (body.season !== undefined) data.season = body.season;
+  if (body.organization !== undefined) {
+    data.organization = JSON.stringify(body.organization);
+  }
+  if (body.statDefinition !== undefined) {
+    data.statDefinition =
+      body.statDefinition == null ? null : JSON.stringify(body.statDefinition);
+  }
 
   const team = await prisma.team.update({
     where: { id },
@@ -60,29 +72,8 @@ export async function PATCH(
   });
 
   const rawDb = team as { organization?: string | null; statDefinition?: string | null };
-
-  if (body.organization !== undefined) {
-    const organizationJson = JSON.stringify(body.organization);
-    await (prisma as unknown as { $executeRawUnsafe: (query: string, ...args: unknown[]) => Promise<unknown> }).$executeRawUnsafe(
-      "UPDATE Team SET organization = ? WHERE id = ?",
-      organizationJson,
-      id,
-    );
-  }
-
-  if (body.statDefinition !== undefined) {
-    const statJson = body.statDefinition == null ? null : JSON.stringify(body.statDefinition);
-    await (prisma as unknown as { $executeRawUnsafe: (query: string, ...args: unknown[]) => Promise<unknown> }).$executeRawUnsafe(
-      "UPDATE Team SET statDefinition = ? WHERE id = ?",
-      statJson,
-      id,
-    );
-  }
-
-  const rawOrg = body.organization !== undefined ? JSON.stringify(body.organization) : rawDb.organization;
-  const rawStat = body.statDefinition !== undefined
-    ? (body.statDefinition == null ? null : JSON.stringify(body.statDefinition))
-    : rawDb.statDefinition;
+  const rawOrg = rawDb.organization ?? null;
+  const rawStat = rawDb.statDefinition ?? null;
 
   return NextResponse.json({
     id: team.id,
