@@ -157,5 +157,10 @@ export function hasCoachBlueprintContent(
     return true;
   if (Array.isArray(d.formationCustomSlots) && d.formationCustomSlots.length > 0)
     return true;
+  if (
+    Array.isArray(d.formationPlayerAssignments) &&
+    d.formationPlayerAssignments.length > 0
+  )
+    return true;
   return false;
 }

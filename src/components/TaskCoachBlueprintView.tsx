@@ -131,6 +131,10 @@ export function TaskCoachBlueprintView({ details, compact = false }: Props) {
     d?.formation === "custom"
       ? d?.formationLabel?.trim() || "직접 배치"
       : d?.formation?.trim() || "";
+  const scopeLabelMap: Record<string, string> = {
+    공통과제: "공통",
+    개인과제: "개인",
+  };
 
   return (
     <div
@@ -162,6 +166,12 @@ export function TaskCoachBlueprintView({ details, compact = false }: Props) {
                 포메이션 {formationLabel}
               </span>
             )}
+            {Array.isArray(d?.formationPlayerAssignments) &&
+              d.formationPlayerAssignments.length > 0 && (
+                <span className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-200">
+                  슬롯 배정 {d.formationPlayerAssignments.length}명
+                </span>
+              )}
             {d?.preCheckTime && (
               <span className="rounded border border-slate-600 px-2 py-0.5 text-[10px] text-slate-300">
                 사전 점검 {d.preCheckTime}
@@ -177,7 +187,7 @@ export function TaskCoachBlueprintView({ details, compact = false }: Props) {
                     <span className="text-slate-100">{line.text}</span>
                     {Array.isArray(line.scopes) && line.scopes.length > 0 && (
                       <span className="ml-1 text-slate-500">
-                        ({line.scopes.join(", ")})
+                        ({line.scopes.map((s) => scopeLabelMap[s] ?? s).join(", ")})
                       </span>
                     )}
                   </li>

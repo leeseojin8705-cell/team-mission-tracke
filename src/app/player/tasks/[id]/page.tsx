@@ -313,7 +313,14 @@ export default function PlayerTaskDetailPage() {
             <section className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-sm">
               <h2 className="text-sm font-semibold text-slate-100">과제 정보</h2>
               <div className="text-xs text-slate-400 space-y-1">
-                {d?.taskType && <p>분류: {d.taskType}</p>}
+                {(d?.taskTypes?.length || d?.taskType) && (
+                  <p>
+                    분류:{" "}
+                    {d?.taskTypes?.length
+                      ? d.taskTypes.join(" · ")
+                      : d?.taskType}
+                  </p>
+                )}
                 {Array.isArray(d?.contents) && d!.contents!.length > 0 ? (
                   <p>내용: {d!.contents!.join(", ")}</p>
                 ) : (

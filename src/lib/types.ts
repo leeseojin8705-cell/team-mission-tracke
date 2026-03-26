@@ -87,8 +87,10 @@ export interface Task {
 export interface TaskDetails {
   htmlTaskType?: "daily" | "single";
   htmlCategory?: "selfcare" | "practice" | "practice_game" | "official";
-  /** 과제 분류: 자기관리 / 연습 및 훈련 / 연습 경기 / 정식 경기 */
+  /** 과제 분류: 자기관리 / 연습 및 훈련 / 연습 경기 / 정식 경기 (대표 1개, 하위 호환) */
   taskType?: "자기관리" | "연습 및 훈련" | "연습 경기" | "정식 경기";
+  /** 코치 과제에서 유형 복수 선택 시 전체 목록 (첫 항목이 taskType과 동일하게 취급) */
+  taskTypes?: ("자기관리" | "연습 및 훈련" | "연습 경기" | "정식 경기")[];
   /** 과제 내용 축: 기술 / 신체 / 전술 / 심리 / 인지 / 태도 */
   contentCategory?: "기술" | "신체" | "전술" | "심리" | "인지" | "태도";
   contents?: string[]; // 선택된 태그 value 목록
@@ -112,8 +114,14 @@ export interface TaskDetails {
   formationLabel?: string;
   /** 직접 배치 좌표 */
   formationCustomSlots?: { x: number; y: number; label?: string }[];
-  /** 과제 줄: 텍스트 + 범위 태그 */
-  assignmentLines?: { text: string; scopes?: string[] }[];
+  /** 포메이션 슬롯 인덱스별 선수 배정 */
+  formationPlayerAssignments?: { slot: number; playerId: string }[];
+  /** 과제 줄: 텍스트 + 범위 태그 + 포지션별 가중치(%) */
+  assignmentLines?: {
+    text: string;
+    scopes?: string[];
+    weights?: Partial<Record<"FW" | "MF" | "DF" | "GK", number>>;
+  }[];
   positions?: string[]; // ["GK","DF","MF","FW"] 또는 ["ALL"]
   positionWeights?: Record<string, number>; // 포지션별 중요도 %
   players?: string[]; // 과제에 포함된 선수 id 목록 (대표 대상은 별도 targetId로 저장)

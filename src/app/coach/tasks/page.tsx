@@ -10,7 +10,15 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import type { Task, Team, Player, TaskCategory, TeamStaff, TaskProgress } from "@/lib/types";
+import type {
+  Task,
+  TaskDetails,
+  Team,
+  Player,
+  TaskCategory,
+  TeamStaff,
+  TaskProgress,
+} from "@/lib/types";
 import { FORMATION_PRESET_OPTIONS } from "@/lib/formationLayouts";
 import {
   aggregatePhaseScores,
@@ -199,15 +207,16 @@ export default function CoachTasksPage() {
 
   // 확장 UI 상태 (HTML 템플릿 반영, 현재는 미리보기/UX 용)
   const [htmlTaskType, setHtmlTaskType] = useState<HtmlTaskType>("daily");
-  const [htmlCategory, setHtmlCategory] = useState<HtmlCategory>(null);
-  const [taskType, setTaskType] = useState<
-    "자기관리" | "연습 및 훈련" | "연습 경기" | "정식 경기"
-  >("연습 및 훈련");
-  const [contentCategory, setContentCategory] = useState<
-    "기술" | "신체" | "전술" | "심리" | "인지" | "태도"
-  >("기술");
-  const [taskDetail, setTaskDetail] = useState("");
-  const [taskGoal, setTaskGoal] = useState("");
+  const [htmlCategory, setHtmlCategory] = useState<HtmlCategory>("practice");
+  type TaskTypeLabel =
+    | "자기관리"
+    | "연습 및 훈련"
+    | "연습 경기"
+    | "정식 경기";
+  /** 유형: 복수 선택 (첫 항목이 htmlCategory·초점 행 기준) */
+  const [taskTypeSelections, setTaskTypeSelections] = useState<TaskTypeLabel[]>([
+    "연습 및 훈련",
+  ]);
   const [dailyStart, setDailyStart] = useState("");
   const [dailyEnd, setDailyEnd] = useState("");
   const [singleDate, setSingleDate] = useState("");
@@ -215,15 +224,11 @@ export default function CoachTasksPage() {
   const [timeStart, setTimeStart] = useState("");
   const [timeEnd, setTimeEnd] = useState("");
   const [contentTags, setContentTags] = useState<string[]>([]);
-  const [positionSet, setPositionSet] = useState<Set<string>>(new Set(["ALL"]));
-  const [positionWeights, setPositionWeights] = useState<Record<string, number>>({
-    GK: 25,
-    DF: 25,
-    MF: 25,
-    FW: 25,
-  });
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(new Set());
   const [selectedEvaluatorIds, setSelectedEvaluatorIds] = useState<Set<string>>(new Set());
+  const [slotPlayerAssignments, setSlotPlayerAssignments] = useState<
+    Record<number, string>
+  >({});
 
   /** 목업(코치-선수 과제 등록) 확장 필드 */
   type SubFocusOpt = "이해" | "응용" | "활용" | "전략" | "점검" | "평가";
@@ -236,6 +241,10 @@ export default function CoachTasksPage() {
     df: boolean;
     gk: boolean;
     individual: boolean;
+    fwWeight: number;
+    mfWeight: number;
+    dfWeight: number;
+    gkWeight: number;
   };
   const [subFocus, setSubFocus] = useState<SubFocusOpt | null>(null);
   const [todayStrategy, setTodayStrategy] = useState("");
@@ -247,7 +256,6 @@ export default function CoachTasksPage() {
   >([]);
   const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
   const pitchSvgRef = useRef<SVGSVGElement | null>(null);
-  const [preCheckTime, setPreCheckTime] = useState("");
   const [assignmentRows, setAssignmentRows] = useState<AssignmentRow[]>(() => [
     {
       id: typeof crypto !== "undefined" && crypto.randomUUID
@@ -260,6 +268,10 @@ export default function CoachTasksPage() {
       df: false,
       gk: false,
       individual: false,
+      fwWeight: 0,
+      mfWeight: 0,
+      dfWeight: 0,
+      gkWeight: 0,
     },
   ]);
 
@@ -276,20 +288,85 @@ export default function CoachTasksPage() {
       df: false,
       gk: false,
       individual: false,
+      fwWeight: 0,
+      mfWeight: 0,
+      dfWeight: 0,
+      gkWeight: 0,
     };
   }
 
-  function applyTaskCategoryRow1(label: typeof taskType) {
-    setTaskType(label);
-    const map: Record<string, HtmlCategory> = {
-      자기관리: "selfcare",
-      "연습 및 훈련": "practice",
-      "연습 경기": "practice_game",
-      "정식 경기": "official",
-    };
-    setHtmlCategory(map[label] ?? null);
-    setContentTags([]);
+  const assignmentWeightTotals = useMemo(() => {
+    return assignmentRows.reduce(
+      (acc, row) => {
+        if (row.fw) acc.FW += row.fwWeight || 0;
+        if (row.mf) acc.MF += row.mfWeight || 0;
+        if (row.df) acc.DF += row.dfWeight || 0;
+        if (row.gk) acc.GK += row.gkWeight || 0;
+        return acc;
+      },
+      { FW: 0, MF: 0, DF: 0, GK: 0 },
+    );
+  }, [assignmentRows]);
+
+  const hasAssignmentWeightOverflow = useMemo(
+    () =>
+      assignmentWeightTotals.FW > 100 ||
+      assignmentWeightTotals.MF > 100 ||
+      assignmentWeightTotals.DF > 100 ||
+      assignmentWeightTotals.GK > 100,
+    [assignmentWeightTotals],
+  );
+
+  function toggleTaskType(label: TaskTypeLabel) {
+    setTaskTypeSelections((prev) => {
+      const next = prev.includes(label)
+        ? prev.filter((x) => x !== label)
+        : [...prev, label];
+      if (next.length === 0) return prev;
+
+      const map: Record<string, HtmlCategory> = {
+        자기관리: "selfcare",
+        "연습 및 훈련": "practice",
+        "연습 경기": "practice_game",
+        "정식 경기": "official",
+      };
+      const oldCat = prev[0] ? map[prev[0]] : null;
+      const newCat = next[0] ? map[next[0]] : null;
+      const oldSelf = oldCat === "selfcare";
+      const newSelf = newCat === "selfcare";
+      if (oldSelf !== newSelf) {
+        setContentTags([]);
+      }
+      setHtmlCategory(newCat);
+      return next;
+    });
   }
+
+  function toggleFocusTag(id: string) {
+    setContentTags((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  const resolvedContentCategory = useMemo((): NonNullable<
+    TaskDetails["contentCategory"]
+  > => {
+    if (!htmlCategory) return "기술";
+    if (htmlCategory === "selfcare") return "멘탈";
+    const mapCat: Record<
+      string,
+      "기술" | "신체" | "전술" | "심리" | "인지" | "태도"
+    > = {
+      skill: "기술",
+      physical: "신체",
+      tactical: "전술",
+      mental: "심리",
+      cognitive: "인지",
+      attitude: "태도",
+    };
+    const first = contentTags[0];
+    return first ? mapCat[first] ?? "기술" : "기술";
+  }, [htmlCategory, contentTags]);
 
   const focusAxisOptions: { id: string; label: string }[] = [
     { id: "skill", label: "기술" },
@@ -335,6 +412,14 @@ export default function CoachTasksPage() {
     if (!currentTeamIdForTask) return players;
     return players.filter((p) => p.teamId === currentTeamIdForTask);
   }, [currentTeamIdForTask, players]);
+  const entryPlayerMap = useMemo(
+    () => Object.fromEntries(entryCandidatePlayers.map((p) => [p.id, p])),
+    [entryCandidatePlayers],
+  );
+  const assignedPlayerIds = useMemo(
+    () => new Set(Object.values(slotPlayerAssignments)),
+    [slotPlayerAssignments],
+  );
 
   const displayFormationSlots = useMemo(() => {
     if (formation === "custom") return customFormationSlots;
@@ -393,6 +478,21 @@ export default function CoachTasksPage() {
       window.removeEventListener("pointerup", up);
     };
   }, [draggingSlotId]);
+
+  useEffect(() => {
+    setSlotPlayerAssignments((prev) => {
+      const maxSlot = Math.max(0, displayFormationSlots.length - 1);
+      const allowedIds = new Set(entryCandidatePlayers.map((p) => p.id));
+      const next: Record<number, string> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        const idx = Number(k);
+        if (!Number.isFinite(idx) || idx < 0 || idx > maxSlot) continue;
+        if (!allowedIds.has(v)) continue;
+        next[idx] = v;
+      }
+      return next;
+    });
+  }, [displayFormationSlots, entryCandidatePlayers]);
 
   const [filterType, setFilterType] = useState<TargetType | "all">("all");
   const [filterTeamId, setFilterTeamId] = useState<string>("all");
@@ -587,11 +687,8 @@ export default function CoachTasksPage() {
     setTargetType("team");
     setTargetId(teams[0]?.id ?? "");
     setHtmlTaskType("daily");
-    setHtmlCategory(null);
-    setTaskType("연습 및 훈련");
-    setContentCategory("기술");
-    setTaskDetail("");
-    setTaskGoal("");
+    setTaskTypeSelections(["연습 및 훈련"]);
+    setHtmlCategory("practice");
     setDailyStart("");
     setDailyEnd("");
     setSingleDate("");
@@ -599,17 +696,15 @@ export default function CoachTasksPage() {
     setTimeStart("");
     setTimeEnd("");
     setContentTags([]);
-    setPositionSet(new Set(["ALL"]));
-    setPositionWeights({ GK: 25, DF: 25, MF: 25, FW: 25 });
     setSelectedPlayerIds(new Set());
     setSelectedEvaluatorIds(new Set());
+    setSlotPlayerAssignments({});
     setSubFocus(null);
     setTodayStrategy("");
     setFormation("");
     setFormationNote("");
     setCustomFormationSlots([]);
     setDraggingSlotId(null);
-    setPreCheckTime("");
     setAssignmentRows([newAssignmentRow()]);
   }
 
@@ -629,7 +724,18 @@ export default function CoachTasksPage() {
           r.gk && "GK",
           r.individual && "개인과제",
         ].filter(Boolean) as string[],
+        weights: {
+          ...(r.fw ? { FW: r.fwWeight || 0 } : {}),
+          ...(r.mf ? { MF: r.mfWeight || 0 } : {}),
+          ...(r.df ? { DF: r.dfWeight || 0 } : {}),
+          ...(r.gk ? { GK: r.gkWeight || 0 } : {}),
+        },
       }));
+
+    if (hasAssignmentWeightOverflow) {
+      setError("포지션별 과제 가중치 합이 100%를 넘었습니다. 과제 줄 가중치를 조정해 주세요.");
+      return;
+    }
 
     const resolvedTitle =
       title.trim() ||
@@ -650,18 +756,17 @@ export default function CoachTasksPage() {
     const details = {
       htmlTaskType,
       htmlCategory,
-      taskType,
-      contentCategory,
+      taskType: taskTypeSelections[0] ?? "연습 및 훈련",
+      taskTypes:
+        taskTypeSelections.length > 1 ? taskTypeSelections : undefined,
+      contentCategory: resolvedContentCategory,
       contents: contentTags.length ? contentTags : undefined,
-      detailText: taskDetail || undefined,
-      goalText: taskGoal || undefined,
       dailyStart: dailyStart || undefined,
       dailyEnd: dailyEnd || undefined,
       singleDate: singleDate || undefined,
       weekdays: weekdaySet.size ? Array.from(weekdaySet) : undefined,
       timeStart: timeStart || undefined,
       timeEnd: timeEnd || undefined,
-      preCheckTime: preCheckTime || undefined,
       subFocus: subFocus || undefined,
       todayStrategy: todayStrategy.trim() || undefined,
       formation: formation.trim() || undefined,
@@ -674,9 +779,16 @@ export default function CoachTasksPage() {
               ...(label ? { label } : {}),
             }))
           : undefined,
+      formationPlayerAssignments:
+        Object.keys(slotPlayerAssignments).length > 0
+          ? Object.entries(slotPlayerAssignments)
+              .map(([slot, playerId]) => ({
+                slot: Number(slot),
+                playerId,
+              }))
+              .filter((x) => Number.isFinite(x.slot) && x.slot >= 0 && Boolean(x.playerId))
+          : undefined,
       assignmentLines: assignmentLines.length ? assignmentLines : undefined,
-      positions: positionSet.size ? Array.from(positionSet) : undefined,
-      positionWeights,
       players:
         selectedPlayerIds.size > 0
           ? Array.from(selectedPlayerIds)
@@ -774,11 +886,25 @@ export default function CoachTasksPage() {
 
     if (task.details) {
       setHtmlTaskType(task.details.htmlTaskType ?? "daily");
-      setHtmlCategory(task.details.htmlCategory ?? null);
-      setTaskType(task.details.taskType ?? "연습 및 훈련");
-      setContentCategory(task.details.contentCategory ?? "기술");
-      setTaskDetail(task.details.detailText ?? "");
-      setTaskGoal(task.details.goalText ?? "");
+      const d = task.details as TaskDetails;
+      const tts = d.taskTypes;
+      if (Array.isArray(tts) && tts.length > 0) {
+        setTaskTypeSelections(tts);
+      } else if (d.taskType) {
+        setTaskTypeSelections([d.taskType]);
+      } else {
+        setTaskTypeSelections(["연습 및 훈련"]);
+      }
+      const mapCat: Record<string, HtmlCategory> = {
+        자기관리: "selfcare",
+        "연습 및 훈련": "practice",
+        "연습 경기": "practice_game",
+        "정식 경기": "official",
+      };
+      const primary = (Array.isArray(tts) && tts.length > 0
+        ? tts[0]
+        : d.taskType) ?? "연습 및 훈련";
+      setHtmlCategory(d.htmlCategory ?? mapCat[primary] ?? null);
       setDailyStart(task.details.dailyStart ?? "");
       setDailyEnd(task.details.dailyEnd ?? "");
       setSingleDate(task.details.singleDate ?? "");
@@ -792,19 +918,6 @@ export default function CoachTasksPage() {
           ? (task.details.contents as string[])
           : [],
       );
-      setPositionSet(
-        new Set<string>(
-          Array.isArray(task.details.positions) && task.details.positions.length
-            ? (task.details.positions as string[])
-            : ["ALL"],
-        ),
-      );
-      setPositionWeights((prev) => ({
-        GK: task.details.positionWeights?.GK ?? prev.GK,
-        DF: task.details.positionWeights?.DF ?? prev.DF,
-        MF: task.details.positionWeights?.MF ?? prev.MF,
-        FW: task.details.positionWeights?.FW ?? prev.FW,
-      }));
       setSelectedPlayerIds(
         new Set<string>(
           Array.isArray(task.details.players)
@@ -819,6 +932,19 @@ export default function CoachTasksPage() {
             : [],
         ),
       );
+      const fp = (task.details as { formationPlayerAssignments?: unknown })
+        .formationPlayerAssignments;
+      if (Array.isArray(fp)) {
+        const mapped: Record<number, string> = {};
+        for (const row of fp as { slot?: number; playerId?: string }[]) {
+          if (typeof row.slot === "number" && typeof row.playerId === "string") {
+            mapped[row.slot] = row.playerId;
+          }
+        }
+        setSlotPlayerAssignments(mapped);
+      } else {
+        setSlotPlayerAssignments({});
+      }
       setSubFocus(
         (task.details as { subFocus?: SubFocusOpt }).subFocus ?? null,
       );
@@ -847,9 +973,6 @@ export default function CoachTasksPage() {
       } else {
         setCustomFormationSlots([]);
       }
-      setPreCheckTime(
-        (task.details as { preCheckTime?: string }).preCheckTime ?? "",
-      );
       const al = (task.details as { assignmentLines?: unknown })
         .assignmentLines;
       if (Array.isArray(al) && al.length > 0) {
@@ -864,11 +987,29 @@ export default function CoachTasksPage() {
             gk: Array.isArray(row.scopes) && row.scopes.includes("GK"),
             individual:
               Array.isArray(row.scopes) && row.scopes.includes("개인과제"),
+            fwWeight:
+              typeof (row as { weights?: { FW?: number } }).weights?.FW === "number"
+                ? Math.max(0, Math.min(100, (row as { weights?: { FW?: number } }).weights!.FW!))
+                : 0,
+            mfWeight:
+              typeof (row as { weights?: { MF?: number } }).weights?.MF === "number"
+                ? Math.max(0, Math.min(100, (row as { weights?: { MF?: number } }).weights!.MF!))
+                : 0,
+            dfWeight:
+              typeof (row as { weights?: { DF?: number } }).weights?.DF === "number"
+                ? Math.max(0, Math.min(100, (row as { weights?: { DF?: number } }).weights!.DF!))
+                : 0,
+            gkWeight:
+              typeof (row as { weights?: { GK?: number } }).weights?.GK === "number"
+                ? Math.max(0, Math.min(100, (row as { weights?: { GK?: number } }).weights!.GK!))
+                : 0,
           })),
         );
       } else {
         setAssignmentRows([newAssignmentRow()]);
       }
+    } else {
+      setSlotPlayerAssignments({});
     }
 
     if (task.teamId) {
@@ -1421,7 +1562,8 @@ export default function CoachTasksPage() {
 
         {/* Row1 유형 */}
         <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
-          <div className="mb-2 text-[11px] font-semibold text-slate-400">유형</div>
+          <div className="mb-1 text-[11px] font-semibold text-slate-400">유형</div>
+          <p className="mb-2 text-[10px] text-slate-500">복수 선택 가능 (최소 1개, 첫 번째가 초점 행 기준)</p>
           <div className="flex flex-wrap gap-2">
             {(
               [
@@ -1434,9 +1576,9 @@ export default function CoachTasksPage() {
               <button
                 key={t}
                 type="button"
-                onClick={() => applyTaskCategoryRow1(t)}
+                onClick={() => toggleTaskType(t)}
                 className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-                  taskType === t
+                  taskTypeSelections.includes(t)
                     ? "border-lime-400 bg-lime-400 text-slate-950"
                     : "border-slate-600 text-slate-200 hover:border-lime-500/60"
                 }`}
@@ -1447,9 +1589,10 @@ export default function CoachTasksPage() {
           </div>
         </section>
 
-        {/* Row2 초점 (목업: 단일 선택 → contentTags + contentCategory) */}
+        {/* Row2 초점: 복수 선택 → contents */}
         <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
-          <div className="mb-2 text-[11px] font-semibold text-slate-400">초점</div>
+          <div className="mb-1 text-[11px] font-semibold text-slate-400">초점</div>
+          <p className="mb-2 text-[10px] text-slate-500">복수 선택 가능</p>
           {!htmlCategory ? (
             <p className="text-[11px] text-slate-500">위에서 유형을 먼저 선택하세요.</p>
           ) : htmlCategory === "selfcare" ? (
@@ -1460,15 +1603,12 @@ export default function CoachTasksPage() {
                 { id: "sleep", label: "수면" },
                 { id: "recovery", label: "회복" },
               ].map((opt) => {
-                const on = contentTags[0] === opt.id;
+                const on = contentTags.includes(opt.id);
                 return (
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => {
-                      setContentTags([opt.id]);
-                      setContentCategory("멘탈");
-                    }}
+                    onClick={() => toggleFocusTag(opt.id)}
                     className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
                       on
                         ? "border-lime-400 bg-lime-400 text-slate-950"
@@ -1483,23 +1623,12 @@ export default function CoachTasksPage() {
           ) : (
             <div className="flex flex-wrap gap-2">
               {focusAxisOptions.map((opt) => {
-                const on = contentTags[0] === opt.id;
-                const mapCat: Record<string, typeof contentCategory> = {
-                  skill: "기술",
-                  physical: "신체",
-                  tactical: "전술",
-                  mental: "심리",
-                  cognitive: "인지",
-                  attitude: "태도",
-                };
+                const on = contentTags.includes(opt.id);
                 return (
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => {
-                      setContentTags([opt.id]);
-                      setContentCategory(mapCat[opt.id] ?? "기술");
-                    }}
+                    onClick={() => toggleFocusTag(opt.id)}
                     className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
                       on
                         ? "border-lime-400 bg-lime-400 text-slate-950"
@@ -1514,7 +1643,7 @@ export default function CoachTasksPage() {
           )}
         </section>
 
-        {/* Row3 세부 초점 */}
+        {/* Row3 세부 초점: 단일 선택(한 번에 하나만) */}
         <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
           <div className="mb-2 text-[11px] font-semibold text-slate-400">세부 초점</div>
           <div className="flex flex-wrap gap-2">
@@ -1522,7 +1651,7 @@ export default function CoachTasksPage() {
               <button
                 key={sf}
                 type="button"
-                onClick={() => setSubFocus(subFocus === sf ? null : sf)}
+                onClick={() => setSubFocus(sf)}
                 className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
                   subFocus === sf
                     ? "border-sky-400 bg-sky-500/20 text-sky-100"
@@ -1614,15 +1743,6 @@ export default function CoachTasksPage() {
                     className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
                   />
                 </label>
-                <label className="flex items-center gap-2">
-                  <span className="text-slate-300">사전 점검</span>
-                  <input
-                    type="time"
-                    value={preCheckTime}
-                    onChange={(e) => setPreCheckTime(e.target.value)}
-                    className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
-                  />
-                </label>
               </div>
             </>
           ) : (
@@ -1655,15 +1775,6 @@ export default function CoachTasksPage() {
                     type="time"
                     value={timeEnd}
                     onChange={(e) => setTimeEnd(e.target.value)}
-                    className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
-                  />
-                </label>
-                <label className="flex items-center gap-2">
-                  <span className="text-slate-300">사전 점검</span>
-                  <input
-                    type="time"
-                    value={preCheckTime}
-                    onChange={(e) => setPreCheckTime(e.target.value)}
                     className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
                   />
                 </label>
@@ -2018,6 +2129,23 @@ export default function CoachTasksPage() {
                       const slotKey =
                         slot.id ?? `preset-${slot.x}-${slot.y}-${i}`;
                       const editable = isCustomFormation && Boolean(slot.id);
+                      const assignedPlayerId = slotPlayerAssignments[i];
+                      const assignedPlayer = assignedPlayerId
+                        ? entryPlayerMap[assignedPlayerId]
+                        : undefined;
+                      const shortName = assignedPlayer?.name
+                        ? assignedPlayer.name.length > 4
+                          ? `${assignedPlayer.name.slice(0, 4)}…`
+                          : assignedPlayer.name
+                        : null;
+                      const badgeText = assignedPlayer
+                        ? [
+                            assignedPlayer.position?.toUpperCase(),
+                            assignedPlayer.loginId ? `#${assignedPlayer.loginId}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" ")
+                        : null;
                       return (
                         <g
                           key={slotKey}
@@ -2027,8 +2155,34 @@ export default function CoachTasksPage() {
                               ? draggingSlotId === slot.id
                                 ? "grabbing"
                                 : "grab"
-                              : "default",
-                            pointerEvents: editable ? "auto" : "none",
+                              : "copy",
+                            pointerEvents: "auto",
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const playerId = e.dataTransfer.getData("text/player-id");
+                            if (!playerId) return;
+                            setSlotPlayerAssignments((prev) => ({
+                              ...prev,
+                              [i]: playerId,
+                            }));
+                            setSelectedPlayerIds((prev) => {
+                              const n = new Set(prev);
+                              n.add(playerId);
+                              return n;
+                            });
+                          }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setSlotPlayerAssignments((prev) => {
+                              const next = { ...prev };
+                              delete next[i];
+                              return next;
+                            });
                           }}
                           onPointerDown={(e) => {
                             if (!editable || !slot.id) return;
@@ -2071,6 +2225,32 @@ export default function CoachTasksPage() {
                           >
                             {isGk ? "GK" : String(i + 1)}
                           </text>
+                          {shortName && (
+                            <text
+                              x={slot.x}
+                              y={slot.y + 3.7}
+                              textAnchor="middle"
+                              fontSize={1.8}
+                              fontWeight="700"
+                              fill="rgba(255,255,255,0.95)"
+                              style={{ fontFamily: "system-ui, sans-serif" }}
+                            >
+                              {shortName}
+                            </text>
+                          )}
+                          {badgeText && (
+                            <text
+                              x={slot.x}
+                              y={slot.y + 5.7}
+                              textAnchor="middle"
+                              fontSize={1.5}
+                              fontWeight="700"
+                              fill="rgba(251,191,36,0.95)"
+                              style={{ fontFamily: "system-ui, sans-serif" }}
+                            >
+                              {badgeText}
+                            </text>
+                          )}
                         </g>
                       );
                     })}
@@ -2085,7 +2265,7 @@ export default function CoachTasksPage() {
                 </div>
                 <div className="border-t border-slate-700/80 bg-slate-950/85 px-2 py-2">
                   <p className="mb-1.5 text-[10px] text-slate-500">
-                    대상 선수 (탭으로 다중 선택)
+                    대상 선수 (탭 선택 + 드래그해서 필드 슬롯에 배치)
                   </p>
                   <div className="flex max-h-[4.5rem] flex-wrap gap-1 overflow-y-auto pr-0.5">
                     {entryCandidatePlayers.length === 0 ? (
@@ -2099,6 +2279,11 @@ export default function CoachTasksPage() {
                           <button
                             key={p.id}
                             type="button"
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("text/player-id", p.id);
+                              e.dataTransfer.effectAllowed = "copyMove";
+                            }}
                             onClick={() =>
                               setSelectedPlayerIds((prev) => {
                                 const n = new Set(prev);
@@ -2114,6 +2299,9 @@ export default function CoachTasksPage() {
                             }`}
                           >
                             {p.name}
+                            {assignedPlayerIds.has(p.id) && (
+                              <span className="ml-1 text-[9px] text-amber-300">●</span>
+                            )}
                           </button>
                         );
                       })
@@ -2126,8 +2314,22 @@ export default function CoachTasksPage() {
                 {displayFormationSlots.length > 0
                   ? ` · 필드 ${displayFormationSlots.length}포지션 표시`
                   : " · 프리셋 또는 직접 배치를 선택하면 표시됩니다"}
-                {" · 팀 과제는 아래 엔트리에서도 조정 가능"}
+                {Object.keys(slotPlayerAssignments).length > 0
+                  ? ` · 배정 ${Object.keys(slotPlayerAssignments).length}명`
+                  : ""}
+                {" · 슬롯 우클릭으로 배정 해제"}
               </p>
+              {Object.keys(slotPlayerAssignments).length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setSlotPlayerAssignments({})}
+                    className="rounded border border-rose-700/50 px-2 py-0.5 text-rose-200 hover:bg-rose-950/40"
+                  >
+                    배정 초기화
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -2145,13 +2347,22 @@ export default function CoachTasksPage() {
               + 줄 추가
             </button>
           </div>
+          <div className="mb-2 rounded-lg border border-slate-700/80 bg-slate-950/60 px-2 py-1.5 text-[10px] text-slate-400">
+            FW {assignmentWeightTotals.FW}% / MF {assignmentWeightTotals.MF}% / DF{" "}
+            {assignmentWeightTotals.DF}% / GK {assignmentWeightTotals.GK}%
+            {hasAssignmentWeightOverflow && (
+              <span className="ml-2 text-rose-300">
+                포지션별 합계는 100%를 넘을 수 없습니다.
+              </span>
+            )}
+          </div>
           <div className="space-y-3">
             {assignmentRows.map((row, idx) => (
               <div
                 key={row.id}
                 className="rounded-lg border border-slate-600 bg-slate-900/80 p-3"
               >
-                <div className="flex flex-wrap items-start gap-2">
+                <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
                   <input
                     value={row.text}
                     onChange={(e) =>
@@ -2161,17 +2372,13 @@ export default function CoachTasksPage() {
                         ),
                       )
                     }
-                    className="min-w-[200px] flex-1 rounded border border-slate-600 bg-slate-950 px-2 py-1.5 text-xs text-slate-100"
+                    className="min-w-[220px] flex-1 rounded border border-slate-600 bg-slate-950 px-2.5 py-2 text-xs text-slate-100"
                     placeholder="예: 볼 뺏기지 않기, 미드 프레싱"
                   />
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-nowrap items-center gap-1 rounded bg-slate-950/40 px-1 py-1">
                     {(
                       [
                         ["common", "공통", row.common] as const,
-                        ["fw", "FW", row.fw] as const,
-                        ["mf", "MF", row.mf] as const,
-                        ["df", "DF", row.df] as const,
-                        ["gk", "GK", row.gk] as const,
                         ["individual", "개인", row.individual] as const,
                       ] as const
                     ).map(([key, label, on]) => (
@@ -2190,7 +2397,7 @@ export default function CoachTasksPage() {
                             ),
                           )
                         }
-                        className={`rounded border px-2 py-0.5 text-[10px] ${
+                        className={`rounded border px-2 py-1 text-[10px] ${
                           on
                             ? "border-lime-400 bg-lime-400/20 text-lime-100"
                             : "border-slate-600 text-slate-400"
@@ -2198,6 +2405,68 @@ export default function CoachTasksPage() {
                       >
                         {label}
                       </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-nowrap items-center gap-1 rounded bg-slate-950/40 px-1 py-1">
+                    {(
+                      [
+                        ["fw", "FW", row.fw, row.fwWeight, "fwWeight"] as const,
+                        ["mf", "MF", row.mf, row.mfWeight, "mfWeight"] as const,
+                        ["df", "DF", row.df, row.dfWeight, "dfWeight"] as const,
+                        ["gk", "GK", row.gk, row.gkWeight, "gkWeight"] as const,
+                      ] as const
+                    ).map(([key, label, on, val, weightKey]) => (
+                      <div
+                        key={key}
+                        className={`flex items-center gap-1 rounded border px-1.5 py-1 ${
+                          on
+                            ? "border-slate-600 bg-slate-950 text-slate-200"
+                            : "border-slate-800 bg-slate-950/50 text-slate-500"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAssignmentRows((prev) =>
+                              prev.map((r) => {
+                                if (r.id !== row.id) return r;
+                                const nextOn = !r[key as keyof AssignmentRow] as boolean;
+                                return {
+                                  ...r,
+                                  [key]: nextOn,
+                                  ...(nextOn ? {} : { [weightKey]: 0 }),
+                                };
+                              }),
+                            )
+                          }
+                          className={`rounded px-1.5 py-0.5 text-[10px] ${
+                            on ? "text-lime-200" : "text-slate-400"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          disabled={!on}
+                          value={on ? val : 0}
+                          onChange={(e) => {
+                            const next = Math.max(
+                              0,
+                              Math.min(100, Number(e.target.value) || 0),
+                            );
+                            setAssignmentRows((prev) =>
+                              prev.map((r) =>
+                                r.id === row.id ? { ...r, [weightKey]: next } : r,
+                              ),
+                            );
+                          }}
+                          className="h-7 w-12 rounded border border-slate-700 bg-slate-900 px-1.5 text-[10px] text-slate-100 outline-none disabled:opacity-40"
+                        />
+                        <span className="text-[10px]">%</span>
+                      </div>
                     ))}
                   </div>
                   {assignmentRows.length > 1 && (
@@ -2214,11 +2483,6 @@ export default function CoachTasksPage() {
                     </button>
                   )}
                 </div>
-                {idx === 0 && !title.trim() && row.text.trim() && (
-                  <p className="mt-1 text-[10px] text-slate-500">
-                    제목이 비어 있으면 저장 시 첫 줄이 제목으로도 쓰일 수 있게 아래에서 입력하세요.
-                  </p>
-                )}
               </div>
             ))}
           </div>
@@ -2231,39 +2495,39 @@ export default function CoachTasksPage() {
             과제 기본 정보
           </div>
           <div>
-            <label className="mb-1 block text-xs text-slate-300">
-              과제 제목 <span className="text-slate-500">(비우면 첫 과제 줄이 제목으로 저장)</span>
-            </label>
+            <label className="mb-1 block text-xs text-slate-300">과제 제목</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
-              placeholder="목록에 표시될 제목 (선택)"
+              placeholder="목록에 표시될 제목 (비우면 첫 과제 줄 사용)"
             />
           </div>
 
           <div className="rounded-lg border border-slate-700/80 bg-slate-950/50 p-3">
             <p className="text-[11px] text-slate-400">
-              <strong className="text-slate-300">유형 · 초점 · 세부 초점</strong>은 폼 상단에서만
-              설정합니다. (중복 선택 방지)
+              <strong className="text-slate-300">유형·초점</strong>은 복수 선택,
+              <strong className="text-slate-300"> 세부 초점</strong>은 하나만 선택합니다.
             </p>
             {htmlCategory ? (
               <p className="mt-2 text-xs text-slate-200">
-                현재: {taskType}
-                {contentTags[0]
-                  ? ` · 초점: ${
-                      (
-                        {
-                          routine: "루틴",
-                          nutrition: "식단",
-                          sleep: "수면",
-                          recovery: "회복",
-                        } as Record<string, string>
-                      )[contentTags[0]] ??
-                      focusAxisOptions.find((o) => o.id === contentTags[0])
-                        ?.label ??
-                      contentTags[0]
-                    }`
+                현재 유형: {taskTypeSelections.join(" · ") || "—"}
+                {contentTags.length > 0
+                  ? ` · 초점: ${contentTags
+                      .map((id) =>
+                        htmlCategory === "selfcare"
+                          ? (
+                              {
+                                routine: "루틴",
+                                nutrition: "식단",
+                                sleep: "수면",
+                                recovery: "회복",
+                              } as Record<string, string>
+                            )[id] ?? id
+                          : focusAxisOptions.find((o) => o.id === id)?.label ??
+                            id,
+                      )
+                      .join(", ")}`
                   : " · 초점: 미선택"}
                 {subFocus ? ` · 세부 초점: ${subFocus}` : ""}
               </p>
@@ -2273,225 +2537,64 @@ export default function CoachTasksPage() {
               </p>
             )}
           </div>
+        </section>
 
+        {/* ③ 일정: 과제 일정 + 공개 일정(한 박스) */}
+        <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
+          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            일정
+          </div>
           <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs text-slate-300">
-                세부 과제
-              </label>
-              <textarea
-                value={taskDetail}
-                onChange={(e) => setTaskDetail(e.target.value)}
-                rows={3}
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
-                placeholder="세부 과제 내용을 자유롭게 입력하세요"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-300">
-                과제 목표
-              </label>
-              <textarea
-                value={taskGoal}
-                onChange={(e) => setTaskGoal(e.target.value)}
-                rows={3}
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
-                placeholder="이 과제를 통해 달성하고자 하는 목표를 입력하세요"
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* ③ 과제 일정 (간단 버전) */}
-        <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            과제 일정
-          </div>
-          {htmlTaskType === "daily" ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs text-slate-300">
-                  시작 날짜
-                </label>
-                <input
-                  type="date"
-                  value={dailyStart}
-                  onChange={(e) => setDailyStart(e.target.value)}
-                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-slate-300">
-                  종료 날짜
-                </label>
-                <input
-                  type="date"
-                  value={dailyEnd}
-                  onChange={(e) => setDailyEnd(e.target.value)}
-                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs text-slate-300">
-                  날짜
-                </label>
-                <input
-                  type="date"
-                  value={singleDate}
-                  onChange={(e) => setSingleDate(e.target.value)}
-                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-slate-300">
-                  (선택) 마감일 메모
-                </label>
-                <input
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
-                  placeholder="예: 2026-03-31"
-                />
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* ④ 포지션 지정 + 중요도 */}
-        <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            포지션 지정 / 중요도
-          </div>
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-2">
-              {[
-                { id: "ALL", label: "전부" },
-                { id: "GK", label: "GK" },
-                { id: "DF", label: "DF" },
-                { id: "MF", label: "MF" },
-                { id: "FW", label: "FW" },
-              ].map((pos) => {
-                const on = positionSet.has(pos.id);
-                return (
-                  <button
-                    key={pos.id}
-                    type="button"
-                    onClick={() => {
-                      setPositionSet((prev) => {
-                        const next = new Set(prev);
-                        if (pos.id === "ALL") {
-                          return new Set(["ALL"]);
-                        }
-                        next.delete("ALL");
-                        if (next.has(pos.id)) next.delete(pos.id);
-                        else next.add(pos.id);
-                        if (next.size === 0) return new Set(["ALL"]);
-                        return next;
-                      });
-                    }}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                      on
-                        ? "border-emerald-500 bg-emerald-500 text-slate-950"
-                        : "border-slate-700 bg-slate-950 text-slate-200 hover:border-emerald-400"
-                    }`}
-                  >
-                    {pos.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-3 grid gap-2 md:grid-cols-4">
-              {["GK", "DF", "MF", "FW"].map((pos) => (
-                <div
-                  key={pos}
-                  className={`rounded-lg border px-3 py-2 text-xs ${
-                    positionSet.has("ALL") || positionSet.has(pos)
-                      ? "border-slate-700 bg-slate-900/80"
-                      : "border-slate-800 bg-slate-950/40 opacity-60"
-                  }`}
-                >
-                  <div className="mb-1 text-[11px] font-semibold text-slate-200">
-                    {pos}
-                  </div>
-                  <div className="flex items-center gap-1">
+            <div className="rounded-lg border border-slate-700/80 bg-slate-950/50 p-3">
+              <p className="mb-2 text-xs font-semibold text-slate-300">과제 일정</p>
+              {htmlTaskType === "daily" ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs text-slate-300">시작 날짜</label>
                     <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={1}
-                      value={positionWeights[pos as "GK" | "DF" | "MF" | "FW"]}
-                      onChange={(e) => {
-                        const val = Number(e.target.value) || 0;
-                        setPositionWeights((prev) => ({
-                          ...prev,
-                          [pos]: Math.max(0, Math.min(100, val)),
-                        }));
-                      }}
-                      className="h-7 w-16 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                      type="date"
+                      value={dailyStart}
+                      onChange={(e) => setDailyStart(e.target.value)}
+                      className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
                     />
-                    <span className="text-[11px] text-slate-400">%</span>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-slate-300">종료 날짜</label>
+                    <input
+                      type="date"
+                      value={dailyEnd}
+                      onChange={(e) => setDailyEnd(e.target.value)}
+                      className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                    />
                   </div>
                 </div>
-              ))}
+              ) : (
+                <div>
+                  <label className="mb-1 block text-xs text-slate-300">날짜</label>
+                  <input
+                    type="date"
+                    value={singleDate}
+                    onChange={(e) => setSingleDate(e.target.value)}
+                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                  />
+                </div>
+              )}
             </div>
 
-            <div className="mt-2 text-[11px] text-slate-400">
-              포지션별 중요도는 0~100% 사이로 자유롭게 설정할 수 있습니다. (필요하면 나중에 합계 100% 검증을 추가할 수 있습니다.)
+            <div className="rounded-lg border border-slate-700/80 bg-slate-950/50 p-3">
+              <p className="mb-2 text-xs font-semibold text-slate-300">공개 일정</p>
+              <label className="mb-1 block text-xs text-slate-300">공개일</label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+              />
+              <p className="mt-2 text-[10px] text-slate-500">
+                비워두면 과제 일정 기준으로 자동 계산됩니다.
+              </p>
             </div>
-          </div>
-        </section>
-
-        {/* ⑤ 연습/경기 엔트리(선수 지정) */}
-        <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            연습·경기 엔트리
-          </div>
-          <p className="text-[11px] text-slate-500">
-            이 과제가 적용될 선수들을 선택합니다. 현재 선택된 팀(또는 선수 소속 팀)의 선수만
-            엔트리 후보로 표시되며, 실제 저장은 과제 상세 정보(`players`)에 남습니다.
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-400">
-            <span>
-              엔트리 후보: {entryCandidatePlayers.length}명 / 선택: {selectedPlayerIds.size}명
-            </span>
-          </div>
-          <div className="mt-2 grid max-h-60 grid-cols-2 gap-2 overflow-y-auto md:grid-cols-3">
-            {entryCandidatePlayers.map((p) => {
-              const on = selectedPlayerIds.has(p.id);
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() =>
-                    setSelectedPlayerIds((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(p.id)) next.delete(p.id);
-                      else next.add(p.id);
-                      return next;
-                    })
-                  }
-                  className={`flex items-center justify-between rounded-md border px-2 py-1.5 text-left text-[11px] transition ${
-                    on
-                      ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
-                      : "border-slate-700 bg-slate-950 text-slate-200 hover:border-emerald-400"
-                  }`}
-                >
-                  <span className="truncate">{p.name}</span>
-                  {p.position && (
-                    <span className="ml-1 text-[10px] text-slate-400">
-                      {p.position}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
           </div>
         </section>
 
@@ -2641,7 +2744,7 @@ export default function CoachTasksPage() {
             <div className="border-b border-slate-700 p-4">
               <h3 className="text-lg font-semibold text-slate-50">이전 과제에서 불러오기</h3>
               <p className="mt-1 text-xs text-slate-400">
-                선택한 과제의 제목·분류·세부·목표·일정·포지션·선수·평가자 설정이 폼에 채워집니다. 수정 후 새로 등록하면 됩니다.
+                선택한 과제의 제목·분류·일정·전술·대상 선수·평가자 설정이 폼에 채워집니다. 수정 후 새로 등록하면 됩니다.
               </p>
             </div>
             <div className="max-h-[50vh] overflow-y-auto p-2">
@@ -2697,7 +2800,7 @@ export default function CoachTasksPage() {
               과제 정보 — {selectedTaskForModal.title}
             </h3>
             <p className="mb-4 text-xs text-slate-400">
-              이 과제에 저장된 세부 항목과 목표를 한눈에 확인할 수 있습니다.
+              이 과제에 저장된 유형·일정·대상 선수 등을 한눈에 확인할 수 있습니다.
             </p>
 
             <div className="space-y-3 text-sm">
@@ -2763,24 +2866,6 @@ export default function CoachTasksPage() {
                 )}
               </div>
 
-              <div>
-                <div className="mb-1 text-xs text-slate-400">세부 과제</div>
-                <div className="whitespace-pre-wrap rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-100">
-                  {selectedTaskForModal.details?.detailText?.trim()
-                    ? selectedTaskForModal.details.detailText
-                    : "등록된 세부 과제가 없습니다."}
-                </div>
-              </div>
-
-              <div>
-                <div className="mb-1 text-xs text-slate-400">과제 목표</div>
-                <div className="whitespace-pre-wrap rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-100">
-                  {selectedTaskForModal.details?.goalText?.trim()
-                    ? selectedTaskForModal.details.goalText
-                    : "등록된 과제 목표가 없습니다."}
-                </div>
-              </div>
-
               {(selectedTaskForModal.details?.dailyStart ||
                 selectedTaskForModal.details?.dailyEnd ||
                 selectedTaskForModal.details?.singleDate) && (
@@ -2802,33 +2887,6 @@ export default function CoachTasksPage() {
                   </div>
                 </div>
               )}
-
-              <div>
-                <div className="mb-1 text-xs text-slate-400">포지션 / 중요도</div>
-                <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-xs text-slate-100">
-                  <div className="mb-1">
-                    대상 포지션:{" "}
-                    {selectedTaskForModal.details?.positions &&
-                    selectedTaskForModal.details.positions.length
-                      ? selectedTaskForModal.details.positions.join(", ")
-                      : "전부"}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {["GK", "DF", "MF", "FW"].map((pos) => (
-                      <span
-                        key={pos}
-                        className="rounded-full bg-slate-800 px-2 py-1 text-[11px]"
-                      >
-                        {pos}:{" "}
-                        {selectedTaskForModal.details?.positionWeights?.[
-                          pos as "GK" | "DF" | "MF" | "FW"
-                        ] ?? 0}
-                        %
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
 
               <div>
                 <div className="mb-1 text-xs text-slate-400">선수 지정</div>
@@ -2853,6 +2911,35 @@ export default function CoachTasksPage() {
                   </div>
                 )}
               </div>
+
+              {(() => {
+                const rows = (selectedTaskForModal.details as {
+                  formationPlayerAssignments?: { slot: number; playerId: string }[];
+                } | null)?.formationPlayerAssignments;
+                if (!Array.isArray(rows) || rows.length === 0) return null;
+                return (
+                  <div>
+                    <div className="mb-1 text-xs text-slate-400">포메이션 슬롯 배정</div>
+                    <div className="flex flex-wrap gap-2">
+                      {rows
+                        .slice()
+                        .sort((a, b) => a.slot - b.slot)
+                        .map((row) => {
+                          const player = players.find((p) => p.id === row.playerId);
+                          return (
+                            <span
+                              key={`${row.slot}-${row.playerId}`}
+                              className="rounded-full border border-lime-500/40 bg-lime-500/10 px-2 py-1 text-[11px] text-lime-100"
+                            >
+                              슬롯 {row.slot + 1}: {player?.name ?? row.playerId}
+                              {player?.position ? ` (${player.position})` : ""}
+                            </span>
+                          );
+                        })}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div>
                 <div className="mb-1 text-xs text-slate-400">평가자 지정</div>

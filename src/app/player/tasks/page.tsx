@@ -531,7 +531,11 @@ export default function PlayerTasksPage() {
                             : task.playerId
                               ? "개인 과제"
                               : "기타"}
-                          {d?.taskType && ` · ${d.taskType}`}
+                          {d?.taskTypes?.length
+                            ? ` · ${d.taskTypes.join(" · ")}`
+                            : d?.taskType
+                              ? ` · ${d.taskType}`
+                              : ""}
                           {contentLabel && ` · ${contentLabel}`}
                         </p>
                         <p className="text-base font-semibold text-slate-100">
