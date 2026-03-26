@@ -11,6 +11,8 @@ export interface Team {
   id: string;
   name: string;
   season: string;
+  /** DB Organization 모델과 연결된 경우 같은 조직 소속 팀을 묶음 */
+  organizationId?: string | null;
   organization?: TeamOrganization | null;
   statDefinition?: StatDefinition | null;
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ChangeEvent } from "react";
 import type { Player, Team, TeamStaff } from "@/lib/types";
@@ -116,6 +117,32 @@ export default function CoachPlayersPage() {
     [teams],
   );
 
+  /** 대시보드 등에서 ?teamId= 로 들어온 경우: 이 팀만 보기(다른 팀 전환은 대시보드에서) */
+  const scopedTeamId = useMemo(() => {
+    if (!adminModeChecked || (!isAdminMode && !isOwnerMode)) return null;
+    const q = searchParams.get("teamId");
+    if (!q || !teams.some((t) => t.id === q)) return null;
+    return q;
+  }, [adminModeChecked, isAdminMode, isOwnerMode, searchParams, teams]);
+
+  const effectiveFilterTeamId = scopedTeamId ?? filterTeamId;
+
+  const teamOptionsForForm = useMemo(
+    () =>
+      scopedTeamId
+        ? teamOptions.filter((t) => t.id === scopedTeamId)
+        : teamOptions,
+    [scopedTeamId, teamOptions],
+  );
+
+  const scopedTeamDisplayName = useMemo(
+    () =>
+      scopedTeamId
+        ? teams.find((t) => t.id === scopedTeamId)?.name ?? null
+        : null,
+    [scopedTeamId, teams],
+  );
+
   useEffect(() => {
     let cancelled = false;
     async function checkAccessMode() {
@@ -158,6 +185,28 @@ export default function CoachPlayersPage() {
       setFilterTeamId(qTeamId);
     }
   }, [adminModeChecked, isAdminMode, isOwnerMode, searchParams, teams, router]);
+
+  const lastTeamParamRef = useRef<string | null>(null);
+  useEffect(() => {
+    const q = searchParams.get("teamId");
+    if (
+      lastTeamParamRef.current &&
+      !q &&
+      (isAdminMode || isOwnerMode)
+    ) {
+      setFilterTeamId("all");
+    }
+    lastTeamParamRef.current = q;
+  }, [searchParams, isAdminMode, isOwnerMode]);
+
+  useEffect(() => {
+    if (!scopedTeamId) return;
+    setTeamId(scopedTeamId);
+  }, [scopedTeamId]);
+
+  useEffect(() => {
+    if (scopedTeamId) setPlayerSortOrder("name");
+  }, [scopedTeamId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,7 +257,7 @@ export default function CoachPlayersPage() {
   function resetForm() {
     setEditingId(null);
     setName("");
-    setTeamId(teams[0]?.id ?? "");
+    setTeamId(scopedTeamId ?? teams[0]?.id ?? "");
     setPosition("");
   }
 
@@ -326,9 +375,9 @@ export default function CoachPlayersPage() {
 
   const visiblePlayers = useMemo(() => {
     let list =
-      filterTeamId === "all"
+      effectiveFilterTeamId === "all"
         ? players
-        : players.filter((p) => p.teamId === filterTeamId);
+        : players.filter((p) => p.teamId === effectiveFilterTeamId);
     const q = playerSearchQuery.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -347,7 +396,7 @@ export default function CoachPlayersPage() {
       return (a.name ?? "").localeCompare(b.name ?? "", "ko");
     });
     return sorted;
-  }, [players, filterTeamId, playerSearchQuery, playerSortOrder, teams]);
+  }, [players, effectiveFilterTeamId, playerSearchQuery, playerSortOrder, teams]);
 
   useEffect(() => {
     if (!stackTeam) {
@@ -620,23 +669,49 @@ export default function CoachPlayersPage() {
         <p className="text-sm text-slate-300">
           선수별로 스탯 보기를 누르면 해당 팀 스탯(집계)이 개인마다 보이게 열립니다. 스탯 평가는 팀 화면에서 평가 코너로 진행하세요.
         </p>
+        {scopedTeamDisplayName && (
+          <p className="text-sm text-emerald-200/90">
+            소속:{" "}
+            <span className="font-semibold text-emerald-100">{scopedTeamDisplayName}</span>
+            <span className="font-normal text-slate-500"> — 아래 목록은 이 팀 소속 선수만 표시됩니다.</span>
+          </p>
+        )}
       </header>
 
       <div className="flex items-center justify-between gap-3 text-xs text-slate-300 flex-wrap">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px]">팀 필터</span>
-          <select
-            value={filterTeamId}
-            onChange={(e) => setFilterTeamId(e.target.value)}
-            className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400"
-          >
-            <option value="all">전체 팀</option>
-            {teamOptions.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
+          {scopedTeamId ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-600/35 bg-emerald-950/25 px-2.5 py-1.5">
+              <span className="text-[11px] font-medium text-emerald-200/95">
+                팀 전용
+              </span>
+              <span className="text-[11px] text-slate-200">
+                {teams.find((t) => t.id === scopedTeamId)?.name ?? "팀"}
+              </span>
+              <Link
+                href="/coach"
+                className="text-[11px] text-sky-400 hover:text-sky-300 hover:underline"
+              >
+                다른 팀은 대시보드에서 선택
+              </Link>
+            </div>
+          ) : (
+            <>
+              <span className="text-[11px]">팀 필터</span>
+              <select
+                value={filterTeamId}
+                onChange={(e) => setFilterTeamId(e.target.value)}
+                className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+              >
+                <option value="all">전체 팀</option>
+                {teamOptions.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
           <input
             type="text"
             value={playerSearchQuery}
@@ -650,16 +725,23 @@ export default function CoachPlayersPage() {
             className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400"
           >
             <option value="name">이름 순</option>
-            <option value="team">팀 순</option>
+            {!scopedTeamId && <option value="team">팀 순</option>}
           </select>
         </div>
         <span className="text-[11px] text-slate-400">
-          표시: {visiblePlayers.length}명 / 총 {players.length}명
+          {scopedTeamId
+            ? `이 팀 선수 ${visiblePlayers.length}명`
+            : `표시: ${visiblePlayers.length}명 / 총 ${players.length}명`}
         </span>
-        {filterTeamId !== "all" && teams.find((t) => t.id === filterTeamId) && (
+        {effectiveFilterTeamId !== "all" &&
+          teams.find((t) => t.id === effectiveFilterTeamId) && (
           <button
             type="button"
-            onClick={() => setStackTeam(teams.find((t) => t.id === filterTeamId) ?? null)}
+            onClick={() =>
+              setStackTeam(
+                teams.find((t) => t.id === effectiveFilterTeamId) ?? null,
+              )
+            }
             className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700"
           >
             팀 스탯 (집계)
@@ -690,9 +772,13 @@ export default function CoachPlayersPage() {
         </div>
         <div className="space-y-1">
           <label className="text-xs text-slate-300">소속 팀</label>
-          {teamOptions.length === 0 ? (
+          {teamOptionsForForm.length === 0 ? (
             <div className="text-xs text-slate-400">
               먼저 팀 관리 화면에서 팀을 한 개 이상 등록해 주세요.
+            </div>
+          ) : scopedTeamId ? (
+            <div className="rounded-lg border border-slate-600 bg-slate-950/80 px-3 py-2 text-sm text-slate-200">
+              {teamOptionsForForm[0]?.name ?? "—"}
             </div>
           ) : (
             <select
@@ -700,7 +786,7 @@ export default function CoachPlayersPage() {
               onChange={(e) => setTeamId(e.target.value)}
               className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-emerald-400"
             >
-              {teamOptions.map((team) => (
+              {teamOptionsForForm.map((team) => (
                 <option key={team.id} value={team.id}>
                   {team.name}
                 </option>
@@ -720,7 +806,7 @@ export default function CoachPlayersPage() {
         <div className="flex items-end gap-2">
           <button
             type="submit"
-            disabled={submitting || teamOptions.length === 0}
+            disabled={submitting || teamOptionsForForm.length === 0}
             className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
           >
             {submitting
@@ -803,7 +889,7 @@ export default function CoachPlayersPage() {
           <thead className="bg-slate-900">
             <tr>
               <th className="px-4 py-2 text-left">이름</th>
-              <th className="px-4 py-2 text-left">팀</th>
+              <th className="px-4 py-2 text-left">소속</th>
               <th className="px-4 py-2 text-left">포지션</th>
               <th className="px-4 py-2 text-left">팀 스탯</th>
               <th className="px-4 py-2 text-right">동작</th>
@@ -831,11 +917,19 @@ export default function CoachPlayersPage() {
             ) : (
               visiblePlayers.map((player) => {
                 const team = teams.find((t) => t.id === player.teamId);
+                const affiliation =
+                  team?.name ?? scopedTeamDisplayName ?? "—";
                 return (
                   <tr key={player.id} className="border-t border-slate-800">
                     <td className="px-4 py-2">{player.name}</td>
-                    <td className="px-4 py-2 text-slate-200">
-                      {team?.name ?? "-"}
+                    <td
+                      className={`px-4 py-2 ${
+                        scopedTeamId
+                          ? "font-medium text-emerald-100/95"
+                          : "text-slate-200"
+                      }`}
+                    >
+                      {affiliation}
                     </td>
                     <td className="px-4 py-2 text-slate-300">
                       {player.position ?? "-"}
@@ -1004,7 +1098,13 @@ export default function CoachPlayersPage() {
             className="max-h-[95vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="mb-4 text-lg font-semibold text-slate-100">개인 정보 — {profilePlayer.name}</h3>
+            <h3 className="mb-1 text-lg font-semibold text-slate-100">개인 정보 — {profilePlayer.name}</h3>
+            <p className="mb-4 text-sm text-slate-400">
+              소속:{" "}
+              <span className="font-medium text-emerald-200/90">
+                {teams.find((t) => t.id === profilePlayer.teamId)?.name ?? "—"}
+              </span>
+            </p>
             <form onSubmit={handleSaveProfile} className="space-y-4">
               {profileError && <p className="text-sm text-rose-400">{profileError}</p>}
               <div className="grid gap-4 sm:grid-cols-2">

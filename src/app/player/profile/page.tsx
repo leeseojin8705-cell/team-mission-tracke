@@ -154,9 +154,15 @@ export default function PlayerProfilePage() {
           <p className="text-xs text-emerald-400">PLAYER</p>
           <h1 className="text-2xl font-semibold">내 정보</h1>
           {player && (
-            <p className="text-sm text-slate-400">
-              {player.name} / {team?.name ?? "팀 정보 없음"}
-            </p>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-slate-200">{player.name}</p>
+              <p className="text-sm text-emerald-200/90">
+                소속:{" "}
+                <span className="font-semibold text-emerald-100">
+                  {team?.name ?? "—"}
+                </span>
+              </p>
+            </div>
           )}
         </header>
 

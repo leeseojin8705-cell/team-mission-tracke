@@ -125,6 +125,32 @@ function StatsContent() {
   const [compareTo, setCompareTo] = useState("");
   const [showCompare, setShowCompare] = useState(false);
   const [snapshots, setSnapshots] = useState<PlayerSnapshot[]>([]);
+  const [affiliationName, setAffiliationName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!playerId) {
+      setAffiliationName(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/players/${encodeURIComponent(playerId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p: { teamId?: string | null } | null) => {
+        if (!p?.teamId || cancelled) return null;
+        return fetch(`/api/teams/${encodeURIComponent(p.teamId)}`);
+      })
+      .then((r) => (r && r.ok ? r.json() : null))
+      .then((t: { name?: string } | null) => {
+        if (cancelled) return;
+        setAffiliationName(t?.name ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setAffiliationName(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [playerId]);
 
   useEffect(() => {
     if (!playerId) {
@@ -401,6 +427,11 @@ function StatsContent() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold text-slate-100">내 스탯</h2>
+          {affiliationName && (
+            <p className="text-xs font-medium text-emerald-200/90">
+              소속: <span className="text-emerald-100">{affiliationName}</span>
+            </p>
+          )}
           <p className="text-xs text-slate-400">
             선수가 받은 코치 평가와 자기평가를 기간별로 모아 볼 수 있습니다.
           </p>

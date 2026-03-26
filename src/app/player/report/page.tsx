@@ -151,6 +151,31 @@ function PlayerReportContent() {
   const [periodPreset, setPeriodPreset] = useState<"all" | "30d" | "custom">("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [affiliationName, setAffiliationName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!playerId) {
+      setAffiliationName(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/players/${encodeURIComponent(playerId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p: { teamId?: string | null } | null) => {
+        if (!p?.teamId || cancelled) return null;
+        return fetch(`/api/teams/${encodeURIComponent(p.teamId)}`);
+      })
+      .then((r) => (r && r.ok ? r.json() : null))
+      .then((t: { name?: string } | null) => {
+        if (!cancelled) setAffiliationName(t?.name ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setAffiliationName(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [playerId]);
 
   useEffect(() => {
     if (!playerId) {
@@ -409,6 +434,11 @@ function PlayerReportContent() {
             <p className="text-lg font-semibold text-slate-100 print:text-black">
               선수 개인 리포트
             </p>
+            {affiliationName && (
+              <p className="mt-1 text-sm font-medium text-emerald-200/90 print:text-emerald-800">
+                소속: {affiliationName}
+              </p>
+            )}
             <p className="text-xs text-slate-400 print:text-slate-700">
               코치 평가, 자기평가, 개인 기록관 데이터를 한 장으로 모은 요약 리포트입니다.
             </p>

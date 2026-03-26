@@ -69,6 +69,26 @@ function PlayerArchiveInner() {
     [players, currentPlayerId],
   );
   const myTeamId = me?.teamId;
+  const [affiliationName, setAffiliationName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!myTeamId) {
+      setAffiliationName(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/teams/${encodeURIComponent(myTeamId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((t: { name?: string } | null) => {
+        if (!cancelled && t?.name) setAffiliationName(t.name);
+      })
+      .catch(() => {
+        if (!cancelled) setAffiliationName(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [myTeamId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -271,6 +291,12 @@ function PlayerArchiveInner() {
           </Link>
         </div>
         <h1 className="text-xl font-semibold text-slate-100">기록관</h1>
+        {affiliationName && (
+          <p className="text-sm text-emerald-200/90">
+            소속:{" "}
+            <span className="font-semibold text-emerald-100">{affiliationName}</span>
+          </p>
+        )}
         <p className="text-sm text-slate-400">
           개인 전술 데이터에서 저장한 내 개인 기록들을 모아서 볼 수 있습니다. 코치 기록관과는
           별도로, 나만의 개인 기록관입니다.

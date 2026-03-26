@@ -1,40 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
-
-const navItems = [
-  { href: "/coach", label: "대시보드" },
-  { href: "/coach/teams", label: "팀" },
-  { href: "/coach/players", label: "선수" },
-  { href: "/coach/schedule", label: "일정" },
-  { href: "/coach/announcements", label: "공지" },
-  { href: "/coach/tasks", label: "과제" },
-  { href: "/coach/analysis/data", label: "전술 데이터" },
-  { href: "/coach/analysis/archive", label: "기록관" },
-];
-
-const ownerNavItems = [
-  { href: "/coach/settings", label: "조직 / 팀 설정" },
-  { href: "/coach/invitations", label: "코치 초대" },
-];
+import { Suspense, useEffect, useState } from "react";
+import { CoachAppChrome } from "./CoachAppChrome";
 
 export default function CoachLayout({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
-  const [teamIdParam, setTeamIdParam] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const q = new URLSearchParams(window.location.search);
-    setTeamIdParam(q.get("teamId"));
-  }, [pathname]);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,73 +109,24 @@ export default function CoachLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50">
-      <div className="mx-auto flex max-w-6xl gap-6 px-4 py-6">
-        <aside className="w-48 shrink-0 space-y-5 rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
-          <div className="space-y-0.5 border-b border-slate-800 pb-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-              Team Mission Tracker
-            </p>
-            <h1 className="text-lg font-semibold text-slate-100">코치</h1>
-          </div>
-
-          <nav className="space-y-0.5 text-sm">
-            {navItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/coach" && pathname.startsWith(item.href));
-              return (
-                <Link
-                  key={item.href}
-                  href={teamIdParam ? `${item.href}?teamId=${encodeURIComponent(teamIdParam)}` : item.href}
-                  className={`block rounded-lg px-3 py-2 transition ${
-                    isActive
-                      ? "bg-emerald-500/15 font-medium text-emerald-300"
-                      : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-            {isOwner && (
-              <>
-                <div className="mt-3 border-t border-slate-800 pt-2 text-[11px] font-semibold text-slate-500">
-                  조직 관리
-                </div>
-                {ownerNavItems.map((item) => {
-                  const isActive =
-                    pathname === item.href ||
-                    (item.href !== "/coach" && pathname.startsWith(item.href));
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`block rounded-lg px-3 py-2 text-xs transition ${
-                        isActive
-                          ? "bg-emerald-500/15 font-medium text-emerald-300"
-                          : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </>
-            )}
-          </nav>
-
-          <Link
-            href="/"
-            className="block rounded-lg px-3 py-2 text-xs text-slate-500 transition hover:bg-slate-800 hover:text-slate-300"
-          >
-            ← 역할 선택
-          </Link>
-        </aside>
-
-        <main className="min-w-0 flex-1">{children}</main>
-      </div>
-    </div>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 text-slate-400 flex items-center justify-center text-sm">
+          로딩…
+        </div>
+      }
+    >
+      <CoachAppChrome isOwner={isOwner}>
+        <Suspense
+          fallback={
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/40 px-4 py-8 text-center text-sm text-slate-500">
+              로딩…
+            </div>
+          }
+        >
+          {children}
+        </Suspense>
+      </CoachAppChrome>
+    </Suspense>
   );
 }
-

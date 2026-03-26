@@ -23,6 +23,7 @@ function SelfEvaluateContent() {
   const [loading, setLoading] = useState(!!playerId);
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [affiliationName, setAffiliationName] = useState<string | null>(null);
 
   const setScore = useCallback((catId: string, itemIndex: number, value: number) => {
     setScores((prev) => {
@@ -46,11 +47,15 @@ function SelfEvaluateContent() {
         if (cancelled) return;
         const p = (playersList as Player[]).find((x) => x.id === playerId);
         setPlayer(p ?? null);
-        if (!p?.teamId) return;
+        if (!p?.teamId) {
+          setAffiliationName(null);
+          return;
+        }
         return fetch(`/api/teams/${p.teamId}`).then((r) => (r.ok ? r.json() : null));
       })
-      .then((teamRes: { statDefinition?: StatDefinition | null } | null | undefined) => {
+      .then((teamRes: { statDefinition?: StatDefinition | null; name?: string } | null | undefined) => {
         if (!cancelled && teamRes?.statDefinition) setDef(teamRes.statDefinition);
+        if (!cancelled) setAffiliationName(teamRes?.name ?? null);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -135,7 +140,14 @@ function SelfEvaluateContent() {
     <div className="min-h-screen bg-slate-950 p-4">
       <div className="mx-auto max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-slate-100">자기평가</h1>
+          <div>
+            <h1 className="text-lg font-semibold text-slate-100">자기평가</h1>
+            {affiliationName && (
+              <p className="mt-1 text-xs font-medium text-emerald-200/90">
+                소속: {affiliationName}
+              </p>
+            )}
+          </div>
           <Link
             href={`/player/stats?playerId=${encodeURIComponent(playerId)}`}
             className="rounded-lg border border-slate-600 px-2 py-1 text-sm text-slate-300 hover:bg-slate-800"

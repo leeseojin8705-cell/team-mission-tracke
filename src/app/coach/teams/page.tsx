@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Player, Team, TeamOrganization, TeamStaff } from "@/lib/types";
 import type { CategoryEvaluationType, StatDefinition } from "@/lib/types";
@@ -14,6 +15,8 @@ const defaultOrganization: TeamOrganization = {
 
 export default function CoachTeamsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const contextTeamId = searchParams.get("teamId");
   const [teams, setTeams] = useState<Team[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -82,7 +85,10 @@ export default function CoachTeamsPage() {
     async function loadTeams() {
       try {
         setLoading(true);
-        const res = await fetch("/api/teams");
+        const url = contextTeamId
+          ? `/api/teams?contextTeamId=${encodeURIComponent(contextTeamId)}`
+          : "/api/teams";
+        const res = await fetch(url);
         if (!res.ok) {
           throw new Error("팀 목록을 불러오지 못했습니다.");
         }
@@ -108,7 +114,7 @@ export default function CoachTeamsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [contextTeamId]);
 
   function resetForm() {
     setEditingId(null);
@@ -573,6 +579,15 @@ export default function CoachTeamsPage() {
         <p className="text-sm text-slate-300">
           팀 이름을 누르면 아래로 코치·프론트 명단과 <strong>선수 명단(지도 평가 대상)</strong>이 펼쳐집니다. 선수 명단은 선수 관리에 등록된 해당 팀 소속 선수입니다. 수정을 누르면 코치·프론트를 등록·수정할 수 있습니다.
         </p>
+        {contextTeamId && (
+          <p className="rounded-lg border border-emerald-600/35 bg-emerald-950/25 px-3 py-2 text-xs text-emerald-100/90">
+            선택한 팀과 같은 조직(관리자)에 속한 팀만 보입니다. 다른 팀·조직은{" "}
+            <Link href="/coach" className="text-sky-400 underline hover:text-sky-300">
+              코치 대시보드
+            </Link>
+            에서 다시 들어오세요.
+          </p>
+        )}
       </header>
 
       {editingId && (

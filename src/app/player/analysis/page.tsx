@@ -61,6 +61,7 @@ function PlayerAnalysisInner() {
   const [recordMessage, setRecordMessage] = useState<
     { type: "ok" | "err"; text: string } | null
   >(null);
+  const [affiliationName, setAffiliationName] = useState<string | null>(null);
 
   const myTeamId = player?.teamId;
 
@@ -91,6 +92,16 @@ function PlayerAnalysisInner() {
         setPlayer(playerData);
         setAnalyses(analysesData);
         setCurrentPlayerId(playerData.id);
+        setAffiliationName(null);
+        if (playerData.teamId) {
+          const tr = await fetch(
+            `/api/teams/${encodeURIComponent(playerData.teamId)}`,
+          );
+          if (tr.ok) {
+            const tm = (await tr.json()) as { name?: string };
+            if (!cancelled && tm?.name) setAffiliationName(tm.name);
+          }
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "오류가 발생했습니다.");
       } finally {
@@ -312,6 +323,12 @@ function PlayerAnalysisInner() {
           </Link>
         </div>
         <h1 className="text-xl font-semibold text-slate-100">개인 전술 데이터</h1>
+        {affiliationName && (
+          <p className="text-sm text-emerald-200/90">
+            소속:{" "}
+            <span className="font-semibold text-emerald-100">{affiliationName}</span>
+          </p>
+        )}
         <p className="text-sm text-slate-400">
           경기를 선택한 뒤 포인트를 기록하고 「코치에게 보내기」를 누르면 이 정보가 코치 코너의 선수 개인 데이터로 전달되며, 코치 전술 데이터(기록관)와 연동됩니다.
         </p>
@@ -333,9 +350,14 @@ function PlayerAnalysisInner() {
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
                   선수
                 </p>
-                <p className="mb-3 text-sm font-medium text-slate-100">
+                <p className="mb-1 text-sm font-medium text-slate-100">
                   {player.name}
                 </p>
+                {affiliationName && (
+                  <p className="mb-3 text-xs text-emerald-200/85">
+                    소속: {affiliationName}
+                  </p>
+                )}
                 <div className="mt-1 flex items-center justify-between gap-2">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                     경기 선택

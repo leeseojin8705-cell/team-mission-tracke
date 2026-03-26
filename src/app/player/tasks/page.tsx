@@ -141,6 +141,7 @@ export default function PlayerTasksPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sortOrder, setSortOrder] = useState<"dueDate" | "title">("dueDate");
+  const [affiliationName, setAffiliationName] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -159,6 +160,7 @@ export default function PlayerTasksPage() {
         }
         if (cancelled) return;
         setPlayerId(pid);
+        setAffiliationName(null);
 
         const [tasksRes] = await Promise.all([fetch("/api/tasks")]);
         if (!tasksRes.ok) throw new Error("과제 목록을 불러오지 못했습니다.");
@@ -191,6 +193,13 @@ export default function PlayerTasksPage() {
             const player: { teamId?: string | null } = await playerRes.json();
             const teamId = player?.teamId;
             if (teamId) {
+              const teamMetaRes = await fetch(
+                `/api/teams/${encodeURIComponent(teamId)}`,
+              );
+              if (teamMetaRes.ok) {
+                const tm = (await teamMetaRes.json()) as { name?: string };
+                if (!cancelled && tm?.name) setAffiliationName(tm.name);
+              }
               const evalRes = await fetch(
                 `/api/teams/${encodeURIComponent(
                   teamId,
@@ -345,6 +354,11 @@ export default function PlayerTasksPage() {
           <div className="bg-gradient-to-r from-lime-400/90 to-emerald-500/90 px-4 py-2 text-center">
             <p className="text-[10px] font-bold tracking-[0.2em] text-slate-900">TEAM MISSION TRACKER</p>
             <h1 className="text-lg font-extrabold text-slate-950">내 과제</h1>
+            {affiliationName && (
+              <p className="px-2 pb-1 text-xs font-medium text-slate-800">
+                소속: <span className="font-bold text-slate-950">{affiliationName}</span>
+              </p>
+            )}
           </div>
           <p className="px-4 py-3 text-sm text-slate-400">
             코치가 등록한 과제와 내가 만든 개인 과제 중, 지금 기간·요일·시간대에 해당하는 과제를 볼 수 있습니다. 코치가

@@ -44,6 +44,7 @@ export default function PlayerTaskDetailPage() {
   const [teamPlayers, setTeamPlayers] = useState<Player[]>([]);
   const [entryPlayers, setEntryPlayers] = useState<Player[]>([]);
   const [evaluators, setEvaluators] = useState<TeamStaff[]>([]);
+  const [affiliationName, setAffiliationName] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +82,7 @@ export default function PlayerTaskDetailPage() {
         };
         if (cancelled) return;
         setTask(parsedTask);
+        setAffiliationName(null);
 
         // 팀 기반 추가 정보 (평가 요약, 엔트리 선수, 평가자)
         const teamId = parsedTask.teamId ?? undefined;
@@ -131,6 +133,24 @@ export default function PlayerTaskDetailPage() {
             setEvaluators(
               evalIds.length > 0 ? staffList.filter((s) => evalIds.includes(s.id)) : [],
             );
+          }
+
+          const metaRes = await fetch(`/api/teams/${encodeURIComponent(teamId)}`);
+          if (metaRes.ok) {
+            const tm = (await metaRes.json()) as { name?: string };
+            if (!cancelled && tm?.name) setAffiliationName(tm.name);
+          }
+        } else {
+          const pr = await fetch(`/api/players/${encodeURIComponent(pid)}`);
+          if (pr.ok) {
+            const pl = (await pr.json()) as { teamId?: string | null };
+            if (pl?.teamId) {
+              const tr = await fetch(`/api/teams/${encodeURIComponent(pl.teamId)}`);
+              if (tr.ok) {
+                const tm = (await tr.json()) as { name?: string };
+                if (!cancelled && tm?.name) setAffiliationName(tm.name);
+              }
+            }
           }
         }
 
@@ -308,6 +328,11 @@ export default function PlayerTaskDetailPage() {
               <p className="text-sm text-slate-400">
                 {task.teamId ? "팀 과제" : task.playerId ? "개인 과제" : "기타 과제"}
               </p>
+              {affiliationName && (
+                <p className="text-sm font-medium text-emerald-200/90">
+                  소속: {affiliationName}
+                </p>
+              )}
             </header>
 
             {d && <TaskCoachBlueprintView details={d} />}

@@ -36,6 +36,7 @@ export default function NewPlayerTaskPage() {
   const [error, setError] = useState<string | null>(null);
   const [teamStaff, setTeamStaff] = useState<TeamStaff[]>([]);
   const [teamPlayers, setTeamPlayers] = useState<Player[]>([]);
+  const [affiliationName, setAffiliationName] = useState<string | null>(null);
   const [selectedEvaluatorIds, setSelectedEvaluatorIds] = useState<Set<string>>(
     new Set(),
   );
@@ -60,7 +61,16 @@ export default function NewPlayerTaskPage() {
         if (!playerRes.ok) return;
         const player = (await playerRes.json()) as { teamId?: string | null };
         const teamId = player.teamId;
-        if (!teamId) return;
+        if (!teamId) {
+          setAffiliationName(null);
+          return;
+        }
+
+        const teamMetaRes = await fetch(`/api/teams/${encodeURIComponent(teamId)}`);
+        if (teamMetaRes.ok) {
+          const tm = (await teamMetaRes.json()) as { name?: string };
+          if (!cancelled && tm?.name) setAffiliationName(tm.name);
+        }
 
         const staffRes = await fetch(`/api/teams/${encodeURIComponent(teamId)}/staff`);
         const playersRes = await fetch(`/api/players?teamId=${encodeURIComponent(teamId)}`);
@@ -172,6 +182,11 @@ export default function NewPlayerTaskPage() {
           </Link>
         </div>
         <h1 className="text-xl font-semibold text-slate-100">개인 과제 만들기</h1>
+        {affiliationName && (
+          <p className="text-sm font-medium text-emerald-200/90">
+            소속: <span className="text-emerald-100">{affiliationName}</span>
+          </p>
+        )}
         <p className="text-sm text-slate-400">
           코치와 관계없이 나만의 개인 과제를 만들어 관리할 수 있습니다. 반복 과제(루틴)와
           특정 하루짜리 과제 둘 중에서 선택할 수 있어요.

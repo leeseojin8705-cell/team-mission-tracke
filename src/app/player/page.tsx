@@ -556,7 +556,13 @@ function PlayerHomeInner() {
     <main className="min-h-screen bg-slate-950 text-slate-50 px-4 py-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row">
         <aside className="w-full max-w-xs space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-          <h1 className="text-xl font-semibold mb-2">선수 대시보드</h1>
+          <h1 className="text-xl font-semibold mb-1">선수 대시보드</h1>
+          {me && myTeam?.name && (
+            <p className="mb-2 text-sm text-emerald-200/90">
+              소속:{" "}
+              <span className="font-semibold text-emerald-100">{myTeam.name}</span>
+            </p>
+          )}
 
           {error && (
             <p className="text-sm text-rose-300">
@@ -569,7 +575,8 @@ function PlayerHomeInner() {
               <p className="text-xs text-slate-400">내 정보</p>
               <p className="font-semibold">{me.name}</p>
               <p className="text-slate-300">
-                팀: <span className="text-slate-100">{myTeam?.name}</span>
+                소속:{" "}
+                <span className="font-medium text-emerald-100/95">{myTeam?.name ?? "—"}</span>
               </p>
               {me.position && (
                 <p className="text-slate-300">

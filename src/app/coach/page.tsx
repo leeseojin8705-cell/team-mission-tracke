@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Player, StatCategory, StatDefinition, Team } from "@/lib/types";
 import { DEFAULT_STAT_DEFINITION, isMeasurementCategory } from "@/lib/statDefinition";
 
@@ -91,6 +91,7 @@ export default function CoachHome() {
   const [myOrgName, setMyOrgName] = useState<string | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("all");
   const [isAdminMode, setIsAdminMode] = useState(false);
+  const teamJumpDefaultedRef = useRef(false);
   const canUseTeamJump = isAdminMode || Boolean(myOrgName);
 
   useEffect(() => {
@@ -128,7 +129,8 @@ export default function CoachHome() {
           setAnnouncementCount(annRes.ok ? (await annRes.json()).length : 0);
           setAnalysisCount(analysesRes.ok ? (await analysesRes.json()).length : 0);
           setTeamsForStats(teamList);
-          if (teamList[0] && selectedTeamId === "all") {
+          if (!teamJumpDefaultedRef.current && teamList.length > 0) {
+            teamJumpDefaultedRef.current = true;
             setSelectedTeamId(teamList[0].id);
           }
           const scheduleList = Array.isArray(schedules) ? schedules : [];
@@ -191,14 +193,19 @@ export default function CoachHome() {
     return () => {
       cancelled = true;
     };
-  }, [selectedTeamId]);
+  }, []);
 
   useEffect(() => {
-    try {
-      setIsAdminMode(window.localStorage.getItem("tmt:adminMode") === "on");
-    } catch {
-      setIsAdminMode(false);
+    function readAdminMode() {
+      try {
+        setIsAdminMode(window.localStorage.getItem("tmt:adminMode") === "on");
+      } catch {
+        setIsAdminMode(false);
+      }
     }
+    readAdminMode();
+    window.addEventListener("focus", readAdminMode);
+    return () => window.removeEventListener("focus", readAdminMode);
   }, []);
 
   // 코치가 소유한 조직/팀 이름 표시용
