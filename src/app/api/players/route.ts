@@ -19,17 +19,25 @@ export async function GET(req: Request) {
     const where: { teamId?: string | { in: string[] } } = {};
 
     if (session && (session.role === "coach" || session.role === "owner")) {
-      const ids = await getAccessibleTeamIds(session);
-      if (ids.length === 0) {
-        return NextResponse.json([]);
-      }
-      if (teamId) {
-        if (!ids.includes(teamId)) {
+      try {
+        const ids = await getAccessibleTeamIds(session);
+        if (ids.length === 0) {
           return NextResponse.json([]);
         }
-        where.teamId = teamId;
-      } else {
-        where.teamId = { in: ids };
+        if (teamId) {
+          if (!ids.includes(teamId)) {
+            return NextResponse.json([]);
+          }
+          where.teamId = teamId;
+        } else {
+          where.teamId = { in: ids };
+        }
+      } catch (accessError) {
+        // Keep list endpoints available even if access-scope lookup errors out.
+        console.warn("[GET /api/players] access scope resolution failed, fallback to public scope", accessError);
+        if (teamId) {
+          where.teamId = teamId;
+        }
       }
     } else if (teamId) {
       where.teamId = teamId;
