@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -188,6 +189,8 @@ const FORMATION_LAYOUTS: Record<string, FormationSlot[]> = {
 };
 
 export default function CoachTasksPage() {
+  const searchParams = useSearchParams();
+  const lockedTeamId = (searchParams.get("teamId") ?? "").trim();
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [staff, setStaff] = useState<TeamStaff[]>([]);
@@ -387,12 +390,18 @@ export default function CoachTasksPage() {
   ];
 
   const teamOptions = useMemo(
-    () => teams.map((t) => ({ id: t.id, name: t.name })),
-    [teams],
+    () =>
+      teams
+        .filter((t) => !lockedTeamId || t.id === lockedTeamId)
+        .map((t) => ({ id: t.id, name: t.name })),
+    [teams, lockedTeamId],
   );
   const playerOptions = useMemo(
-    () => players.map((p) => ({ id: p.id, name: p.name })),
-    [players],
+    () =>
+      players
+        .filter((p) => !lockedTeamId || p.teamId === lockedTeamId)
+        .map((p) => ({ id: p.id, name: p.name })),
+    [players, lockedTeamId],
   );
   const currentTargetOptions =
     targetType === "team" ? teamOptions : playerOptions;
@@ -564,10 +573,16 @@ export default function CoachTasksPage() {
           setTasks(tasksData);
 
           if (!targetId) {
-            if (targetType === "team" && teamsData[0]) {
-              setTargetId(teamsData[0].id);
-            } else if (targetType === "player" && playersData[0]) {
-              setTargetId(playersData[0].id);
+            if (targetType === "team") {
+              const firstTeam = lockedTeamId
+                ? teamsData.find((t) => t.id === lockedTeamId)
+                : teamsData[0];
+              if (firstTeam) setTargetId(firstTeam.id);
+            } else if (targetType === "player") {
+              const firstPlayer = lockedTeamId
+                ? playersData.find((p) => p.teamId === lockedTeamId)
+                : playersData[0];
+              if (firstPlayer) setTargetId(firstPlayer.id);
             }
           }
         }
@@ -589,7 +604,27 @@ export default function CoachTasksPage() {
     return () => {
       cancelled = true;
     };
-  }, [targetId, targetType]);
+  }, [targetId, targetType, lockedTeamId]);
+
+  useEffect(() => {
+    if (!lockedTeamId) return;
+    if (targetType === "team") {
+      if (targetId !== lockedTeamId) {
+        setTargetId(lockedTeamId);
+      }
+      return;
+    }
+    if (targetType === "player") {
+      const scopedPlayers = players.filter((p) => p.teamId === lockedTeamId);
+      if (scopedPlayers.length === 0) {
+        if (targetId) setTargetId("");
+        return;
+      }
+      if (!scopedPlayers.some((p) => p.id === targetId)) {
+        setTargetId(scopedPlayers[0].id);
+      }
+    }
+  }, [lockedTeamId, players, targetId, targetType]);
 
   // 현재 대상 팀 기준으로 코칭 스텝(평가자 후보) 불러오기
   useEffect(() => {
