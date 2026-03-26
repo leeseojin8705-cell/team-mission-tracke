@@ -7,6 +7,8 @@ import type { Player, Team } from "@/lib/types";
 const ADMIN_MODE_PINS = new Set(["3932", "0513"]);
 
 export default function Home() {
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [todayEntryCount, setTodayEntryCount] = useState<number | null>(null);
   const [adminMode, setAdminMode] = useState(false);
   const [showAdminCoachPicker, setShowAdminCoachPicker] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -23,6 +25,35 @@ export default function Home() {
     } catch {
       // ignore
     }
+  }, []);
+
+  useEffect(() => {
+    async function recordTodayEntry() {
+      try {
+        const keyName = "tmt:visitorKey";
+        let visitorKey = window.localStorage.getItem(keyName);
+        if (!visitorKey) {
+          visitorKey =
+            typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `vk-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+          window.localStorage.setItem(keyName, visitorKey);
+        }
+        const res = await fetch("/api/entry/today", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ visitorKey }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { count?: number };
+        if (typeof data.count === "number") {
+          setTodayEntryCount(data.count);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    recordTodayEntry();
   }, []);
 
   function toggleAdmin() {
@@ -126,6 +157,32 @@ export default function Home() {
       cancelled = true;
     };
   }, [showAdminCoachPicker, selectedTeamId]);
+
+  if (showWelcome) {
+    return (
+      <main
+        className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4 cursor-pointer"
+        onClick={() => setShowWelcome(false)}
+      >
+        <div className="w-full max-w-3xl rounded-3xl border border-slate-800 bg-slate-900/60 px-6 py-16 md:px-10 text-center">
+          <p className="text-xs md:text-sm tracking-[0.2em] text-slate-400">COMPANY</p>
+          <h1 className="mt-3 text-4xl md:text-6xl font-black tracking-tight text-emerald-400">
+            러너스 하이
+          </h1>
+          <p className="mt-4 text-sm md:text-base text-slate-300">
+            TEAM MISSION TRACKER
+          </p>
+          <p className="mt-6 text-xs md:text-sm text-slate-400">
+            오늘 입장 인원{" "}
+            <span className="font-semibold text-slate-100">
+              {todayEntryCount ?? "..."}명
+            </span>
+          </p>
+          <p className="mt-8 text-xs text-slate-500">화면을 터치/클릭하면 역할 선택으로 이동합니다</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4">
