@@ -1535,7 +1535,7 @@ export default function CoachTasksPage() {
       {/* 과제 등록 폼 — 코치-선수 과제 등록(목업) */}
       <form
         onSubmit={handleSubmit}
-        className="overflow-hidden rounded-2xl border-2 border-lime-400/40 bg-slate-900/90 text-sm shadow-lg shadow-lime-500/5"
+        className="rounded-2xl border-2 border-lime-400/40 bg-slate-900/90 text-sm shadow-lg shadow-lime-500/5"
       >
         <div className="bg-gradient-to-r from-lime-400 to-emerald-500 px-4 py-3 text-center">
           <p className="text-xs font-bold tracking-[0.2em] text-slate-900">
@@ -1933,7 +1933,7 @@ export default function CoachTasksPage() {
                 >
                   <svg
                     ref={pitchSvgRef}
-                    className="absolute inset-0 h-full w-full touch-none select-none"
+                    className="absolute inset-0 h-full w-full select-none"
                     viewBox={`0 0 ${PITCH_VB.w} ${PITCH_VB.h}`}
                     preserveAspectRatio="xMidYMid meet"
                     aria-label="포메이션 미니 필드"
@@ -2195,11 +2195,34 @@ export default function CoachTasksPage() {
                           }}
                           onDragOver={(e) => {
                             e.preventDefault();
+                            e.stopPropagation();
+                            if (e.dataTransfer) {
+                              e.dataTransfer.dropEffect = "copy";
+                            }
+                          }}
+                          onDragEnter={(e) => {
+                            e.preventDefault();
+                            if (e.dataTransfer) {
+                              e.dataTransfer.dropEffect = "copy";
+                            }
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (editable) return;
+                            if (selectedPlayerIds.size !== 1) return;
+                            const [onlyId] = Array.from(selectedPlayerIds);
+                            if (!onlyId) return;
+                            setSlotPlayerAssignments((prev) => ({
+                              ...prev,
+                              [i]: onlyId,
+                            }));
                           }}
                           onDrop={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            const playerId = e.dataTransfer.getData("text/player-id");
+                            const playerId =
+                              e.dataTransfer.getData("text/player-id") ||
+                              e.dataTransfer.getData("text/plain");
                             if (!playerId) return;
                             setSlotPlayerAssignments((prev) => ({
                               ...prev,
@@ -2236,6 +2259,14 @@ export default function CoachTasksPage() {
                           <circle
                             cx={slot.x}
                             cy={slot.y}
+                            r={5.8}
+                            fill="transparent"
+                            stroke="none"
+                            pointerEvents="all"
+                          />
+                          <circle
+                            cx={slot.x}
+                            cy={slot.y}
                             r={isGk ? 2.35 : 2.05}
                             fill={
                               isGk
@@ -2248,6 +2279,7 @@ export default function CoachTasksPage() {
                                 : "rgba(190,242,100,0.95)"
                             }
                             strokeWidth="0.45"
+                            pointerEvents="none"
                           />
                           <text
                             x={slot.x}
@@ -2257,6 +2289,7 @@ export default function CoachTasksPage() {
                             fontWeight="700"
                             fill="rgba(15,23,42,0.92)"
                             style={{ fontFamily: "system-ui, sans-serif" }}
+                            pointerEvents="none"
                           >
                             {isGk ? "GK" : String(i + 1)}
                           </text>
@@ -2269,6 +2302,7 @@ export default function CoachTasksPage() {
                               fontWeight="700"
                               fill="rgba(255,255,255,0.95)"
                               style={{ fontFamily: "system-ui, sans-serif" }}
+                              pointerEvents="none"
                             >
                               {shortName}
                             </text>
@@ -2282,6 +2316,7 @@ export default function CoachTasksPage() {
                               fontWeight="700"
                               fill="rgba(251,191,36,0.95)"
                               style={{ fontFamily: "system-ui, sans-serif" }}
+                              pointerEvents="none"
                             >
                               {badgeText}
                             </text>
@@ -2300,7 +2335,7 @@ export default function CoachTasksPage() {
                 </div>
                 <div className="border-t border-slate-700/80 bg-slate-950/85 px-2 py-2">
                   <p className="mb-1.5 text-[10px] text-slate-500">
-                    대상 선수 (탭 선택 + 드래그해서 필드 슬롯에 배치)
+                    대상 선수 (탭 선택 · 드래그 또는 선수 1명만 선택 후 슬롯 클릭)
                   </p>
                   <div className="flex max-h-[4.5rem] flex-wrap gap-1 overflow-y-auto pr-0.5">
                     {entryCandidatePlayers.length === 0 ? (
@@ -2310,24 +2345,32 @@ export default function CoachTasksPage() {
                     ) : (
                       entryCandidatePlayers.slice(0, 18).map((p) => {
                         const on = selectedPlayerIds.has(p.id);
+                        const toggle = () =>
+                          setSelectedPlayerIds((prev) => {
+                            const n = new Set(prev);
+                            if (n.has(p.id)) n.delete(p.id);
+                            else n.add(p.id);
+                            return n;
+                          });
                         return (
-                          <button
+                          <div
                             key={p.id}
-                            type="button"
+                            role="button"
+                            tabIndex={0}
                             draggable
                             onDragStart={(e) => {
+                              e.dataTransfer.setData("text/plain", p.id);
                               e.dataTransfer.setData("text/player-id", p.id);
                               e.dataTransfer.effectAllowed = "copyMove";
                             }}
-                            onClick={() =>
-                              setSelectedPlayerIds((prev) => {
-                                const n = new Set(prev);
-                                if (n.has(p.id)) n.delete(p.id);
-                                else n.add(p.id);
-                                return n;
-                              })
-                            }
-                            className={`rounded-md border px-1.5 py-0.5 text-[10px] transition ${
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                toggle();
+                              }
+                            }}
+                            onClick={toggle}
+                            className={`cursor-grab rounded-md border px-1.5 py-0.5 text-[10px] transition active:cursor-grabbing ${
                               on
                                 ? "border-lime-400 bg-lime-400 font-medium text-slate-950 shadow-sm shadow-lime-500/20"
                                 : "border-slate-600/80 bg-slate-900/95 text-slate-200 hover:border-slate-500"
@@ -2337,7 +2380,7 @@ export default function CoachTasksPage() {
                             {assignedPlayerIds.has(p.id) && (
                               <span className="ml-1 text-[9px] text-amber-300">●</span>
                             )}
-                          </button>
+                          </div>
                         );
                       })
                     )}
