@@ -12,6 +12,7 @@ export default function Home() {
   const [selectedTeamId, setSelectedTeamId] = useState<string>("all");
   const [loadingPicker, setLoadingPicker] = useState(false);
   const [pickerError, setPickerError] = useState<string | null>(null);
+  const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -53,6 +54,37 @@ export default function Home() {
       setPickerError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
     } finally {
       setLoadingPicker(false);
+    }
+  }
+
+  async function handleDeleteTeam(team: Team) {
+    const ok = window.confirm(
+      `정말 "${team.name}" 팀을 삭제하시겠습니까?\n팀에 연결된 선수/일정/과제 데이터도 영향받을 수 있습니다.`,
+    );
+    if (!ok) return;
+
+    try {
+      setDeletingTeamId(team.id);
+      setPickerError(null);
+      const res = await fetch(`/api/teams/${encodeURIComponent(team.id)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        throw new Error("팀 삭제에 실패했습니다.");
+      }
+
+      setTeams((prev) => {
+        const next = prev.filter((t) => t.id !== team.id);
+        if (selectedTeamId === team.id) {
+          setSelectedTeamId(next[0]?.id ?? "all");
+        }
+        return next;
+      });
+      setPlayers((prev) => prev.filter((p) => p.teamId !== team.id));
+    } catch (e) {
+      setPickerError(e instanceof Error ? e.message : "팀 삭제에 실패했습니다.");
+    } finally {
+      setDeletingTeamId(null);
     }
   }
 
@@ -194,13 +226,23 @@ export default function Home() {
                             : "border-slate-700 bg-slate-900"
                         }`}
                       >
-                        <button
-                          type="button"
-                          onClick={() => setSelectedTeamId(t.id)}
-                          className="w-full text-left text-sm font-medium text-slate-100"
-                        >
-                          {t.name}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTeamId(t.id)}
+                            className="flex-1 text-left text-sm font-medium text-slate-100"
+                          >
+                            {t.name}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTeam(t)}
+                            disabled={deletingTeamId === t.id}
+                            className="rounded-md border border-rose-700/70 px-2 py-0.5 text-[11px] text-rose-300 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {deletingTeamId === t.id ? "삭제중..." : "삭제"}
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
