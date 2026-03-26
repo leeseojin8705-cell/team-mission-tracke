@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Player, Team } from "@/lib/types";
 
 export default function Home() {
@@ -40,19 +40,14 @@ export default function Home() {
     try {
       setLoadingPicker(true);
       setPickerError(null);
-      const [teamsRes, playersRes] = await Promise.all([
-        fetch("/api/teams"),
-        fetch("/api/players"),
-      ]);
+      const teamsRes = await fetch("/api/teams");
       const teamsData: Team[] = teamsRes.ok ? await teamsRes.json() : [];
-      const playersData: Player[] = playersRes.ok ? await playersRes.json() : [];
       setTeams(Array.isArray(teamsData) ? teamsData : []);
-      setPlayers(Array.isArray(playersData) ? playersData : []);
       if (teamsData[0]) {
         setSelectedTeamId(teamsData[0].id);
       }
-      if (!teamsRes.ok || !playersRes.ok) {
-        setPickerError("팀/선수 목록을 일부 불러오지 못했습니다.");
+      if (!teamsRes.ok) {
+        setPickerError("팀 목록을 불러오지 못했습니다.");
       }
     } catch (e) {
       setPickerError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
@@ -61,10 +56,34 @@ export default function Home() {
     }
   }
 
-  const filteredPlayers = useMemo(() => {
-    if (selectedTeamId === "all") return players;
-    return players.filter((p) => p.teamId === selectedTeamId);
-  }, [players, selectedTeamId]);
+  useEffect(() => {
+    if (!showAdminCoachPicker || selectedTeamId === "all") {
+      setPlayers([]);
+      return;
+    }
+    let cancelled = false;
+    async function loadTeamPlayers() {
+      try {
+        const res = await fetch(`/api/players?teamId=${encodeURIComponent(selectedTeamId)}`);
+        const data: Player[] = res.ok ? await res.json() : [];
+        if (!cancelled) {
+          setPlayers(Array.isArray(data) ? data : []);
+          if (!res.ok) {
+            setPickerError("선수 목록을 불러오지 못했습니다.");
+          }
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setPlayers([]);
+          setPickerError(e instanceof Error ? e.message : "선수 목록을 불러오지 못했습니다.");
+        }
+      }
+    }
+    loadTeamPlayers();
+    return () => {
+      cancelled = true;
+    };
+  }, [showAdminCoachPicker, selectedTeamId]);
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4">
@@ -192,11 +211,11 @@ export default function Home() {
                 <p className="mb-2 text-xs font-semibold text-slate-300">선수 목록</p>
                 {loadingPicker ? (
                   <p className="text-xs text-slate-500">불러오는 중...</p>
-                ) : filteredPlayers.length === 0 ? (
+                ) : players.length === 0 ? (
                   <p className="text-xs text-slate-500">선수 데이터가 없습니다.</p>
                 ) : (
                   <div className="max-h-[420px] space-y-1 overflow-y-auto pr-1">
-                    {filteredPlayers.map((p) => {
+                    {players.map((p) => {
                       const teamName = teams.find((t) => t.id === p.teamId)?.name ?? "-";
                       return (
                         <div
