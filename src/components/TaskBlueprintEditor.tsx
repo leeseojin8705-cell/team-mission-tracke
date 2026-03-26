@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { TaskDetails } from "@/lib/types";
+import type { Player, TaskDetails } from "@/lib/types";
 import {
   FORMATION_LAYOUTS,
   FORMATION_PRESET_OPTIONS,
@@ -23,8 +23,10 @@ export type TaskBlueprintDraft = Partial<
     | "formation"
     | "formationLabel"
     | "formationCustomSlots"
+    | "formationPlayerAssignments"
     | "preCheckTime"
     | "assignmentLines"
+    | "players"
   >
 >;
 
@@ -95,10 +97,15 @@ function newAssignmentRow(): AssignmentRow {
 type Props = {
   /** 저장 시 details에 합치할 필드 (ref로만 써도 됨) */
   onDraftChange?: (draft: TaskBlueprintDraft) => void;
+  candidatePlayers?: Player[];
   className?: string;
 };
 
-export function TaskBlueprintEditor({ onDraftChange, className }: Props) {
+export function TaskBlueprintEditor({
+  onDraftChange,
+  candidatePlayers = [],
+  className,
+}: Props) {
   const subFocusOptions: SubFocusOpt[] = [
     "이해",
     "응용",
@@ -118,15 +125,38 @@ export function TaskBlueprintEditor({ onDraftChange, className }: Props) {
   const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
   const pitchSvgRef = useRef<SVGSVGElement | null>(null);
   const [preCheckTime, setPreCheckTime] = useState("");
+  const [slotPlayerAssignments, setSlotPlayerAssignments] = useState<
+    Record<number, string>
+  >({});
   const [assignmentRows, setAssignmentRows] = useState<AssignmentRow[]>(() => [
     newAssignmentRow(),
   ]);
+  const playerMap = useMemo(
+    () => Object.fromEntries(candidatePlayers.map((p) => [p.id, p])),
+    [candidatePlayers],
+  );
 
   const displayFormationSlots = useMemo(() => {
     if (formation === "custom") return customFormationSlots;
     if (!formation) return [] as FormationSlot[];
     return FORMATION_LAYOUTS[formation] ?? [];
   }, [formation, customFormationSlots]);
+  const normalizedSlotPlayerAssignments = useMemo(() => {
+    const maxSlot = Math.max(0, displayFormationSlots.length - 1);
+    const allowedIds = new Set(candidatePlayers.map((p) => p.id));
+    const next: Record<number, string> = {};
+    for (const [k, v] of Object.entries(slotPlayerAssignments)) {
+      const idx = Number(k);
+      if (!Number.isFinite(idx) || idx < 0 || idx > maxSlot) continue;
+      if (!allowedIds.has(v)) continue;
+      next[idx] = v;
+    }
+    return next;
+  }, [slotPlayerAssignments, displayFormationSlots, candidatePlayers]);
+  const assignedPlayerIds = useMemo(
+    () => new Set(Object.values(normalizedSlotPlayerAssignments)),
+    [normalizedSlotPlayerAssignments],
+  );
 
   const isCustomFormation = formation === "custom";
 
@@ -208,11 +238,25 @@ export function TaskBlueprintEditor({ onDraftChange, className }: Props) {
               ...(label ? { label } : {}),
             }))
           : undefined,
+      formationPlayerAssignments:
+        Object.keys(normalizedSlotPlayerAssignments).length > 0
+          ? Object.entries(normalizedSlotPlayerAssignments)
+              .map(([slot, playerId]) => ({
+                slot: Number(slot),
+                playerId,
+              }))
+              .filter((x) => Number.isFinite(x.slot) && x.slot >= 0 && Boolean(x.playerId))
+          : undefined,
       preCheckTime: preCheckTime || undefined,
       assignmentLines: assignmentLines.length ? assignmentLines : undefined,
+      players:
+        Object.keys(normalizedSlotPlayerAssignments).length > 0
+          ? Array.from(new Set(Object.values(normalizedSlotPlayerAssignments)))
+          : undefined,
     };
   }, [
     assignmentRows,
+    normalizedSlotPlayerAssignments,
     customFormationSlots,
     formation,
     formationNote,
@@ -594,6 +638,18 @@ export function TaskBlueprintEditor({ onDraftChange, className }: Props) {
                     const slotKey =
                       slot.id ?? `preset-${slot.x}-${slot.y}-${i}`;
                     const editable = isCustomFormation && Boolean(slot.id);
+                    const assignedPlayerId = normalizedSlotPlayerAssignments[i];
+                    const assignedPlayer = assignedPlayerId
+                      ? playerMap[assignedPlayerId]
+                      : undefined;
+                    const shortName = assignedPlayer?.name
+                      ? assignedPlayer.name.length > 4
+                        ? `${assignedPlayer.name.slice(0, 4)}…`
+                        : assignedPlayer.name
+                      : null;
+                    const badgeText = assignedPlayer?.position
+                      ? assignedPlayer.position.toUpperCase()
+                      : null;
                     return (
                       <g
                         key={slotKey}
@@ -603,8 +659,29 @@ export function TaskBlueprintEditor({ onDraftChange, className }: Props) {
                             ? draggingSlotId === slot.id
                               ? "grabbing"
                               : "grab"
-                            : "default",
-                          pointerEvents: editable ? "auto" : "none",
+                            : "copy",
+                          pointerEvents: "auto",
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const playerId = e.dataTransfer.getData("text/player-id");
+                          if (!playerId) return;
+                          setSlotPlayerAssignments((prev) => ({
+                            ...prev,
+                            [i]: playerId,
+                          }));
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setSlotPlayerAssignments((prev) => {
+                            const next = { ...prev };
+                            delete next[i];
+                            return next;
+                          });
                         }}
                         onPointerDown={(e) => {
                           if (!editable || !slot.id) return;
@@ -647,6 +724,32 @@ export function TaskBlueprintEditor({ onDraftChange, className }: Props) {
                         >
                           {isGk ? "GK" : String(i + 1)}
                         </text>
+                        {shortName && (
+                          <text
+                            x={slot.x}
+                            y={slot.y + 3.7}
+                            textAnchor="middle"
+                            fontSize={1.8}
+                            fontWeight="700"
+                            fill="rgba(255,255,255,0.95)"
+                            style={{ fontFamily: "system-ui, sans-serif" }}
+                          >
+                            {shortName}
+                          </text>
+                        )}
+                        {badgeText && (
+                          <text
+                            x={slot.x}
+                            y={slot.y + 5.7}
+                            textAnchor="middle"
+                            fontSize={1.5}
+                            fontWeight="700"
+                            fill="rgba(251,191,36,0.95)"
+                            style={{ fontFamily: "system-ui, sans-serif" }}
+                          >
+                            {badgeText}
+                          </text>
+                        )}
                       </g>
                     );
                   })}
@@ -663,7 +766,36 @@ export function TaskBlueprintEditor({ onDraftChange, className }: Props) {
               {displayFormationSlots.length > 0
                 ? `필드 ${displayFormationSlots.length}포지션 표시`
                 : "프리셋 또는 직접 배치를 선택하면 표시됩니다"}
+              {Object.keys(normalizedSlotPlayerAssignments).length > 0
+                ? ` · 배정 ${Object.keys(normalizedSlotPlayerAssignments).length}명`
+                : ""}
             </p>
+            {candidatePlayers.length > 0 && (
+              <div className="border-t border-slate-700/80 bg-slate-950/85 px-2 py-2">
+                <p className="mb-1.5 text-[10px] text-slate-500">
+                  대상 선수 (드래그해서 슬롯에 배치, 슬롯 우클릭 해제)
+                </p>
+                <div className="flex max-h-[4.5rem] flex-wrap gap-1 overflow-y-auto pr-0.5">
+                  {candidatePlayers.slice(0, 24).map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/player-id", p.id);
+                        e.dataTransfer.effectAllowed = "copyMove";
+                      }}
+                      className="rounded-md border border-slate-600/80 bg-slate-900/95 px-1.5 py-0.5 text-[10px] text-slate-200 hover:border-slate-500"
+                    >
+                      {p.name}
+                      {assignedPlayerIds.has(p.id) && (
+                        <span className="ml-1 text-[9px] text-amber-300">●</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

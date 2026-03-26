@@ -41,6 +41,7 @@ export default function PlayerTaskDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [evalSummary, setEvalSummary] = useState<EvaluationSummary | null>(null);
+  const [teamPlayers, setTeamPlayers] = useState<Player[]>([]);
   const [entryPlayers, setEntryPlayers] = useState<Player[]>([]);
   const [evaluators, setEvaluators] = useState<TeamStaff[]>([]);
 
@@ -109,6 +110,7 @@ export default function PlayerTaskDetailPage() {
 
           if (playersRes.ok) {
             const teamPlayers = (await playersRes.json()) as Player[];
+            setTeamPlayers(teamPlayers);
             const ids =
               Array.isArray(parsedTask.details?.players) &&
               parsedTask.details.players.length > 0
@@ -372,6 +374,24 @@ export default function PlayerTaskDetailPage() {
                       .join(", ")}
                   </p>
                 )}
+                {Array.isArray(d?.formationPlayerAssignments) &&
+                  d.formationPlayerAssignments.length > 0 && (
+                    <p>
+                      슬롯 배정:{" "}
+                      {d.formationPlayerAssignments
+                        .slice()
+                        .sort((a, b) => a.slot - b.slot)
+                        .map((row) => {
+                          const player = teamPlayers.find((p) => p.id === row.playerId);
+                          return `슬롯 ${row.slot + 1} ${
+                            player
+                              ? `${player.name}${player.position ? `(${player.position})` : ""}`
+                              : row.playerId
+                          }`;
+                        })
+                        .join(", ")}
+                    </p>
+                  )}
                 {evaluators.length > 0 && (
                   <p>
                     평가자:{" "}

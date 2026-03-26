@@ -7,7 +7,7 @@ import {
   TaskBlueprintEditor,
   type TaskBlueprintDraft,
 } from "@/components/TaskBlueprintEditor";
-import type { TaskCategory, TeamStaff } from "@/lib/types";
+import type { Player, TaskCategory, TeamStaff } from "@/lib/types";
 
 type PlayerSession = {
   session?: {
@@ -35,6 +35,7 @@ export default function NewPlayerTaskPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [teamStaff, setTeamStaff] = useState<TeamStaff[]>([]);
+  const [teamPlayers, setTeamPlayers] = useState<Player[]>([]);
   const [selectedEvaluatorIds, setSelectedEvaluatorIds] = useState<Set<string>>(
     new Set(),
   );
@@ -62,11 +63,21 @@ export default function NewPlayerTaskPage() {
         if (!teamId) return;
 
         const staffRes = await fetch(`/api/teams/${encodeURIComponent(teamId)}/staff`);
+        const playersRes = await fetch(`/api/players?teamId=${encodeURIComponent(teamId)}`);
         if (!staffRes.ok) return;
         const staffList = (await staffRes.json()) as TeamStaff[];
-        if (!cancelled) setTeamStaff(staffList);
+        const playersList = playersRes.ok
+          ? ((await playersRes.json()) as Player[])
+          : [];
+        if (!cancelled) {
+          setTeamStaff(staffList);
+          setTeamPlayers(playersList);
+        }
       } catch {
-        if (!cancelled) setTeamStaff([]);
+        if (!cancelled) {
+          setTeamStaff([]);
+          setTeamPlayers([]);
+        }
       }
     }
     loadStaff();
@@ -458,7 +469,10 @@ export default function NewPlayerTaskPage() {
             />
           </div>
 
-          <TaskBlueprintEditor onDraftChange={onBlueprintDraft} />
+          <TaskBlueprintEditor
+            onDraftChange={onBlueprintDraft}
+            candidatePlayers={teamPlayers}
+          />
 
           <div className="pt-2">
             <button
