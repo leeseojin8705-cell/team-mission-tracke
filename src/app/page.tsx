@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Player, Team } from "@/lib/types";
 
+const ADMIN_MODE_PINS = new Set(["3932", "0513"]);
+
 export default function Home() {
   const [adminMode, setAdminMode] = useState(false);
   const [showAdminCoachPicker, setShowAdminCoachPicker] = useState(false);
@@ -26,6 +28,14 @@ export default function Home() {
   function toggleAdmin() {
     setAdminMode((prev) => {
       const next = !prev;
+      if (next) {
+        const input = window.prompt("관리자 모드 비밀번호 4자리를 입력하세요.");
+        const pin = (input ?? "").trim();
+        if (!ADMIN_MODE_PINS.has(pin)) {
+          window.alert("비밀번호가 올바르지 않습니다.");
+          return prev;
+        }
+      }
       try {
         window.localStorage.setItem("tmt:adminMode", next ? "on" : "off");
       } catch {
@@ -189,8 +199,8 @@ export default function Home() {
       </div>
 
       {showAdminCoachPicker && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 px-4 py-6">
-          <div className="mx-auto w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 p-4 md:p-5">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 px-4 py-6">
+          <div className="mx-auto w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 p-4 md:p-5 max-h-[90vh] overflow-y-auto">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-amber-300">관리자 팀 선택</h2>
               <button
@@ -209,14 +219,14 @@ export default function Home() {
             )}
 
             <div className="grid gap-4 md:grid-cols-2">
-              <section className="rounded-xl border border-slate-700 bg-slate-950/40 p-3">
+              <section className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 min-h-[220px]">
                 <p className="mb-2 text-xs font-semibold text-slate-300">팀 목록</p>
                 {loadingPicker ? (
                   <p className="text-xs text-slate-500">불러오는 중...</p>
                 ) : teams.length === 0 ? (
                   <p className="text-xs text-slate-500">등록된 팀이 없습니다.</p>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
                     {teams.map((t) => (
                       <div
                         key={t.id}
@@ -249,14 +259,14 @@ export default function Home() {
                 )}
               </section>
 
-              <section className="rounded-xl border border-slate-700 bg-slate-950/40 p-3">
+              <section className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 min-h-[220px]">
                 <p className="mb-2 text-xs font-semibold text-slate-300">선수 목록</p>
                 {loadingPicker ? (
                   <p className="text-xs text-slate-500">불러오는 중...</p>
                 ) : players.length === 0 ? (
                   <p className="text-xs text-slate-500">선수 데이터가 없습니다.</p>
                 ) : (
-                  <div className="max-h-[420px] space-y-1 overflow-y-auto pr-1">
+                  <div className="max-h-[52vh] space-y-1 overflow-y-auto pr-1">
                     {players.map((p) => {
                       const teamName = teams.find((t) => t.id === p.teamId)?.name ?? "-";
                       return (
@@ -278,16 +288,16 @@ export default function Home() {
             </div>
 
             {selectedTeamId !== "all" && (
-              <div className="mt-4 flex justify-end gap-2 border-t border-slate-700 pt-3">
+              <div className="mt-4 flex flex-col sm:flex-row sm:justify-end gap-2 border-t border-slate-700 pt-3">
                 <Link
                   href={`/coach?teamId=${encodeURIComponent(selectedTeamId)}`}
-                  className="rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+                  className="w-full sm:w-auto rounded-md border border-slate-600 px-3 py-1.5 text-center text-xs text-slate-200 hover:bg-slate-800"
                 >
                   선택 팀 대시보드 입장
                 </Link>
                 <Link
                   href={`/coach/players?teamId=${encodeURIComponent(selectedTeamId)}`}
-                  className="rounded-md border border-emerald-600/70 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/10"
+                  className="w-full sm:w-auto rounded-md border border-emerald-600/70 px-3 py-1.5 text-center text-xs text-emerald-300 hover:bg-emerald-500/10"
                 >
                   선택 팀 선수 개인 항목 입장
                 </Link>

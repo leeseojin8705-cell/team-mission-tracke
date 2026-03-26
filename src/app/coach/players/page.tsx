@@ -798,7 +798,7 @@ export default function CoachPlayersPage() {
         </p>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
+      <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-900">
             <tr>
@@ -852,7 +852,8 @@ export default function CoachPlayersPage() {
                         스탯 보기
                       </button>
                     </td>
-                    <td className="px-4 py-2 text-right text-xs space-x-2">
+                    <td className="px-4 py-2 text-right text-xs">
+                      <div className="flex flex-wrap justify-end gap-2">
                       <button
                         type="button"
                         onClick={() => setProfilePlayer(player)}
@@ -874,6 +875,7 @@ export default function CoachPlayersPage() {
                       >
                         삭제
                       </button>
+                      </div>
                     </td>
                   </tr>
                 );
