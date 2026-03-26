@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
@@ -24,12 +24,17 @@ const ownerNavItems = [
 export default function CoachLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [authorized, setAuthorized] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
-  const teamIdParam = searchParams.get("teamId");
+  const [teamIdParam, setTeamIdParam] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    setTeamIdParam(q.get("teamId"));
+  }, [pathname]);
 
   useEffect(() => {
     let cancelled = false;
