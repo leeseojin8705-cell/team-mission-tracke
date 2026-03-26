@@ -72,6 +72,11 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const session = await getSession();
+  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
+  }
+
   const body = await req.json();
 
   if (!body.name || !body.teamId) {
@@ -79,6 +84,11 @@ export async function POST(req: Request) {
       { error: "name과 teamId는 필수입니다." },
       { status: 400 },
     );
+  }
+
+  const ids = await getAccessibleTeamIds(session);
+  if (!ids.includes(body.teamId)) {
+    return NextResponse.json({ error: "접근 가능한 팀이 아닙니다." }, { status: 403 });
   }
 
   const player = await prisma.player.create({

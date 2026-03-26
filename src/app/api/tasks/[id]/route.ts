@@ -1,5 +1,32 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/session";
+import { getAccessibleTeamIds } from "@/lib/coachAccess";
+
+async function canAccessTask(taskId: string): Promise<boolean> {
+  const session = await getSession();
+  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+    return false;
+  }
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { id: true, teamId: true, playerId: true },
+  });
+  if (!task) return false;
+
+  let teamId = task.teamId;
+  if (!teamId && task.playerId) {
+    const player = await prisma.player.findUnique({
+      where: { id: task.playerId },
+      select: { teamId: true },
+    });
+    teamId = player?.teamId ?? null;
+  }
+  if (!teamId) return false;
+
+  const ids = await getAccessibleTeamIds(session);
+  return ids.includes(teamId);
+}
 
 export async function GET(
   _req: Request,
@@ -20,6 +47,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  if (!(await canAccessTask(id))) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  }
   const body = await req.json();
 
   const task = await prisma.task.update({
@@ -42,6 +72,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  if (!(await canAccessTask(id))) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  }
   await prisma.task.delete({
     where: { id },
   });
