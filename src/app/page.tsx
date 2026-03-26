@@ -211,6 +211,10 @@ export default function Home() {
                 닫기
               </button>
             </div>
+            <p className="mb-3 text-[11px] text-slate-400">
+              총 등록 팀 <span className="font-semibold text-slate-200">{teams.length}</span> · 총 등록 선수{" "}
+              <span className="font-semibold text-slate-200">{players.length}</span>
+            </p>
 
             {pickerError && (
               <p className="mb-3 rounded-md border border-rose-700/50 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">
