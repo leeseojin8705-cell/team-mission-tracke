@@ -31,7 +31,14 @@ function parseStatDefinition(raw: string | null): import("@/lib/types").StatDefi
 
 export async function GET(req: Request) {
   try {
-    const session = await getSession();
+    let session: Awaited<ReturnType<typeof getSession>> = null;
+    try {
+      session = await getSession();
+    } catch (sessionError) {
+      // Keep public team listing available even when cookie parsing fails.
+      console.warn("[GET /api/teams] session read failed, fallback to public scope", sessionError);
+      session = null;
+    }
     if (!prisma?.team) {
       console.error("[GET /api/teams] prisma or prisma.team is undefined");
       return NextResponse.json(

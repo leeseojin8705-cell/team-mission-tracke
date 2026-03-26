@@ -7,7 +7,14 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const teamId = searchParams.get("teamId");
-    const session = await getSession();
+    let session: Awaited<ReturnType<typeof getSession>> = null;
+    try {
+      session = await getSession();
+    } catch (sessionError) {
+      // Allow list retrieval even when session cookie cannot be parsed.
+      console.warn("[GET /api/players] session read failed, fallback to public scope", sessionError);
+      session = null;
+    }
 
     const where: { teamId?: string | { in: string[] } } = {};
 
