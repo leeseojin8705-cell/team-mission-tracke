@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { Player, Team } from "@/lib/types";
 
 export default function Home() {
-  const router = useRouter();
   const [adminMode, setAdminMode] = useState(false);
   const [showAdminCoachPicker, setShowAdminCoachPicker] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -179,28 +177,11 @@ export default function Home() {
                       >
                         <button
                           type="button"
-                          onClick={() => {
-                            setSelectedTeamId(t.id);
-                            router.push(`/coach/players?teamId=${encodeURIComponent(t.id)}`);
-                          }}
+                          onClick={() => setSelectedTeamId(t.id)}
                           className="w-full text-left text-sm font-medium text-slate-100"
                         >
                           {t.name}
                         </button>
-                        <div className="mt-2 flex gap-2">
-                          <Link
-                            href={`/coach?teamId=${encodeURIComponent(t.id)}`}
-                            className="rounded-md border border-slate-600 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
-                          >
-                            팀 대시보드
-                          </Link>
-                          <Link
-                            href={`/coach/players?teamId=${encodeURIComponent(t.id)}`}
-                            className="rounded-md border border-emerald-600/70 px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10"
-                          >
-                            선수 개인 항목
-                          </Link>
-                        </div>
                       </div>
                     ))}
                   </div>
@@ -234,6 +215,23 @@ export default function Home() {
                 )}
               </section>
             </div>
+
+            {selectedTeamId !== "all" && (
+              <div className="mt-4 flex justify-end gap-2 border-t border-slate-700 pt-3">
+                <Link
+                  href={`/coach?teamId=${encodeURIComponent(selectedTeamId)}`}
+                  className="rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+                >
+                  선택 팀 대시보드 입장
+                </Link>
+                <Link
+                  href={`/coach/players?teamId=${encodeURIComponent(selectedTeamId)}`}
+                  className="rounded-md border border-emerald-600/70 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/10"
+                >
+                  선택 팀 선수 개인 항목 입장
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       )}
