@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ChangeEvent } from "react";
 import type { Player, Team, TeamStaff } from "@/lib/types";
 import type { StatCategory } from "@/lib/types";
@@ -75,6 +75,7 @@ function StackRadarChart({ categories, values }: { categories: StatCategory[]; v
 
 export default function CoachPlayersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +85,9 @@ export default function CoachPlayersPage() {
   const playerFormRef = useRef<HTMLFormElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterTeamId, setFilterTeamId] = useState<string>("all");
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [isOwnerMode, setIsOwnerMode] = useState(false);
+  const [adminModeChecked, setAdminModeChecked] = useState(false);
   const [playerSearchQuery, setPlayerSearchQuery] = useState("");
   const [playerSortOrder, setPlayerSortOrder] = useState<"name" | "team">("name");
   const [name, setName] = useState("");
@@ -111,6 +115,49 @@ export default function CoachPlayersPage() {
     () => teams.map((t) => ({ id: t.id, name: t.name })),
     [teams],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkAccessMode() {
+      try {
+        const adminOn = window.localStorage.getItem("tmt:adminMode") === "on";
+        if (!cancelled) setIsAdminMode(adminOn);
+        if (adminOn) {
+          if (!cancelled) setIsOwnerMode(false);
+          return;
+        }
+        const orgRes = await fetch("/api/coach/organizations/me", { cache: "no-store" });
+        const orgs = orgRes.ok ? await orgRes.json() : [];
+        if (!cancelled) {
+          setIsOwnerMode(Array.isArray(orgs) && orgs.length > 0);
+        }
+      } catch {
+        if (!cancelled) setIsOwnerMode(false);
+      } finally {
+        if (!cancelled) setAdminModeChecked(true);
+      }
+    }
+    checkAccessMode();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!adminModeChecked) return;
+    const qTeamId = searchParams.get("teamId");
+    if (!isAdminMode && !isOwnerMode) {
+      if (qTeamId) {
+        setFilterTeamId("all");
+        router.replace("/coach/players");
+      }
+      return;
+    }
+    if (!qTeamId) return;
+    if (teams.some((t) => t.id === qTeamId)) {
+      setFilterTeamId(qTeamId);
+    }
+  }, [adminModeChecked, isAdminMode, isOwnerMode, searchParams, teams, router]);
 
   useEffect(() => {
     let cancelled = false;

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Player, StatCategory, StatDefinition, Team } from "@/lib/types";
 import { DEFAULT_STAT_DEFINITION, isMeasurementCategory } from "@/lib/statDefinition";
 
@@ -85,11 +85,13 @@ export default function CoachHome() {
     { id: string; name: string; teamName: string | null; total: number; completed: number }[]
   >([]);
   const [teamsForStats, setTeamsForStats] = useState<Team[]>([]);
-  const [players, setPlayers] = useState<Player[]>([]);
   const [latestTeamId, setLatestTeamId] = useState<string | null>(null);
   const [teamStatDef, setTeamStatDef] = useState<StatDefinition | null>(null);
   const [teamRadarValues, setTeamRadarValues] = useState<Record<string, number> | null>(null);
   const [myOrgName, setMyOrgName] = useState<string | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("all");
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const canUseTeamJump = isAdminMode || Boolean(myOrgName);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,8 +128,9 @@ export default function CoachHome() {
           setAnnouncementCount(annRes.ok ? (await annRes.json()).length : 0);
           setAnalysisCount(analysesRes.ok ? (await analysesRes.json()).length : 0);
           setTeamsForStats(teamList);
-          setPlayers(playerList);
-
+          if (teamList[0] && selectedTeamId === "all") {
+            setSelectedTeamId(teamList[0].id);
+          }
           const scheduleList = Array.isArray(schedules) ? schedules : [];
           const withDate = scheduleList
             .map((s: { id: string; title?: string; date?: string | Date; teamId?: string }) => ({
@@ -188,6 +191,14 @@ export default function CoachHome() {
     return () => {
       cancelled = true;
     };
+  }, [selectedTeamId]);
+
+  useEffect(() => {
+    try {
+      setIsAdminMode(window.localStorage.getItem("tmt:adminMode") === "on");
+    } catch {
+      setIsAdminMode(false);
+    }
   }, []);
 
   // 코치가 소유한 조직/팀 이름 표시용
@@ -325,6 +336,36 @@ export default function CoachHome() {
               <p className="text-lg font-semibold">{analysisCount ?? (loading ? "…" : 0)}</p>
             </div>
           </div>
+
+          {canUseTeamJump && (
+            <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-3">
+              <p className="text-[11px] font-semibold text-slate-300">관리자 팀 선택 이동</p>
+              <select
+                value={selectedTeamId}
+                onChange={(e) => setSelectedTeamId(e.target.value)}
+                className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
+              >
+                <option value="all">팀 선택</option>
+                {teamsForStats.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              {selectedTeamId !== "all" ? (
+                <Link
+                  href={`/coach/players?teamId=${encodeURIComponent(selectedTeamId)}`}
+                  className="block rounded-md border border-emerald-600/60 px-2 py-1.5 text-center text-[11px] text-emerald-300 hover:bg-emerald-500/10"
+                >
+                  선수 개인 항목으로 이동
+                </Link>
+              ) : (
+                <p className="text-[10px] text-slate-500">
+                  팀을 선택하면 선수 개인 항목으로 이동할 수 있습니다.
+                </p>
+              )}
+            </div>
+          )}
 
           {error && (
             <p className="text-xs text-rose-300">
