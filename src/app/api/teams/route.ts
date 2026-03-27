@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isValidAdminPin } from "@/lib/adminModePins";
 
 function parseOrganization(raw: string | null): { front: string[]; coaching: string[]; player: string[] } | null {
   if (!raw) return null;
@@ -47,6 +48,27 @@ export async function GET(req: Request) {
       return NextResponse.json(
         { error: "데이터베이스 연결을 사용할 수 없습니다. Prisma 클라이언트를 재생성한 뒤 서버를 재시작해 주세요." },
         { status: 500 },
+      );
+    }
+
+    const adminPin = req.headers.get("x-admin-pin")?.trim() ?? "";
+    if (isValidAdminPin(adminPin)) {
+      const teams = await prisma.team.findMany({
+        orderBy: { name: "asc" },
+      });
+      return NextResponse.json(
+        teams.map((t) => {
+          const rawOrg = (t as { organization?: string | null }).organization;
+          const rawStat = (t as { statDefinition?: string | null }).statDefinition;
+          return {
+            id: t.id,
+            name: t.name,
+            season: t.season,
+            organizationId: t.organizationId ?? null,
+            organization: parseOrganization(rawOrg ?? null),
+            statDefinition: parseStatDefinition(rawStat ?? null),
+          };
+        }),
       );
     }
 

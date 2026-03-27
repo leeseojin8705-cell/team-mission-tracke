@@ -95,7 +95,37 @@ export default function Home() {
     try {
       setLoadingPicker(true);
       setPickerError(null);
-      const teamsRes = await fetch("/api/teams");
+      let adminPin = "";
+      try {
+        adminPin = sessionStorage.getItem(ADMIN_PIN_STORAGE) ?? "";
+      } catch {
+        adminPin = "";
+      }
+      if (!adminPin) {
+        const input = window.prompt(
+          "관리자 팀 목록을 불러오려면 PIN 4자리를 입력하세요.",
+        );
+        const pin = (input ?? "").trim();
+        if (!pin) {
+          setPickerError("팀 목록을 보려면 관리자 PIN이 필요합니다.");
+          setLoadingPicker(false);
+          return;
+        }
+        if (!ADMIN_MODE_PINS.has(pin)) {
+          setPickerError("PIN이 올바르지 않습니다.");
+          setLoadingPicker(false);
+          return;
+        }
+        adminPin = pin;
+        try {
+          sessionStorage.setItem(ADMIN_PIN_STORAGE, pin);
+        } catch {
+          // ignore
+        }
+      }
+      const teamsRes = await fetch("/api/teams", {
+        headers: adminPin ? { "x-admin-pin": adminPin } : {},
+      });
       const teamsData: Team[] = teamsRes.ok ? await teamsRes.json() : [];
       setTeams(Array.isArray(teamsData) ? teamsData : []);
       if (teamsData[0]) {
