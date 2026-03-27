@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/session";
+import { canAccessMatchAnalysis } from "@/lib/matchAnalysisAccess";
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const session = await getSession();
   const { id } = await params;
   const a = await prisma.matchAnalysis.findUnique({
     where: { id },
@@ -16,6 +19,14 @@ export async function GET(
 
   if (!a) {
     return NextResponse.json({ error: "분석을 찾을 수 없습니다." }, { status: 404 });
+  }
+
+  const ok = await canAccessMatchAnalysis(session, {
+    teamId: a.teamId,
+    scheduleId: a.scheduleId,
+  });
+  if (!ok) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
 
   return NextResponse.json({
@@ -38,7 +49,27 @@ export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const session = await getSession();
+  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
+  }
+
   const { id } = await params;
+  const existing = await prisma.matchAnalysis.findUnique({
+    where: { id },
+    select: { teamId: true, scheduleId: true },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "분석을 찾을 수 없습니다." }, { status: 404 });
+  }
+  const ok = await canAccessMatchAnalysis(session, {
+    teamId: existing.teamId,
+    scheduleId: existing.scheduleId,
+  });
+  if (!ok) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  }
+
   const body = await req.json();
 
   const updateData: { opponent?: string; events?: string; playerEvents?: string } = {};
@@ -72,7 +103,27 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const session = await getSession();
+  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
+  }
+
   const { id } = await params;
+  const existing = await prisma.matchAnalysis.findUnique({
+    where: { id },
+    select: { teamId: true, scheduleId: true },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "분석을 찾을 수 없습니다." }, { status: 404 });
+  }
+  const ok = await canAccessMatchAnalysis(session, {
+    teamId: existing.teamId,
+    scheduleId: existing.scheduleId,
+  });
+  if (!ok) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  }
+
   await prisma.matchAnalysis.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

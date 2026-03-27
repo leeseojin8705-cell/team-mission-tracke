@@ -20,12 +20,25 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const session = await getSession();
+  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
+  }
+
   const body = await req.json();
 
   if (!body.title || !body.date || !body.teamId) {
     return NextResponse.json(
       { error: "title, date, teamId는 필수입니다." },
       { status: 400 },
+    );
+  }
+
+  const ids = await getAccessibleTeamIds(session);
+  if (!ids.includes(body.teamId)) {
+    return NextResponse.json(
+      { error: "해당 팀에 일정을 등록할 수 없습니다." },
+      { status: 403 },
     );
   }
 

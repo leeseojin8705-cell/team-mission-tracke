@@ -91,23 +91,36 @@ function PlayerArchiveInner() {
   }, [myTeamId]);
 
   useEffect(() => {
+    if (!myTeamId) {
+      setAnalyses([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/analyses?teamId=${encodeURIComponent(myTeamId)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: AnalysisWithMeta[]) => {
+        if (!cancelled && Array.isArray(data)) setAnalyses(data);
+      })
+      .catch(() => {
+        if (!cancelled) setAnalyses([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [myTeamId]);
+
+  useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
         setLoading(true);
         setError(null);
-        const [playersRes, analysesRes] = await Promise.all([
-          fetch("/api/players"),
-          fetch("/api/analyses"),
-        ]);
-        if (!playersRes.ok || !analysesRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
-        const [playersData, analysesData]: [
-          { id: string; name: string; teamId: string }[],
-          AnalysisWithMeta[],
-        ] = await Promise.all([playersRes.json(), analysesRes.json()]);
+        const playersRes = await fetch("/api/players");
+        if (!playersRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
+        const playersData: { id: string; name: string; teamId: string }[] =
+          await playersRes.json();
         if (cancelled) return;
         setPlayers(playersData);
-        setAnalyses(analysesData);
         if (!currentPlayerId && playersData[0]) {
           const saved =
             typeof window !== "undefined"

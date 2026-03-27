@@ -3,11 +3,42 @@
 import FootballTacticsAnalyzer, {
   type AnalysisEventsData,
 } from "@/components/FootballTacticsAnalyzer";
-import { useCallback, useRef, useState } from "react";
+import type { Team } from "@/lib/types";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Outcome = "win" | "loss" | "draw" | null;
 
 export default function CoachAnalysisDataPage() {
+  const searchParams = useSearchParams();
+  const paramTeamId = (searchParams.get("teamId") ?? "").trim();
+
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/teams")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: Team[]) => {
+        if (cancelled || !Array.isArray(list)) return;
+        setTeams(list);
+        setSelectedTeamId((prev) => {
+          if (prev) return prev;
+          if (paramTeamId && list.some((t) => t.id === paramTeamId)) {
+            return paramTeamId;
+          }
+          return list[0]?.id ?? "";
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setTeams([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [paramTeamId]);
+
   const [modalOpen, setModalOpen] = useState(false);
   const [matchDate, setMatchDate] = useState("");
   const [matchName, setMatchName] = useState("");
@@ -59,11 +90,16 @@ export default function CoachAnalysisDataPage() {
     }
     setSaving(true);
     setError(null);
+    if (!selectedTeamId) {
+      setError("팀을 선택하거나 로드될 때까지 기다려 주세요.");
+      return;
+    }
     try {
       const res = await fetch("/api/analyses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          teamId: selectedTeamId,
           matchDate: new Date(matchDate).toISOString(),
           matchName: matchName.trim(),
           result: resultString || undefined,
@@ -83,15 +119,34 @@ export default function CoachAnalysisDataPage() {
     } finally {
       setSaving(false);
     }
-  }, [matchDate, matchName, resultString]);
+  }, [matchDate, matchName, resultString, selectedTeamId]);
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-800 pb-4">
-        <div>
+        <div className="min-w-0 flex-1 space-y-2">
           <h1 className="text-xl font-semibold tracking-tight text-slate-100">
             전술 데이터
           </h1>
+          {teams.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="analysis-team" className="text-xs text-slate-400">
+                저장 팀
+              </label>
+              <select
+                id="analysis-team"
+                value={selectedTeamId}
+                onChange={(e) => setSelectedTeamId(e.target.value)}
+                className="rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-emerald-500"
+              >
+                {teams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <p className="mt-1 text-sm text-slate-400">
             경기장에서 기록한 뒤 저장 버튼으로 날짜·이름·결과를 입력해 저장하세요.
           </p>

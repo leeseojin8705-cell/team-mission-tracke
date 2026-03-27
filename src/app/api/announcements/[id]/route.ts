@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AnnouncementCategory, AnnouncementType } from "@/generated/prisma/enums";
+import { getSession } from "@/lib/session";
+import { getAccessibleTeamIds } from "@/lib/coachAccess";
 
 const CATEGORIES = ["DAILY", "SCHEDULE"] as const;
 const TYPES = ["GAME", "PRACTICE", "REST", "EDUCATION", "OFFICIAL", "OTHER"] as const;
@@ -33,13 +35,40 @@ function toJson(a: {
   };
 }
 
+async function canAnnounceForTeam(
+  session: NonNullable<Awaited<ReturnType<typeof getSession>>>,
+  teamId: string,
+) {
+  if (session.role !== "coach" && session.role !== "owner") return false;
+  const ids = await getAccessibleTeamIds(session);
+  return ids.includes(teamId);
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const session = await getSession();
   const { id } = await params;
   const a = await prisma.announcement.findUnique({ where: { id } });
   if (!a) return NextResponse.json(null, { status: 404 });
+
+  if (session?.role === "player" && session.playerId) {
+    const player = await prisma.player.findUnique({
+      where: { id: session.playerId },
+      select: { teamId: true },
+    });
+    if (!player?.teamId || player.teamId !== a.teamId) {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+    }
+  } else if (session?.role === "coach" || session?.role === "owner") {
+    if (!(await canAnnounceForTeam(session, a.teamId))) {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+    }
+  } else {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
+  }
+
   return NextResponse.json(toJson(a));
 }
 
@@ -47,7 +76,20 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const session = await getSession();
+  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
+  }
+
   const { id } = await params;
+  const existing = await prisma.announcement.findUnique({ where: { id } });
+  if (!existing) {
+    return NextResponse.json({ error: "공지를 찾을 수 없습니다." }, { status: 404 });
+  }
+  if (!(await canAnnounceForTeam(session, existing.teamId))) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  }
+
   try {
     const body = await req.json();
 
@@ -98,7 +140,20 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const session = await getSession();
+  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
+  }
+
   const { id } = await params;
+  const existing = await prisma.announcement.findUnique({ where: { id } });
+  if (!existing) {
+    return NextResponse.json({ error: "공지를 찾을 수 없습니다." }, { status: 404 });
+  }
+  if (!(await canAnnounceForTeam(session, existing.teamId))) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  }
+
   await prisma.announcement.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }
