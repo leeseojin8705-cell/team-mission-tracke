@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { EvalPhase } from "@/lib/prismaEnums";
+import { getSession } from "@/lib/session";
+import { getAccessibleTeamIds } from "@/lib/coachAccess";
 
 function parseScores(raw: string): Record<string, number[]> {
   try {
@@ -20,13 +22,46 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const session = await getSession();
   const { id: teamId } = await params;
   const url = new URL(req.url);
   const taskId = url.searchParams.get("taskId");
+  const forPlayerId = url.searchParams.get("forPlayerId");
+
+  /** 코치는 팀 전체, 선수·링크(forPlayerId)는 본인 행만 */
+  let subjectPlayerScope: string | null = null;
+
+  if (session?.role === "player" && session.playerId) {
+    const p = await prisma.player.findUnique({
+      where: { id: session.playerId },
+      select: { teamId: true },
+    });
+    if (p?.teamId !== teamId) {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+    }
+    subjectPlayerScope = session.playerId;
+  } else if (session?.role === "coach" || session?.role === "owner") {
+    const ids = await getAccessibleTeamIds(session);
+    if (!ids.includes(teamId)) {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+    }
+  } else if (!session && forPlayerId) {
+    const pl = await prisma.player.findUnique({
+      where: { id: forPlayerId },
+      select: { teamId: true },
+    });
+    if (pl?.teamId !== teamId) {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+    }
+    subjectPlayerScope = forPlayerId;
+  } else {
+    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  }
 
   const list = await prisma.playerEvaluation.findMany({
     where: {
       teamId,
+      ...(subjectPlayerScope ? { subjectPlayerId: subjectPlayerScope } : {}),
       ...(taskId ? { taskId } : {}),
     },
     orderBy: { createdAt: "desc" },
@@ -50,6 +85,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+    }
+
     const { id: teamId } = await params;
     const body = await req.json();
     const { evaluatorStaffId, subjectPlayerId, scores, phase: phaseRaw, taskId } = body as {
@@ -64,6 +104,26 @@ export async function POST(
         { error: "evaluatorStaffId, subjectPlayerId, scores 필요" },
         { status: 400 },
       );
+    }
+
+    if (session.role === "player" && session.playerId) {
+      if (session.playerId !== subjectPlayerId) {
+        return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+      }
+      const pl = await prisma.player.findUnique({
+        where: { id: subjectPlayerId },
+        select: { teamId: true },
+      });
+      if (pl?.teamId !== teamId) {
+        return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+      }
+    } else if (session.role === "coach" || session.role === "owner") {
+      const ids = await getAccessibleTeamIds(session);
+      if (!ids.includes(teamId)) {
+        return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+      }
+    } else {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     }
     const scoresJson = JSON.stringify(scores);
     const phase: (typeof EvalPhase)[keyof typeof EvalPhase] =

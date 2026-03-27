@@ -4,8 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const qpPlayerId = searchParams.get("playerId");
+
     const session = await getSession();
     let where: Prisma.TaskWhereInput | undefined;
 
@@ -33,6 +36,26 @@ export async function GET() {
           OR: [{ teamId: { in: ids } }, { teamId: null }],
         };
       }
+    } else if (!session && qpPlayerId) {
+      const player = await prisma.player.findUnique({
+        where: { id: qpPlayerId },
+        select: { teamId: true },
+      });
+      if (!player) {
+        return NextResponse.json([]);
+      }
+      if (!player.teamId) {
+        where = { playerId: qpPlayerId };
+      } else {
+        where = {
+          OR: [
+            { playerId: qpPlayerId },
+            { teamId: player.teamId, playerId: null },
+          ],
+        };
+      }
+    } else {
+      return NextResponse.json([]);
     }
 
     const tasks = await prisma.task.findMany({

@@ -23,6 +23,7 @@ function SelfEvaluateContent() {
   const [loading, setLoading] = useState(!!playerId);
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [affiliationName, setAffiliationName] = useState<string | null>(null);
 
   const setScore = useCallback((catId: string, itemIndex: number, value: number) => {
@@ -40,12 +41,10 @@ function SelfEvaluateContent() {
     }
     let cancelled = false;
     setLoading(true);
-    Promise.all([
-      fetch("/api/players").then((r) => r.json()) as Promise<Player[]>,
-    ])
-      .then(([playersList]) => {
+    fetch(`/api/players/${encodeURIComponent(playerId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p: Player | null) => {
         if (cancelled) return;
-        const p = (playersList as Player[]).find((x) => x.id === playerId);
         setPlayer(p ?? null);
         if (!p?.teamId) {
           setAffiliationName(null);
@@ -66,7 +65,10 @@ function SelfEvaluateContent() {
   useEffect(() => {
     if (!player?.teamId || !playerId) return;
     let cancelled = false;
-    fetch(`/api/teams/${player.teamId}/player-evaluations`)
+    const evalQs = new URLSearchParams();
+    evalQs.set("forPlayerId", playerId);
+    if (taskId) evalQs.set("taskId", taskId);
+    fetch(`/api/teams/${player.teamId}/player-evaluations?${evalQs}`)
       .then((r) => r.json())
       .then(
         (
@@ -98,12 +100,13 @@ function SelfEvaluateContent() {
     return () => {
       cancelled = true;
     };
-  }, [player?.teamId, playerId, phase]);
+  }, [player?.teamId, playerId, phase, taskId]);
 
   async function handleSave() {
     if (!player?.teamId || !playerId) return;
     setSubmitting(true);
     setSaved(false);
+    setSaveError(null);
     try {
       const res = await fetch(`/api/teams/${player.teamId}/player-evaluations`, {
         method: "POST",
@@ -116,8 +119,17 @@ function SelfEvaluateContent() {
           taskId,
         }),
       });
-      if (!res.ok) throw new Error("저장 실패");
+      if (res.status === 401) {
+        setSaveError("저장하려면 선수로 로그인해 주세요. 대시보드에서 로그인한 뒤 다시 시도해 주세요.");
+        return;
+      }
+      if (!res.ok) {
+        setSaveError("저장에 실패했습니다.");
+        return;
+      }
       setSaved(true);
+    } catch {
+      setSaveError("저장에 실패했습니다.");
     } finally {
       setSubmitting(false);
     }
@@ -287,6 +299,9 @@ function SelfEvaluateContent() {
               </button>
             </div>
 
+            {saveError && (
+              <p className="mt-4 text-center text-sm text-amber-400">{saveError}</p>
+            )}
             {saved && <p className="mt-4 text-center text-sm text-emerald-400">저장되었습니다. 내 스탯에 반영됩니다.</p>}
           </>
         )}

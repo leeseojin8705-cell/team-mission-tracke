@@ -50,6 +50,63 @@ export async function GET(req: Request) {
       );
     }
 
+    const singleTeamIdParam = url.searchParams.get("teamId");
+
+    if (session?.role === "player" && session.playerId) {
+      const player = await prisma.player.findUnique({
+        where: { id: session.playerId },
+        select: { teamId: true },
+      });
+      if (!player?.teamId) {
+        return NextResponse.json([]);
+      }
+      if (singleTeamIdParam && singleTeamIdParam !== player.teamId) {
+        return NextResponse.json([]);
+      }
+      const teams = await prisma.team.findMany({
+        where: { id: player.teamId },
+        orderBy: { name: "asc" },
+      });
+      return NextResponse.json(
+        teams.map((t) => {
+          const rawOrg = (t as { organization?: string | null }).organization;
+          const rawStat = (t as { statDefinition?: string | null }).statDefinition;
+          return {
+            id: t.id,
+            name: t.name,
+            season: t.season,
+            organizationId: t.organizationId ?? null,
+            organization: parseOrganization(rawOrg ?? null),
+            statDefinition: parseStatDefinition(rawStat ?? null),
+          };
+        }),
+      );
+    }
+
+    if (!session) {
+      if (singleTeamIdParam) {
+        const teams = await prisma.team.findMany({
+          where: { id: singleTeamIdParam },
+          orderBy: { name: "asc" },
+        });
+        return NextResponse.json(
+          teams.map((t) => {
+            const rawOrg = (t as { organization?: string | null }).organization;
+            const rawStat = (t as { statDefinition?: string | null }).statDefinition;
+            return {
+              id: t.id,
+              name: t.name,
+              season: t.season,
+              organizationId: t.organizationId ?? null,
+              organization: parseOrganization(rawOrg ?? null),
+              statDefinition: parseStatDefinition(rawStat ?? null),
+            };
+          }),
+        );
+      }
+      return NextResponse.json([]);
+    }
+
     let accessibleIds: string[] | null = null;
     if (session && (session.role === "coach" || session.role === "owner")) {
       try {

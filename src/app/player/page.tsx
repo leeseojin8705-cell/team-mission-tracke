@@ -162,16 +162,39 @@ function PlayerHomeInner() {
     let cancelled = false;
 
     async function loadBase() {
+      if (!currentPlayerId) {
+        if (!cancelled) {
+          setTeams([]);
+          setPlayers([]);
+          setSchedules([]);
+          setTasks([]);
+          setLoading(false);
+        }
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
 
+        const meRes = await fetch(
+          `/api/players/${encodeURIComponent(currentPlayerId)}`,
+        );
+        if (!meRes.ok) {
+          throw new Error("선수 정보를 불러오지 못했습니다.");
+        }
+        const me = (await meRes.json()) as Player | null;
+        if (!me?.teamId) {
+          throw new Error("팀에 소속된 선수만 이용할 수 있습니다.");
+        }
+        const tid = me.teamId;
+
         const [teamsRes, playersRes, schedulesRes, tasksRes] = await Promise.all(
           [
-            fetch("/api/teams"),
-            fetch("/api/players"),
-            fetch("/api/schedules"),
-            fetch("/api/tasks"),
+            fetch(`/api/teams?teamId=${encodeURIComponent(tid)}`),
+            fetch(`/api/players?teamId=${encodeURIComponent(tid)}`),
+            fetch(`/api/schedules?teamId=${encodeURIComponent(tid)}`),
+            fetch(`/api/tasks?playerId=${encodeURIComponent(currentPlayerId)}`),
           ],
         );
 

@@ -115,21 +115,39 @@ function PlayerArchiveInner() {
       try {
         setLoading(true);
         setError(null);
-        const playersRes = await fetch("/api/players");
+        const saved =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("tmt:lastPlayerId")
+            : null;
+        if (!saved) {
+          if (!cancelled) {
+            setPlayers([]);
+            setLoading(false);
+          }
+          return;
+        }
+        const meRes = await fetch(`/api/players/${encodeURIComponent(saved)}`);
+        if (!meRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
+        const me = (await meRes.json()) as {
+          id: string;
+          name: string;
+          teamId: string;
+        } | null;
+        if (cancelled) return;
+        if (!me?.teamId) {
+          setPlayers([]);
+          setCurrentPlayerId(me?.id ?? saved);
+          return;
+        }
+        setCurrentPlayerId(me.id);
+        const playersRes = await fetch(
+          `/api/players?teamId=${encodeURIComponent(me.teamId)}`,
+        );
         if (!playersRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
         const playersData: { id: string; name: string; teamId: string }[] =
           await playersRes.json();
         if (cancelled) return;
         setPlayers(playersData);
-        if (!currentPlayerId && playersData[0]) {
-          const saved =
-            typeof window !== "undefined"
-              ? window.localStorage.getItem("tmt:lastPlayerId")
-              : null;
-          const id =
-            saved && playersData.some((p) => p.id === saved) ? saved : playersData[0].id;
-          setCurrentPlayerId(id);
-        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "오류가 발생했습니다.");
       } finally {

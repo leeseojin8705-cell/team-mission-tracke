@@ -5,11 +5,27 @@ import { getAccessibleTeamIds } from "@/lib/coachAccess";
 
 export async function GET(req: Request) {
   const session = await getSession();
-  let where: { teamId?: { in: string[] } } | undefined;
+  const { searchParams } = new URL(req.url);
+  const teamIdParam = searchParams.get("teamId");
 
-  if (session && (session.role === "coach" || session.role === "owner")) {
+  let where: { teamId?: string | { in: string[] } } | undefined;
+
+  if (session?.role === "player" && session.playerId) {
+    const player = await prisma.player.findUnique({
+      where: { id: session.playerId },
+      select: { teamId: true },
+    });
+    if (!player?.teamId) {
+      return NextResponse.json([]);
+    }
+    where = { teamId: player.teamId };
+  } else if (session && (session.role === "coach" || session.role === "owner")) {
     const ids = await getAccessibleTeamIds(session);
     where = { teamId: { in: ids } };
+  } else if (!session && teamIdParam) {
+    where = { teamId: teamIdParam };
+  } else {
+    return NextResponse.json([]);
   }
 
   const schedules = await prisma.schedule.findMany({

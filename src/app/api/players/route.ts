@@ -16,7 +16,7 @@ export async function GET(req: Request) {
       session = null;
     }
 
-    const where: { teamId?: string | { in: string[] } } = {};
+    const where: { teamId?: string | { in: string[] }; id?: string } = {};
 
     if (session && (session.role === "coach" || session.role === "owner")) {
       try {
@@ -33,14 +33,31 @@ export async function GET(req: Request) {
           where.teamId = { in: ids };
         }
       } catch (accessError) {
-        // Keep list endpoints available even if access-scope lookup errors out.
         console.warn("[GET /api/players] access scope resolution failed, fallback to public scope", accessError);
         if (teamId) {
           where.teamId = teamId;
         }
       }
-    } else if (teamId) {
+    } else if (session?.role === "player" && session.playerId) {
+      const me = await prisma.player.findUnique({
+        where: { id: session.playerId },
+        select: { teamId: true },
+      });
+      if (!me?.teamId) {
+        where.id = session.playerId;
+      } else {
+        if (teamId && teamId !== me.teamId) {
+          return NextResponse.json([]);
+        }
+        where.teamId = teamId ?? me.teamId;
+      }
+    } else if (!session) {
+      if (!teamId) {
+        return NextResponse.json([]);
+      }
       where.teamId = teamId;
+    } else {
+      return NextResponse.json([]);
     }
 
     const players = await prisma.player.findMany({

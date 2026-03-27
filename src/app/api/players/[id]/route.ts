@@ -1,6 +1,39 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/session";
+import {
+  canDeletePlayer,
+  canPatchPlayer,
+  getPlayerReadAccess,
+} from "@/lib/playerApiAccess";
+
+const SELECT_FULL = {
+  id: true,
+  name: true,
+  teamId: true,
+  position: true,
+  height: true,
+  weight: true,
+  dateOfBirth: true,
+  gender: true,
+  photo: true,
+  phone: true,
+  loginId: true,
+} as const;
+
+/** 비로그인·링크 접근: 연락처·로그인 식별자 제외 */
+const SELECT_REDACTED = {
+  id: true,
+  name: true,
+  teamId: true,
+  position: true,
+  height: true,
+  weight: true,
+  dateOfBirth: true,
+  gender: true,
+  photo: true,
+} as const;
 
 export async function GET(
   _req: Request,
@@ -10,21 +43,15 @@ export async function GET(
   if (!id) {
     return NextResponse.json({ error: "잘못된 요청입니다. (id 없음)" }, { status: 400 });
   }
+  const session = await getSession();
+  const access = await getPlayerReadAccess(id, session);
+  if (access === "missing") return NextResponse.json(null, { status: 404 });
+  if (access === "deny") return NextResponse.json({ error: "찾을 수 없습니다." }, { status: 404 });
+
+  const select = access === "full" ? SELECT_FULL : SELECT_REDACTED;
   const player = await prisma.player.findUnique({
     where: { id },
-    select: {
-      id: true,
-      name: true,
-      teamId: true,
-      position: true,
-      height: true,
-      weight: true,
-      dateOfBirth: true,
-      gender: true,
-      photo: true,
-      phone: true,
-      loginId: true,
-    },
+    select,
   });
   if (!player) return NextResponse.json(null, { status: 404 });
   return NextResponse.json(player);
@@ -37,6 +64,10 @@ export async function PATCH(
   const { id } = await params;
   if (!id) {
     return NextResponse.json({ error: "잘못된 요청입니다. (id 없음)" }, { status: 400 });
+  }
+  const session = await getSession();
+  if (!(await canPatchPlayer(session, id))) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
   try {
     const body = await req.json();
@@ -114,6 +145,10 @@ export async function DELETE(
   const { id } = await params;
   if (!id) {
     return NextResponse.json({ error: "잘못된 요청입니다. (id 없음)" }, { status: 400 });
+  }
+  const session = await getSession();
+  if (!(await canDeletePlayer(session, id))) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
   // 선수와 해당 선수에게만 걸린 과제를 함께 삭제
   await prisma.task.deleteMany({

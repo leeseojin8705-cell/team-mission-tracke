@@ -35,6 +35,17 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const session = await getSession();
+  if (session?.role === "player" && session.playerId) {
+    const player = await prisma.player.findUnique({
+      where: { id: session.playerId },
+      select: { teamId: true },
+    });
+    if (player?.teamId !== id) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+  }
+
   const team = await prisma.team.findUnique({ where: { id } });
   if (!team) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const t = team as { organization?: string | null; statDefinition?: string | null };
