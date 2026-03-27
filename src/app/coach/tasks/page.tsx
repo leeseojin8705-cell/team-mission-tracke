@@ -1514,10 +1514,10 @@ export default function CoachTasksPage() {
   }, [tasks]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 rounded-2xl border border-white/60 bg-white/95 p-4 shadow-md shadow-sky-900/10 text-slate-800 md:p-6">
       <header className="space-y-1">
-        <h2 className="text-xl font-semibold">과제 관리</h2>
-        <p className="text-sm text-slate-300">
+        <h2 className="text-xl font-semibold text-slate-900">과제 관리</h2>
+        <p className="text-sm text-slate-600">
           팀 전체 공식 과제와 선수 개인 과제가 Prisma + SQLite DB에 실제로 저장됩니다.
         </p>
       </header>

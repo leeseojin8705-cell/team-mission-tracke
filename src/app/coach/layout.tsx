@@ -81,25 +81,25 @@ export default function CoachLayout({ children }: { children: ReactNode }) {
 
   if (!authorized) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4">
-        <div className="w-full max-w-sm space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-6 text-center">
-          <p className="text-xs font-semibold text-emerald-400">
+      <div className="min-h-screen bg-gradient-to-br from-sky-400 via-sky-300 to-cyan-200 text-slate-900 flex items-center justify-center px-4">
+        <div className="w-full max-w-sm space-y-4 rounded-2xl border border-white/60 bg-white/95 p-6 text-center shadow-lg shadow-sky-900/10">
+          <p className="text-xs font-semibold text-[#00aeef]">
             TEAM MISSION TRACKER
           </p>
-          <h1 className="mt-1 text-lg font-semibold">코치 전용 화면</h1>
-          <p className="text-xs text-slate-300">
+          <h1 className="mt-1 text-lg font-semibold text-slate-900">코치 전용 화면</h1>
+          <p className="text-xs text-slate-600">
             코치/구단 계정으로 로그인하면 팀 관리 화면에 접근할 수 있습니다.
           </p>
           <button
             type="button"
             onClick={() => router.push("/login/coach")}
-            className="w-full rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400"
+            className="w-full rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600"
           >
             코치 로그인으로 이동
           </button>
           <Link
             href="/"
-            className="block text-xs text-slate-400 hover:text-slate-200 text-center"
+            className="block text-xs text-slate-500 hover:text-sky-800 text-center"
           >
             ← 역할 선택으로 돌아가기
           </Link>
@@ -111,7 +111,7 @@ export default function CoachLayout({ children }: { children: ReactNode }) {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-950 text-slate-400 flex items-center justify-center text-sm">
+        <div className="min-h-screen bg-gradient-to-br from-sky-300 to-cyan-100 text-slate-600 flex items-center justify-center text-sm">
           로딩…
         </div>
       }

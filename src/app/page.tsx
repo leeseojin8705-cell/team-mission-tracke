@@ -212,7 +212,7 @@ export default function Home() {
       >
         <div className="w-full max-w-lg rounded-3xl border border-sky-200/80 bg-white/92 px-8 py-12 md:px-12 md:py-14 text-center shadow-xl shadow-sky-500/25 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3">
-            <FlowLogo className="h-12 w-[min(100%,13rem)] md:h-16 text-sky-500" />
+            <FlowLogo className="h-12 w-[min(100%,13rem)] md:h-16 text-[#00aeef]" />
             <p className="text-[10px] md:text-xs font-semibold tracking-[0.32em] text-sky-600/85">
               TEAM MISSION TRACKER
             </p>
@@ -239,7 +239,7 @@ export default function Home() {
       <div className="w-full max-w-2xl rounded-2xl border border-white/45 bg-white/92 shadow-xl shadow-sky-600/20 p-8 md:p-10 space-y-8 backdrop-blur-sm">
         <header className="text-center space-y-4">
           <div className="flex flex-col items-center gap-2">
-            <FlowLogo className="h-9 w-[min(100%,11rem)] md:h-11 text-sky-500" />
+            <FlowLogo className="h-9 w-[min(100%,11rem)] md:h-11 text-[#00aeef]" />
             <p className="text-[11px] font-semibold tracking-[0.28em] text-sky-600/80">
               TEAM MISSION TRACKER
             </p>

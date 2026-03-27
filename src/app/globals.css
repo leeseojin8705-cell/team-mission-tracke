@@ -1,26 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f0f9ff;
+  --foreground: #0f172a;
+  /* 목업 기준 브랜드 블루 */
+  --flow-brand: #00aeef;
+  --flow-brand-deep: #0284c7;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/** 앱 공통: 밝은 하늘 그라데이션 배경 */
+.flow-app-shell {
+  @apply min-h-screen bg-gradient-to-br from-sky-300 via-sky-200 to-cyan-100 text-slate-900;
 }

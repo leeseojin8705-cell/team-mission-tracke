@@ -553,14 +553,14 @@ function PlayerHomeInner() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 px-4 py-8">
+    <main className="min-h-screen px-4 py-8 text-slate-900">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row">
-        <aside className="w-full max-w-xs space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+        <aside className="w-full max-w-xs space-y-4 rounded-2xl border border-sky-100 bg-white/95 p-4">
           <h1 className="text-xl font-semibold mb-1">선수 대시보드</h1>
           {me && myTeam?.name && (
-            <p className="mb-2 text-sm text-emerald-200/90">
+            <p className="mb-2 text-sm text-sky-800">
               소속:{" "}
-              <span className="font-semibold text-emerald-100">{myTeam.name}</span>
+              <span className="font-semibold text-sky-900">{myTeam.name}</span>
             </p>
           )}
 
@@ -571,16 +571,16 @@ function PlayerHomeInner() {
           )}
 
           {me ? (
-            <div className="rounded-xl border border-slate-700 bg-slate-900/80 p-3 text-sm space-y-1">
-              <p className="text-xs text-slate-400">내 정보</p>
+            <div className="rounded-xl border border-sky-100 bg-sky-50/90 p-3 text-sm space-y-1">
+              <p className="text-xs text-slate-500">내 정보</p>
               <p className="font-semibold">{me.name}</p>
-              <p className="text-slate-300">
+              <p className="text-slate-600">
                 소속:{" "}
-                <span className="font-medium text-emerald-100/95">{myTeam?.name ?? "—"}</span>
+                <span className="font-medium text-sky-900">{myTeam?.name ?? "—"}</span>
               </p>
               {me.position && (
-                <p className="text-slate-300">
-                  포지션: <span className="text-slate-100">{me.position}</span>
+                <p className="text-slate-600">
+                  포지션: <span className="text-slate-900">{me.position}</span>
                 </p>
               )}
             </div>
@@ -594,7 +594,7 @@ function PlayerHomeInner() {
                 value={accessCodeInput}
                 onChange={(e) => setAccessCodeInput(e.target.value)}
                 placeholder="접속 링크 또는 선수 코드"
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-emerald-400"
+                className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
               />
               <button
                 type="button"
@@ -612,16 +612,16 @@ function PlayerHomeInner() {
                     window.history.replaceState(null, "", `/player?playerId=${encodeURIComponent(id)}`);
                   }
                 }}
-                className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400"
+                className="w-full rounded-lg bg-sky-500 px-3 py-2 text-sm font-medium text-white hover:bg-sky-600"
               >
                 접속하기
               </button>
             </div>
           )}
-          <nav className="pt-2 border-t border-slate-800 space-y-1">
+          <nav className="pt-2 border-t border-sky-100 space-y-1">
             <Link
               href="/player/profile"
-              className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+              className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-sky-50"
             >
               내 정보
             </Link>
@@ -631,7 +631,7 @@ function PlayerHomeInner() {
                   ? `/player/stats?playerId=${encodeURIComponent(currentPlayerId)}`
                   : "/player"
               }
-              className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+              className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-sky-50"
             >
               내 스탯
             </Link>
@@ -641,7 +641,7 @@ function PlayerHomeInner() {
                   ? `/player/report?playerId=${encodeURIComponent(currentPlayerId)}`
                   : "/player"
               }
-              className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+              className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-sky-50"
             >
               리포트 (인쇄용)
             </Link>
@@ -651,25 +651,25 @@ function PlayerHomeInner() {
                   ? `/player/self-evaluate?playerId=${encodeURIComponent(currentPlayerId)}`
                   : "/player"
               }
-              className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+              className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-sky-50"
             >
               자기평가
             </Link>
             <Link
               href="/player/tasks"
-              className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+              className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-sky-50"
             >
               내 과제
             </Link>
             <Link
               href="/player/analysis"
-              className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+              className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-sky-50"
             >
               개인 전술 데이터
             </Link>
             <Link
               href="/player/archive"
-              className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+              className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-sky-50"
             >
               기록관
             </Link>
@@ -682,14 +682,14 @@ function PlayerHomeInner() {
                   setCurrentPlayerId("");
                   window.location.href = "/login";
                 }}
-                className="mt-2 block w-full rounded-lg px-3 py-2 text-xs text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-t border-slate-800 pt-2 text-left"
+                className="mt-2 block w-full rounded-lg px-3 py-2 text-xs text-slate-500 hover:bg-sky-50 hover:text-slate-800 border-t border-sky-100 pt-2 text-left"
               >
                 로그아웃
               </button>
             )}
             <Link
               href="/"
-              className="mt-2 block rounded-lg px-3 py-2 text-xs text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-t border-slate-800 pt-2"
+              className="mt-2 block rounded-lg px-3 py-2 text-xs text-slate-500 hover:bg-sky-50 hover:text-slate-800 border-t border-sky-100 pt-2"
             >
               ← 역할 선택
             </Link>
@@ -700,7 +700,7 @@ function PlayerHomeInner() {
           {loading ? (
             <p className="text-sm text-slate-400">데이터를 불러오는 중입니다...</p>
           ) : !me ? (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-center space-y-2">
+            <div className="rounded-2xl border border-sky-100 bg-white/95 p-6 text-center space-y-2">
               <p className="text-slate-300">
                 등록된 선수는 본인만 볼 수 있습니다.
               </p>
@@ -711,15 +711,15 @@ function PlayerHomeInner() {
           ) : (
             <>
               <div className="grid gap-3 md:grid-cols-2 sm:grid-cols-4">
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="rounded-2xl border border-sky-100 bg-white/95 p-4">
                   <p className="text-xs text-slate-400 mb-1">다가오는 일정</p>
                   <p className="text-2xl font-semibold">{mySchedule.length}</p>
                 </div>
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="rounded-2xl border border-sky-100 bg-white/95 p-4">
                   <p className="text-xs text-slate-400 mb-1">할당된 과제</p>
                   <p className="text-2xl font-semibold">{myTasks.length}</p>
                 </div>
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="rounded-2xl border border-sky-100 bg-white/95 p-4">
                   <p className="text-xs text-slate-400 mb-1">과제 진행률</p>
                   <div className="flex items-baseline justify-between gap-2">
                     <p className="text-lg font-semibold">{progressRate}%</p>
@@ -727,14 +727,14 @@ function PlayerHomeInner() {
                       {completedCount}/{totalCount} 완료
                     </p>
                   </div>
-                  <div className="mt-2 h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                  <div className="mt-2 h-2 w-full rounded-full bg-sky-200 overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-emerald-500 transition-all"
+                      className="h-full rounded-full bg-sky-500 transition-all"
                       style={{ width: `${progressRate}%` }}
                     />
                   </div>
                 </div>
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="rounded-2xl border border-sky-100 bg-white/95 p-4">
                   <p className="text-xs text-slate-400 mb-1">팀 공지</p>
                   <p className="text-2xl font-semibold">{announcementCount ?? "…"}</p>
                   <p className="text-[11px] text-slate-400 mt-0.5">건</p>
@@ -742,7 +742,7 @@ function PlayerHomeInner() {
               </div>
 
               {statDef && statValues && (
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="rounded-2xl border border-sky-100 bg-white/95 p-4">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div>
                       <p className="text-xs text-slate-400 mb-1">내 스탯 레이더 (최근 30일)</p>
@@ -791,7 +791,7 @@ function PlayerHomeInner() {
               )}
 
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="rounded-2xl border border-sky-100 bg-white/95 p-4">
                   <h2 className="mb-2 text-lg font-semibold">내 일정</h2>
                   {mySchedule.length === 0 ? (
                     <p className="text-sm text-slate-400">
@@ -824,7 +824,7 @@ function PlayerHomeInner() {
                   )}
                 </div>
 
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+                <div className="rounded-2xl border border-sky-100 bg-white/95 p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <h2 className="text-lg font-semibold">내 과제</h2>
                     <div className="flex items-center gap-2 text-[11px] text-slate-300">
@@ -1040,7 +1040,7 @@ export default function PlayerHome() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen bg-slate-950 text-slate-50 px-4 py-8">
+        <main className="min-h-screen px-4 py-8 text-slate-900">
           <div className="mx-auto max-w-4xl">
             <p className="text-sm text-slate-400">불러오는 중…</p>
           </div>

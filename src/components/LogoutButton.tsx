@@ -42,9 +42,7 @@ export function LogoutButton({ variant = "coach", className }: Props) {
   }
 
   const base =
-    variant === "coach"
-      ? "rounded-lg border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-100 hover:bg-rose-500/20 disabled:opacity-50"
-      : "rounded-lg border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-100 hover:bg-rose-500/20 disabled:opacity-50";
+    "rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800 hover:bg-rose-100 disabled:opacity-50";
 
   return (
     <button

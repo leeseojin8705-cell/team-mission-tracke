@@ -5,9 +5,9 @@ import { LogoutButton } from "@/components/LogoutButton";
 
 export function PlayerChrome({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50">
-      <header className="sticky top-0 z-50 flex items-center justify-between gap-3 border-b border-slate-800/90 bg-slate-950/95 px-4 py-2.5 backdrop-blur-sm">
-        <span className="text-xs font-semibold uppercase tracking-wide text-emerald-400/90">
+    <div className="min-h-screen bg-gradient-to-br from-sky-400 via-sky-300 to-cyan-200 text-slate-900">
+      <header className="sticky top-0 z-50 flex items-center justify-between gap-3 border-b border-white/50 bg-white/90 px-4 py-2.5 text-slate-800 shadow-sm shadow-sky-900/5 backdrop-blur-md">
+        <span className="text-xs font-semibold uppercase tracking-wide text-sky-700">
           Team Mission Tracker · 선수
         </span>
         <LogoutButton variant="player" />

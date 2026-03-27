@@ -304,53 +304,53 @@ export default function CoachHome() {
   }, [teamsForStats]);
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 px-4 py-8">
+    <main className="px-2 py-2 text-slate-900 md:px-0">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row">
-        <aside className="w-full max-w-xs space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-          <h1 className="text-xl font-semibold">코치 대시보드</h1>
-          <p className="text-sm text-slate-300">
+        <aside className="w-full max-w-xs space-y-4 rounded-2xl border border-white/60 bg-white/95 p-4 shadow-md shadow-sky-900/10">
+          <h1 className="text-xl font-semibold text-slate-900">코치 대시보드</h1>
+          <p className="text-sm text-slate-600">
             현재 DB 기준으로 팀, 선수, 일정, 과제 현황을 한눈에 볼 수 있습니다.
           </p>
           {myOrgName && (
-            <p className="text-xs text-slate-400">
-              소속 조직: <span className="font-medium text-slate-100">{myOrgName}</span>
+            <p className="text-xs text-slate-500">
+              소속 조직: <span className="font-medium text-slate-800">{myOrgName}</span>
             </p>
           )}
 
           <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2">
-              <p className="text-[11px] text-slate-400">팀</p>
-              <p className="text-lg font-semibold">{teamCount ?? (loading ? "…" : 0)}</p>
+            <div className="rounded-xl border border-sky-100 bg-sky-50/90 px-3 py-2">
+              <p className="text-[11px] text-slate-500">팀</p>
+              <p className="text-lg font-semibold text-sky-900">{teamCount ?? (loading ? "…" : 0)}</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2">
-              <p className="text-[11px] text-slate-400">선수</p>
-              <p className="text-lg font-semibold">{playerCount ?? (loading ? "…" : 0)}</p>
+            <div className="rounded-xl border border-sky-100 bg-sky-50/90 px-3 py-2">
+              <p className="text-[11px] text-slate-500">선수</p>
+              <p className="text-lg font-semibold text-sky-900">{playerCount ?? (loading ? "…" : 0)}</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2">
-              <p className="text-[11px] text-slate-400">일정</p>
-              <p className="text-lg font-semibold">{scheduleCount ?? (loading ? "…" : 0)}</p>
+            <div className="rounded-xl border border-sky-100 bg-sky-50/90 px-3 py-2">
+              <p className="text-[11px] text-slate-500">일정</p>
+              <p className="text-lg font-semibold text-sky-900">{scheduleCount ?? (loading ? "…" : 0)}</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2">
-              <p className="text-[11px] text-slate-400">과제</p>
-              <p className="text-lg font-semibold">{taskCount ?? (loading ? "…" : 0)}</p>
+            <div className="rounded-xl border border-sky-100 bg-sky-50/90 px-3 py-2">
+              <p className="text-[11px] text-slate-500">과제</p>
+              <p className="text-lg font-semibold text-sky-900">{taskCount ?? (loading ? "…" : 0)}</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2">
-              <p className="text-[11px] text-slate-400">공지</p>
-              <p className="text-lg font-semibold">{announcementCount ?? (loading ? "…" : 0)}</p>
+            <div className="rounded-xl border border-sky-100 bg-sky-50/90 px-3 py-2">
+              <p className="text-[11px] text-slate-500">공지</p>
+              <p className="text-lg font-semibold text-sky-900">{announcementCount ?? (loading ? "…" : 0)}</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2">
-              <p className="text-[11px] text-slate-400">전술 기록</p>
-              <p className="text-lg font-semibold">{analysisCount ?? (loading ? "…" : 0)}</p>
+            <div className="rounded-xl border border-sky-100 bg-sky-50/90 px-3 py-2">
+              <p className="text-[11px] text-slate-500">전술 기록</p>
+              <p className="text-lg font-semibold text-sky-900">{analysisCount ?? (loading ? "…" : 0)}</p>
             </div>
           </div>
 
           {canUseTeamJump && (
-            <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-3">
-              <p className="text-[11px] font-semibold text-slate-300">관리자 팀 선택 이동</p>
+            <div className="space-y-2 rounded-xl border border-sky-100 bg-sky-50/80 px-3 py-3">
+              <p className="text-[11px] font-semibold text-slate-700">관리자 팀 선택 이동</p>
               <select
                 value={selectedTeamId}
                 onChange={(e) => setSelectedTeamId(e.target.value)}
-                className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
+                className="w-full rounded-md border border-sky-200 bg-white px-2 py-1.5 text-xs text-slate-800"
               >
                 <option value="all">팀 선택</option>
                 {teamsForStats.map((t) => (
@@ -362,7 +362,7 @@ export default function CoachHome() {
               {selectedTeamId !== "all" ? (
                 <Link
                   href={`/coach/players?teamId=${encodeURIComponent(selectedTeamId)}`}
-                  className="block rounded-md border border-emerald-600/60 px-2 py-1.5 text-center text-[11px] text-emerald-300 hover:bg-emerald-500/10"
+                  className="block rounded-md border border-sky-400 bg-sky-50 px-2 py-1.5 text-center text-[11px] text-sky-800 hover:bg-sky-100"
                 >
                   선수 개인 항목으로 이동
                 </Link>
@@ -383,7 +383,7 @@ export default function CoachHome() {
 
         <section className="flex-1 space-y-4">
           {teamStatDef && teamRadarValues && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+            <div className="rounded-2xl border border-sky-100 bg-white/90 p-5">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div>
                   <h2 className="text-lg font-semibold">팀 스탯 레이더 (최근 30일)</h2>
@@ -395,13 +395,13 @@ export default function CoachHome() {
                   <div className="flex flex-col items-end gap-1 text-[11px]">
                     <Link
                       href={`/coach/teams/${encodeURIComponent(latestTeamId)}/stats`}
-                      className="rounded-full border border-slate-600 px-3 py-1 text-[11px] text-slate-200 hover:border-emerald-500 hover:text-emerald-300"
+                      className="rounded-full border border-slate-300 px-3 py-1 text-[11px] text-slate-600 hover:border-sky-400 hover:text-sky-800"
                     >
                       스탯 상세
                     </Link>
                     <Link
                       href={`/coach/teams/${encodeURIComponent(latestTeamId)}/report`}
-                      className="rounded-full border border-emerald-500 px-3 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10"
+                      className="rounded-full border border-sky-500 bg-sky-50 px-3 py-1 text-[11px] text-sky-800 hover:bg-sky-100"
                     >
                       리포트 (인쇄용)
                     </Link>
@@ -417,7 +417,7 @@ export default function CoachHome() {
                     values={teamRadarValues}
                   />
                 </div>
-                <div className="md:w-1/2 space-y-1 text-xs text-slate-300">
+                <div className="md:w-1/2 space-y-1 text-xs text-slate-600">
                   {teamStatDef.categories
                     .filter((c) => !isMeasurementCategory(teamStatDef, c.id))
                     .map((c) => {
@@ -428,7 +428,7 @@ export default function CoachHome() {
                           className="flex items-center justify-between gap-2"
                         >
                           <span style={{ color: c.color }}>{c.label}</span>
-                          <span className="text-slate-100">{v.toFixed(1)} / 5.0</span>
+                          <span className="text-slate-900">{v.toFixed(1)} / 5.0</span>
                         </div>
                       );
                     })}
@@ -437,7 +437,7 @@ export default function CoachHome() {
             </div>
           )}
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+          <div className="rounded-2xl border border-sky-100 bg-white/90 p-5 space-y-4">
             <h2 className="text-lg font-semibold mb-1">팀 / 선수 과제 요약</h2>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
@@ -459,10 +459,10 @@ export default function CoachHome() {
                         <li key={t.id}>
                           <Link
                             href="/coach/tasks"
-                            className="flex items-center justify-between rounded-lg bg-slate-950/50 px-3 py-2 hover:bg-slate-800/50 transition-colors"
+                            className="flex items-center justify-between rounded-lg bg-sky-50/90 px-3 py-2 hover:bg-sky-100 transition-colors"
                           >
-                            <span className="text-slate-100">{t.name}</span>
-                            <span className="text-slate-300">
+                            <span className="text-slate-900">{t.name}</span>
+                            <span className="text-slate-600">
                               {t.completed}/{t.total} ({rate}%)
                             </span>
                           </Link>
@@ -491,15 +491,15 @@ export default function CoachHome() {
                         <li key={p.id}>
                           <Link
                             href="/coach/players"
-                            className="flex items-center justify-between rounded-lg bg-slate-950/50 px-3 py-2 hover:bg-slate-800/50 transition-colors"
+                            className="flex items-center justify-between rounded-lg bg-sky-50/90 px-3 py-2 hover:bg-sky-100 transition-colors"
                           >
                             <div>
-                              <p className="text-slate-100">{p.name}</p>
+                              <p className="text-slate-900">{p.name}</p>
                               {p.teamName && (
                                 <p className="text-[10px] text-slate-400">{p.teamName}</p>
                               )}
                             </div>
-                            <span className="text-slate-300">
+                            <span className="text-slate-600">
                               {p.completed}/{p.total} ({rate}%)
                             </span>
                           </Link>
@@ -511,7 +511,7 @@ export default function CoachHome() {
               </div>
             </div>
           </div>
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+          <div className="rounded-2xl border border-sky-100 bg-white/90 p-5">
             <h2 className="text-lg font-semibold mb-3">다가오는 일정</h2>
             {upcomingSchedules.length === 0 ? (
               <p className="text-sm text-slate-500">다가오는 일정이 없습니다.</p>
@@ -521,9 +521,9 @@ export default function CoachHome() {
                   <li key={s.id}>
                     <Link
                       href="/coach/schedule"
-                      className="block rounded-lg bg-slate-950/50 px-3 py-2 hover:bg-slate-800/50 transition-colors text-sm"
+                      className="block rounded-lg bg-sky-50/90 px-3 py-2 hover:bg-sky-100 transition-colors text-sm"
                     >
-                      <span className="text-slate-100 font-medium">{s.title}</span>
+                      <span className="text-slate-900 font-medium">{s.title}</span>
                       <span className="ml-2 text-slate-400 text-xs">
                         {s.date ? new Date(s.date).toLocaleDateString("ko-KR", {
                           month: "short",
@@ -544,56 +544,56 @@ export default function CoachHome() {
             </Link>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+          <div className="rounded-2xl border border-sky-100 bg-white/90 p-5">
             <h2 className="text-lg font-semibold mb-3">바로가기</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <Link
                 href="/coach/schedule"
-                className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 hover:bg-slate-800/60 transition-colors text-center"
+                className="rounded-xl border border-sky-200 bg-white/95 px-4 py-3 hover:bg-sky-50 transition-colors text-center"
               >
-                <p className="text-sm font-medium text-slate-100">일정</p>
+                <p className="text-sm font-medium text-slate-900">일정</p>
                 <p className="text-xs text-slate-400 mt-0.5">{scheduleCount ?? 0}건</p>
               </Link>
               <Link
                 href="/coach/tasks"
-                className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 hover:bg-slate-800/60 transition-colors text-center"
+                className="rounded-xl border border-sky-200 bg-white/95 px-4 py-3 hover:bg-sky-50 transition-colors text-center"
               >
-                <p className="text-sm font-medium text-slate-100">과제</p>
+                <p className="text-sm font-medium text-slate-900">과제</p>
                 <p className="text-xs text-slate-400 mt-0.5">{taskCount ?? 0}건</p>
               </Link>
               <Link
                 href="/coach/announcements"
-                className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 hover:bg-slate-800/60 transition-colors text-center"
+                className="rounded-xl border border-sky-200 bg-white/95 px-4 py-3 hover:bg-sky-50 transition-colors text-center"
               >
-                <p className="text-sm font-medium text-slate-100">공지</p>
+                <p className="text-sm font-medium text-slate-900">공지</p>
                 <p className="text-xs text-slate-400 mt-0.5">{announcementCount ?? 0}건</p>
               </Link>
               <Link
                 href="/coach/analysis/data"
-                className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 hover:bg-slate-800/60 transition-colors text-center"
+                className="rounded-xl border border-sky-200 bg-white/95 px-4 py-3 hover:bg-sky-50 transition-colors text-center"
               >
-                <p className="text-sm font-medium text-slate-100">전술 데이터</p>
+                <p className="text-sm font-medium text-slate-900">전술 데이터</p>
                 <p className="text-xs text-slate-400 mt-0.5">{analysisCount ?? 0}건</p>
               </Link>
               <Link
                 href="/coach/analysis/archive"
-                className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 hover:bg-slate-800/60 transition-colors text-center"
+                className="rounded-xl border border-sky-200 bg-white/95 px-4 py-3 hover:bg-sky-50 transition-colors text-center"
               >
-                <p className="text-sm font-medium text-slate-100">기록관</p>
+                <p className="text-sm font-medium text-slate-900">기록관</p>
                 <p className="text-xs text-slate-400 mt-0.5">경기 목록</p>
               </Link>
               <Link
                 href="/coach/teams"
-                className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 hover:bg-slate-800/60 transition-colors text-center"
+                className="rounded-xl border border-sky-200 bg-white/95 px-4 py-3 hover:bg-sky-50 transition-colors text-center"
               >
-                <p className="text-sm font-medium text-slate-100">팀</p>
+                <p className="text-sm font-medium text-slate-900">팀</p>
                 <p className="text-xs text-slate-400 mt-0.5">{teamCount ?? 0}개</p>
               </Link>
               <Link
                 href="/coach/players"
-                className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 hover:bg-slate-800/60 transition-colors text-center"
+                className="rounded-xl border border-sky-200 bg-white/95 px-4 py-3 hover:bg-sky-50 transition-colors text-center"
               >
-                <p className="text-sm font-medium text-slate-100">선수</p>
+                <p className="text-sm font-medium text-slate-900">선수</p>
                 <p className="text-xs text-slate-400 mt-0.5">{playerCount ?? 0}명</p>
               </Link>
             </div>

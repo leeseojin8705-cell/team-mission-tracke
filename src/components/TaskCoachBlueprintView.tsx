@@ -21,7 +21,7 @@ function PitchReadonly({
 }) {
   return (
     <div
-      className={`relative w-full overflow-hidden rounded-xl border-2 border-emerald-600/60 shadow-inner ring-1 ring-white/10 ${
+      className={`relative w-full overflow-hidden rounded-xl border-2 border-sky-400/50 shadow-inner shadow-sky-900/20 ring-1 ring-sky-300/30 ${
         compact ? "max-h-40" : ""
       }`}
       style={{ aspectRatio: `${PITCH_VB.w} / ${PITCH_VB.h}` }}
@@ -180,17 +180,17 @@ export function TaskCoachBlueprintView({ details, compact = false }: Props) {
 
   return (
     <div
-      className={`overflow-hidden rounded-xl border border-lime-400/30 bg-slate-950/80 ${
-        compact ? "" : "shadow-lg shadow-lime-500/5"
+      className={`overflow-hidden rounded-xl border border-sky-200 bg-white/95 ${
+        compact ? "" : "shadow-lg shadow-sky-500/15"
       }`}
     >
-      <div className="bg-gradient-to-r from-lime-400 to-emerald-500 px-3 py-2 text-center">
-        <p className="text-[10px] font-bold tracking-[0.15em] text-slate-900">TEAM MISSION TRACKER</p>
-        <p className="text-xs font-extrabold text-slate-950">코치·선수 과제 블루프린트</p>
+      <div className="bg-gradient-to-r from-sky-400 to-cyan-400 px-3 py-2 text-center">
+        <p className="text-[10px] font-bold tracking-[0.15em] text-white/95">TEAM MISSION TRACKER</p>
+        <p className="text-xs font-extrabold text-white">코치·선수 과제 블루프린트</p>
       </div>
 
       <div className={`grid gap-3 p-3 ${compact ? "md:grid-cols-1" : "md:grid-cols-2"}`}>
-        <div className="space-y-2 text-[11px] text-slate-300">
+        <div className="space-y-2 text-[11px] text-slate-700">
           {d?.subFocus && (
             <p>
               <span className="text-slate-500">세부 초점</span> · {d.subFocus}
@@ -199,39 +199,39 @@ export function TaskCoachBlueprintView({ details, compact = false }: Props) {
           {d?.todayStrategy?.trim() && (
             <div>
               <p className="text-slate-500">오늘의 전술</p>
-              <p className="mt-0.5 whitespace-pre-wrap text-slate-200">{d.todayStrategy.trim()}</p>
+              <p className="mt-0.5 whitespace-pre-wrap text-slate-800">{d.todayStrategy.trim()}</p>
             </div>
           )}
           <div className="flex flex-wrap gap-2">
             {formationLabel && (
-              <span className="rounded border border-lime-500/40 bg-lime-500/10 px-2 py-0.5 text-[10px] font-semibold text-lime-200">
+              <span className="rounded border border-sky-300 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800">
                 포메이션 {formationLabel}
               </span>
             )}
             {Array.isArray(d?.formationPlayerAssignments) &&
               d.formationPlayerAssignments.length > 0 && (
-                <span className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-200">
+                <span className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-900">
                   슬롯 배정 {d.formationPlayerAssignments.length}명
                 </span>
               )}
             {Array.isArray(d?.formationSubPoints) && d.formationSubPoints.length > 0 && (
-              <span className="rounded border border-orange-500/45 bg-orange-500/10 px-2 py-0.5 text-[10px] text-orange-200">
+              <span className="rounded border border-orange-300 bg-orange-50 px-2 py-0.5 text-[10px] text-orange-900">
                 교체 포인트 {d.formationSubPoints.length}명
               </span>
             )}
             {d?.preCheckTime && (
-              <span className="rounded border border-slate-600 px-2 py-0.5 text-[10px] text-slate-300">
+              <span className="rounded border border-slate-300 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-700">
                 사전 점검 {d.preCheckTime}
               </span>
             )}
           </div>
           {Array.isArray(d?.assignmentLines) && d!.assignmentLines!.length > 0 && (
-            <div className="border-t border-slate-700/80 pt-2">
+            <div className="border-t border-slate-200 pt-2">
               <p className="mb-1 text-[10px] font-semibold text-slate-500">과제 줄</p>
               <ul className="space-y-1">
                 {d!.assignmentLines!.map((line, idx) => (
-                  <li key={idx} className="rounded border border-slate-700/80 bg-slate-900/60 px-2 py-1 text-[10px] text-slate-200">
-                    <span className="text-slate-100">{line.text}</span>
+                  <li key={idx} className="rounded border border-sky-100 bg-sky-50/80 px-2 py-1 text-[10px] text-slate-800">
+                    <span className="text-slate-900">{line.text}</span>
                     {Array.isArray(line.scopes) && line.scopes.length > 0 && (
                       <span className="ml-1 text-slate-500">
                         ({line.scopes.map((s) => scopeLabelMap[s] ?? s).join(", ")})

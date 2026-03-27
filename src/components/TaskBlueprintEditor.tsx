@@ -16,6 +16,7 @@ import {
   type FormationSlot,
 } from "@/lib/formationLayouts";
 import { assignPlayerToUniqueSlot } from "@/lib/formationSlotAssignments";
+import { FlowPitchWatermark } from "@/components/FlowLogo";
 
 export type TaskBlueprintDraft = Partial<
   Pick<
@@ -521,6 +522,7 @@ export function TaskBlueprintEditor({
                     r="0.55"
                     fill="rgba(255,255,255,0.95)"
                   />
+                  <FlowPitchWatermark />
                   <rect
                     x="0"
                     y="13.84"

@@ -61,14 +61,14 @@ export function CoachAppChrome({
     teamIdParam ? `${href}?teamId=${encodeURIComponent(teamIdParam)}` : href;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50">
+    <div className="min-h-screen bg-gradient-to-br from-sky-400 via-sky-300 to-cyan-200 text-slate-900">
       <div className="mx-auto flex max-w-6xl gap-6 px-4 py-6">
-        <aside className="w-48 shrink-0 space-y-5 rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
-          <div className="space-y-0.5 border-b border-slate-800 pb-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+        <aside className="w-48 shrink-0 space-y-5 rounded-2xl border border-white/70 bg-white/95 p-4 shadow-lg shadow-sky-900/10 backdrop-blur-sm">
+          <div className="space-y-0.5 border-b border-sky-100 pb-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-600">
               Team Mission Tracker
             </p>
-            <h1 className="text-lg font-semibold leading-snug text-slate-100">
+            <h1 className="text-lg font-semibold leading-snug text-slate-900">
               {contextTeamName ?? "코치"}
             </h1>
             {contextTeamName && (
@@ -87,8 +87,8 @@ export function CoachAppChrome({
                   href={withTeam(item.href)}
                   className={`block rounded-lg px-3 py-2 transition ${
                     isActive
-                      ? "bg-emerald-500/15 font-medium text-emerald-300"
-                      : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+                      ? "border border-sky-200 bg-sky-100 font-medium text-sky-900"
+                      : "text-slate-600 hover:bg-sky-50 hover:text-slate-900"
                   }`}
                 >
                   {item.label}
@@ -97,7 +97,7 @@ export function CoachAppChrome({
             })}
             {isOwner && (
               <>
-                <div className="mt-3 border-t border-slate-800 pt-2 text-[11px] font-semibold text-slate-500">
+                <div className="mt-3 border-t border-sky-100 pt-2 text-[11px] font-semibold text-slate-400">
                   조직 관리
                 </div>
                 {ownerNavItems.map((item) => {
@@ -110,8 +110,8 @@ export function CoachAppChrome({
                       href={item.href}
                       className={`block rounded-lg px-3 py-2 text-xs transition ${
                         isActive
-                          ? "bg-emerald-500/15 font-medium text-emerald-300"
-                          : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+                          ? "border border-sky-200 bg-sky-100 font-medium text-sky-900"
+                          : "text-slate-600 hover:bg-sky-50 hover:text-slate-900"
                       }`}
                     >
                       {item.label}
@@ -122,11 +122,11 @@ export function CoachAppChrome({
             )}
           </nav>
 
-          <div className="space-y-2 border-t border-slate-800 pt-3">
+          <div className="space-y-2 border-t border-sky-100 pt-3">
             <LogoutButton variant="coach" />
             <Link
               href="/"
-              className="block rounded-lg px-3 py-2 text-center text-xs text-slate-500 transition hover:bg-slate-800 hover:text-slate-300"
+              className="block rounded-lg px-3 py-2 text-center text-xs text-slate-500 transition hover:bg-sky-50 hover:text-slate-800"
             >
               ← 역할 선택
             </Link>

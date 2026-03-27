@@ -20,7 +20,6 @@ export function FlowLogo({
         style={{
           fontSize: 42,
           fontWeight: 800,
-          fontFamily: "system-ui, -apple-system, sans-serif",
           letterSpacing: "0.08em",
         }}
       >
@@ -30,20 +29,20 @@ export function FlowLogo({
   );
 }
 
-/** 미니 필드(105×68) 중앙 연한 워터마크 — 포메이션 SVG 안에서만 사용 */
+/** 미니 필드(105×68) 중앙 워터마크 — 포메이션 SVG 안에서만 사용 */
 export function FlowPitchWatermark() {
   return (
     <g pointerEvents="none" aria-hidden>
       <text
         x={52.5}
-        y={37}
+        y={37.5}
         textAnchor="middle"
         transform="rotate(-9 52.5 34)"
-        fill="rgba(255,255,255,0.12)"
-        fontSize={7.2}
+        fill="rgba(255,255,255,0.3)"
+        fontSize={8}
         fontWeight={800}
         fontFamily="system-ui, sans-serif"
-        letterSpacing="0.22em"
+        letterSpacing="0.2em"
       >
         FLOW
       </text>
