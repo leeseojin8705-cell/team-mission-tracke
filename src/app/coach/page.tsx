@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Player, StatCategory, StatDefinition, Team } from "@/lib/types";
 import { DEFAULT_STAT_DEFINITION, isMeasurementCategory } from "@/lib/statDefinition";
 
@@ -82,7 +82,14 @@ export default function CoachHome() {
     { id: string; name: string; total: number; completed: number }[]
   >([]);
   const [playerSummary, setPlayerSummary] = useState<
-    { id: string; name: string; teamName: string | null; total: number; completed: number }[]
+    {
+      id: string;
+      name: string;
+      teamName: string | null;
+      teamId: string | null;
+      total: number;
+      completed: number;
+    }[]
   >([]);
   const [teamsForStats, setTeamsForStats] = useState<Team[]>([]);
   const [latestTeamId, setLatestTeamId] = useState<string | null>(null);
@@ -91,8 +98,22 @@ export default function CoachHome() {
   const [myOrgName, setMyOrgName] = useState<string | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("all");
   const [isAdminMode, setIsAdminMode] = useState(false);
-  const teamJumpDefaultedRef = useRef(false);
   const canUseTeamJump = isAdminMode || Boolean(myOrgName);
+
+  const filteredTeamSummary = useMemo(() => {
+    if (selectedTeamId === "all") return teamSummary;
+    return teamSummary.filter((t) => t.id === selectedTeamId);
+  }, [teamSummary, selectedTeamId]);
+
+  const filteredPlayerSummary = useMemo(() => {
+    if (selectedTeamId === "all") return playerSummary;
+    return playerSummary.filter((p) => p.teamId === selectedTeamId);
+  }, [playerSummary, selectedTeamId]);
+
+  const filteredUpcomingSchedules = useMemo(() => {
+    if (selectedTeamId === "all") return upcomingSchedules;
+    return upcomingSchedules.filter((s) => s.teamId === selectedTeamId);
+  }, [upcomingSchedules, selectedTeamId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -129,10 +150,6 @@ export default function CoachHome() {
           setAnnouncementCount(annRes.ok ? (await annRes.json()).length : 0);
           setAnalysisCount(analysesRes.ok ? (await analysesRes.json()).length : 0);
           setTeamsForStats(teamList);
-          if (!teamJumpDefaultedRef.current && teamList.length > 0) {
-            teamJumpDefaultedRef.current = true;
-            setSelectedTeamId(teamList[0].id);
-          }
           const scheduleList = Array.isArray(schedules) ? schedules : [];
           const withDate = scheduleList
             .map((s: { id: string; title?: string; date?: string | Date; teamId?: string }) => ({
@@ -164,12 +181,19 @@ export default function CoachHome() {
             const playerEntries = Object.entries(
               summary.playerTaskCounts as Record<
                 string,
-                { total: number; completed: number; name: string; teamName: string | null }
+                {
+                  total: number;
+                  completed: number;
+                  name: string;
+                  teamName: string | null;
+                  teamId?: string | null;
+                }
               >,
             ).map(([id, v]) => ({
               id,
               name: v.name,
               teamName: v.teamName,
+              teamId: v.teamId ?? null,
               total: v.total,
               completed: v.completed,
             }));
@@ -438,19 +462,26 @@ export default function CoachHome() {
           )}
 
           <div className="rounded-2xl border border-sky-100 bg-white/90 p-5 space-y-4">
-            <h2 className="text-lg font-semibold mb-1">팀 / 선수 과제 요약</h2>
+            <div className="mb-1 flex flex-wrap items-end justify-between gap-2">
+              <h2 className="text-lg font-semibold">팀 / 선수 과제 요약</h2>
+              {selectedTeamId !== "all" && (
+                <p className="text-[11px] text-sky-700">
+                  선택 팀만 표시 중
+                </p>
+              )}
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-slate-400">
                   팀별 과제 완료율
                 </p>
-                {teamSummary.length === 0 ? (
+                {filteredTeamSummary.length === 0 ? (
                   <p className="text-xs text-slate-500">
                     팀 대상 과제가 아직 없습니다.
                   </p>
                 ) : (
                   <ul className="space-y-1 text-xs">
-                    {teamSummary.map((t) => {
+                    {filteredTeamSummary.map((t) => {
                       const rate =
                         t.total === 0
                           ? 0
@@ -458,7 +489,7 @@ export default function CoachHome() {
                       return (
                         <li key={t.id}>
                           <Link
-                            href="/coach/tasks"
+                            href={`/coach/tasks?teamId=${encodeURIComponent(t.id)}`}
                             className="flex items-center justify-between rounded-lg bg-sky-50/90 px-3 py-2 hover:bg-sky-100 transition-colors"
                           >
                             <span className="text-slate-900">{t.name}</span>
@@ -476,13 +507,13 @@ export default function CoachHome() {
                 <p className="text-xs font-semibold text-slate-400">
                   선수별 과제 완료율
                 </p>
-                {playerSummary.length === 0 ? (
+                {filteredPlayerSummary.length === 0 ? (
                   <p className="text-xs text-slate-500">
                     선수 개인 과제가 아직 없습니다.
                   </p>
                 ) : (
                   <ul className="space-y-1 text-xs">
-                    {playerSummary.map((p) => {
+                    {filteredPlayerSummary.map((p) => {
                       const rate =
                         p.total === 0
                           ? 0
@@ -490,7 +521,11 @@ export default function CoachHome() {
                       return (
                         <li key={p.id}>
                           <Link
-                            href="/coach/players"
+                            href={
+                              p.teamId
+                                ? `/coach/players?teamId=${encodeURIComponent(p.teamId)}`
+                                : "/coach/players"
+                            }
                             className="flex items-center justify-between rounded-lg bg-sky-50/90 px-3 py-2 hover:bg-sky-100 transition-colors"
                           >
                             <div>
@@ -513,11 +548,11 @@ export default function CoachHome() {
           </div>
           <div className="rounded-2xl border border-sky-100 bg-white/90 p-5">
             <h2 className="text-lg font-semibold mb-3">다가오는 일정</h2>
-            {upcomingSchedules.length === 0 ? (
+            {filteredUpcomingSchedules.length === 0 ? (
               <p className="text-sm text-slate-500">다가오는 일정이 없습니다.</p>
             ) : (
               <ul className="space-y-2">
-                {upcomingSchedules.map((s) => (
+                {filteredUpcomingSchedules.map((s) => (
                   <li key={s.id}>
                     <Link
                       href="/coach/schedule"
