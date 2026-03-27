@@ -71,6 +71,14 @@ function clampPitch(x: number, y: number) {
   };
 }
 
+/** 교체 포인트 근처 클릭 시 삭제 판정 (SVG 좌표 단위) */
+function dist2(ax: number, ay: number, bx: number, by: number) {
+  const dx = ax - bx;
+  const dy = ay - by;
+  return dx * dx + dy * dy;
+}
+const SUB_POINT_HIT_R = 3.5;
+
 function clientToSvgPoint(
   svg: SVGSVGElement,
   clientX: number,
@@ -1327,6 +1335,16 @@ export default function CoachTasksPage() {
     }
 
     const filtered = tasks.filter((task) => {
+      // 사이드바 링크 ?teamId= 로 특정 팀 컨텍스트일 때: 그 팀 과제만 표시 (다른 팀 과제는 숨김)
+      if (lockedTeamId) {
+        const taskTeamId =
+          task.teamId ??
+          (task.playerId
+            ? players.find((p) => p.id === task.playerId)?.teamId
+            : undefined);
+        if (taskTeamId !== lockedTeamId) return false;
+      }
+
       // 선수 개인이 만든 개인 과제( playerId 가 있고, 평가자를 지정한 경우 )는
       // 이 화면(팀/코치 과제 관리)에서는 제외한다.
       if (task.playerId && Array.isArray(task.details?.evaluators) && task.details.evaluators.length > 0) {
@@ -1373,6 +1391,8 @@ export default function CoachTasksPage() {
     return sorted;
   }, [
     tasks,
+    players,
+    lockedTeamId,
     filterType,
     filterTeamId,
     filterPlayerId,
@@ -2254,7 +2274,7 @@ export default function CoachTasksPage() {
                   </span>
                 )}
               </div>
-              <div className="relative w-full overflow-hidden rounded-xl border-2 border-emerald-600/70 shadow-inner shadow-black/40 ring-1 ring-white/10">
+              <div className="relative w-full overflow-hidden rounded-xl border-2 border-sky-400/55 bg-gradient-to-b from-sky-950/80 via-sky-950/40 to-slate-950/90 shadow-inner shadow-sky-900/30 ring-1 ring-sky-400/20">
                 {/* 비율: FIFA 길이·너비 (105:68) */}
                 <div
                   className="relative w-full"
@@ -2487,22 +2507,36 @@ export default function CoachTasksPage() {
                         }}
                       />
                     )}
-                    {!isCustomFormation && formation && subBenchPickId ? (
+                    {!isCustomFormation && formation ? (
                       <rect
                         x="0"
                         y="0"
                         width={PITCH_VB.w}
                         height={PITCH_VB.h}
                         fill="transparent"
-                        style={{ cursor: "crosshair" }}
+                        style={{
+                          cursor: subBenchPickId ? "crosshair" : "default",
+                        }}
                         onPointerDown={(e) => {
                           if (e.button !== 0) return;
                           e.stopPropagation();
-                          if (formationSubPoints.length >= MAX_SUB_POINTS) return;
                           const svg = pitchSvgRef.current;
                           if (!svg) return;
                           const p = clientToSvgPoint(svg, e.clientX, e.clientY);
                           const c = clampPitch(p.x, p.y);
+                          const r2 = SUB_POINT_HIT_R * SUB_POINT_HIT_R;
+                          // 기존 교체 포인트 위/근처를 다시 클릭하면 해제
+                          for (let i = formationSubPoints.length - 1; i >= 0; i--) {
+                            const sp = formationSubPoints[i];
+                            if (dist2(c.x, c.y, sp.x, sp.y) <= r2) {
+                              setFormationSubPoints((prev) =>
+                                prev.filter((_, j) => j !== i),
+                              );
+                              return;
+                            }
+                          }
+                          if (!subBenchPickId) return;
+                          if (formationSubPoints.length >= MAX_SUB_POINTS) return;
                           setFormationSubPoints((prev) => [
                             ...prev,
                             {
@@ -2692,6 +2726,14 @@ export default function CoachTasksPage() {
                         <g
                           key={`sub-${sp.playerId}-${idx}-${sp.x}-${sp.y}`}
                           style={{ cursor: "pointer" }}
+                          onPointerDown={(e) => {
+                            if (e.button !== 0) return;
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setFormationSubPoints((prev) =>
+                              prev.filter((_, i) => i !== idx),
+                            );
+                          }}
                           onContextMenu={(e) => {
                             e.preventDefault();
                             setFormationSubPoints((prev) =>
@@ -2702,10 +2744,19 @@ export default function CoachTasksPage() {
                           <circle
                             cx={sp.x}
                             cy={sp.y}
+                            r={4.2}
+                            fill="transparent"
+                            stroke="none"
+                            pointerEvents="all"
+                          />
+                          <circle
+                            cx={sp.x}
+                            cy={sp.y}
                             r={2.55}
                             fill="rgba(249,115,22,0.42)"
                             stroke="rgba(251,146,60,0.95)"
                             strokeWidth="0.5"
+                            pointerEvents="none"
                           />
                           <text
                             x={sp.x}
@@ -2748,8 +2799,9 @@ export default function CoachTasksPage() {
                     </p>
                     <p className="mb-2 text-slate-500">
                       명단 확정 후, 선발에 넣지 않은 선수를 고른 뒤 잔디를 클릭하면
-                      주황색 교체 포인트가 찍힙니다. 우클릭으로 삭제합니다. 직접
-                      배치(커스텀) 모드와는 함께 쓸 수 없습니다.
+                      주황색 교체 포인트가 찍힙니다. 같은 위치를 다시 클릭하거나
+                      마커를 클릭하면 해제됩니다. 직접 배치(커스텀) 모드와는 함께 쓸
+                      수 없습니다.
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <select
@@ -3662,6 +3714,17 @@ export default function CoachTasksPage() {
                   className="px-4 py-6 text-center text-sm text-slate-400"
                 >
                   등록된 과제가 없습니다. 위 폼에서 과제를 추가해 보세요.
+                </td>
+              </tr>
+            ) : visibleTasks.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={5}
+                  className="px-4 py-6 text-center text-sm text-slate-400"
+                >
+                  {lockedTeamId
+                    ? "현재 선택된 팀에 해당하는 과제가 없습니다. (다른 팀 과제는 팀 컨텍스트 밖에서 보입니다.)"
+                    : "필터 조건에 맞는 과제가 없습니다."}
                 </td>
               </tr>
             ) : (

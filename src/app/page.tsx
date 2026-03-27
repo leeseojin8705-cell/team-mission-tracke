@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { FlowLogo } from "@/components/FlowLogo";
 import { ADMIN_MODE_PINS } from "@/lib/adminModePins";
 import type { Player, Team } from "@/lib/types";
 
@@ -206,50 +207,57 @@ export default function Home() {
   if (showWelcome) {
     return (
       <main
-        className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4 cursor-pointer"
+        className="min-h-screen cursor-pointer bg-gradient-to-br from-sky-200 via-sky-300 to-sky-400 text-slate-900 flex items-center justify-center px-4"
         onClick={() => setShowWelcome(false)}
       >
-        <div className="w-full max-w-3xl rounded-3xl border border-slate-800 bg-slate-900/60 px-6 py-16 md:px-10 text-center">
-          <p className="text-xs md:text-sm tracking-[0.2em] text-slate-400">COMPANY</p>
-          <h1 className="mt-3 text-4xl md:text-6xl font-black tracking-tight text-emerald-400">
-            러너스 하이
-          </h1>
-          <p className="mt-4 text-sm md:text-base text-slate-300">
+        <div className="w-full max-w-3xl rounded-3xl border border-sky-200/80 bg-white/90 px-6 py-14 md:px-10 text-center shadow-xl shadow-sky-500/20 backdrop-blur-sm">
+          <p className="text-xs md:text-sm tracking-[0.2em] text-sky-600/80">
             TEAM MISSION TRACKER
           </p>
-          <p className="mt-6 text-xs md:text-sm text-slate-400">
+          <div className="mt-6 flex justify-center">
+            <FlowLogo className="h-14 w-auto md:h-20 text-sky-500 drop-shadow-sm" />
+          </div>
+          <p className="mt-5 text-sm md:text-base font-medium text-sky-800/90">
+            축구 팀 미션 · 훈련 · 과제를 한곳에서
+          </p>
+          <p className="mt-6 text-xs md:text-sm text-sky-700/80">
             오늘 입장 인원{" "}
-            <span className="font-semibold text-slate-100">
+            <span className="font-semibold text-sky-900">
               {todayEntryCount ?? "..."}명
             </span>
           </p>
-          <p className="mt-8 text-xs text-slate-500">화면을 터치/클릭하면 역할 선택으로 이동합니다</p>
+          <p className="mt-8 text-xs text-sky-600/90">
+            화면을 터치/클릭하면 역할 선택으로 이동합니다
+          </p>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900/60 shadow-xl p-8 md:p-10 space-y-8">
-        <header className="text-center space-y-2">
-          <p className="text-sm font-semibold tracking-wide text-emerald-400">
+    <main className="min-h-screen bg-gradient-to-b from-sky-300 via-sky-400 to-sky-500 text-slate-900 flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-2xl rounded-2xl border border-white/40 bg-white/90 shadow-xl shadow-sky-600/20 p-8 md:p-10 space-y-8 backdrop-blur-sm">
+        <header className="text-center space-y-3">
+          <div className="flex justify-center">
+            <FlowLogo className="h-10 w-auto md:h-12 text-sky-500" />
+          </div>
+          <p className="text-sm font-semibold tracking-wide text-sky-700">
             TEAM MISSION TRACKER
           </p>
-          <h1 className="text-2xl md:text-3xl font-bold">
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
             역할을 선택하세요
           </h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-sky-900/75">
             코치로 들어갈지, 선수로 들어갈지 선택합니다.
           </p>
-          <div className="mt-1 flex items-center justify-center gap-2 text-[11px] text-slate-500">
+          <div className="mt-1 flex items-center justify-center gap-2 text-[11px] text-sky-800/70">
             <button
               type="button"
               onClick={toggleAdmin}
               className={`rounded-full border px-2 py-0.5 ${
                 adminMode
-                  ? "border-amber-500 bg-amber-500/15 text-amber-300"
-                  : "border-slate-600 bg-slate-900 text-slate-400"
+                  ? "border-amber-500 bg-amber-100 text-amber-900"
+                  : "border-sky-300 bg-sky-50 text-sky-800"
               }`}
             >
               관리자 모드 {adminMode ? "ON" : "OFF"}
@@ -265,37 +273,41 @@ export default function Home() {
             <button
               type="button"
               onClick={openAdminCoachPicker}
-              className="group rounded-xl border-2 border-slate-700 bg-slate-900/80 px-6 py-5 flex flex-col gap-2 text-left transition hover:border-amber-400 hover:bg-slate-800/60"
+              className="group rounded-xl border-2 border-sky-200 bg-sky-50/80 px-6 py-5 flex flex-col gap-2 text-left transition hover:border-sky-400 hover:bg-sky-100/90"
             >
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 group-hover:text-amber-300">
+              <span className="text-xs font-semibold uppercase tracking-wider text-sky-600 group-hover:text-sky-800">
                 Coach
               </span>
-              <span className="text-xl font-bold text-slate-100">코치</span>
-              <span className="text-sm text-slate-400">
+              <span className="text-xl font-bold text-slate-900">코치</span>
+              <span className="text-sm text-sky-900/70">
                 관리자 모드: 팀을 선택하고 선수 목록을 확인한 뒤 이동합니다.
               </span>
             </button>
           ) : (
             <Link
               href="/coach"
-              className="group rounded-xl border-2 border-slate-700 bg-slate-900/80 px-6 py-5 flex flex-col gap-2 transition hover:border-emerald-400 hover:bg-slate-800/60"
+              className="group rounded-xl border-2 border-sky-200 bg-sky-50/80 px-6 py-5 flex flex-col gap-2 transition hover:border-sky-500 hover:bg-white"
             >
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-sky-600 group-hover:text-sky-800">
                 Coach
               </span>
-              <span className="text-xl font-bold text-slate-100">코치</span>
-              <span className="text-sm text-slate-400">팀·선수·일정·과제·공지·전술을 관리합니다.</span>
+              <span className="text-xl font-bold text-slate-900">코치</span>
+              <span className="text-sm text-sky-900/70">
+                팀·선수·일정·과제·공지·전술을 관리합니다.
+              </span>
             </Link>
           )}
           <Link
             href="/login"
-            className="group rounded-xl border-2 border-slate-700 bg-slate-900/80 px-6 py-5 flex flex-col gap-2 transition hover:border-emerald-400 hover:bg-slate-800/60"
+            className="group rounded-xl border-2 border-sky-200 bg-sky-50/80 px-6 py-5 flex flex-col gap-2 transition hover:border-sky-500 hover:bg-white"
           >
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 group-hover:text-emerald-400">
+            <span className="text-xs font-semibold uppercase tracking-wider text-sky-600 group-hover:text-sky-800">
               Player
             </span>
-            <span className="text-xl font-bold text-slate-100">선수</span>
-            <span className="text-sm text-slate-400">개인 번호·비밀번호로 로그인 후 내 일정·과제를 확인합니다.</span>
+            <span className="text-xl font-bold text-slate-900">선수</span>
+            <span className="text-sm text-sky-900/70">
+              개인 번호·비밀번호로 로그인 후 내 일정·과제를 확인합니다.
+            </span>
           </Link>
         </section>
       </div>
