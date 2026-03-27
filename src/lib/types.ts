@@ -118,6 +118,8 @@ export interface TaskDetails {
   formationCustomSlots?: { x: number; y: number; label?: string }[];
   /** 포메이션 슬롯 인덱스별 선수 배정 */
   formationPlayerAssignments?: { slot: number; playerId: string }[];
+  /** 교체(벤치) — 필드 위 포인트 좌표 (선발 슬롯과 별도, 최대 7명 권장) */
+  formationSubPoints?: { playerId: string; x: number; y: number }[];
   /** 과제 줄: 텍스트 + 범위 태그 + 포지션별 가중치(%) */
   assignmentLines?: {
     text: string;

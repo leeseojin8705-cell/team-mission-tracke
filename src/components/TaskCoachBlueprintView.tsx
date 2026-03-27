@@ -9,7 +9,15 @@ import {
   type FormationSlot,
 } from "@/lib/formationLayouts";
 
-function PitchReadonly({ slots, compact }: { slots: FormationSlot[]; compact: boolean }) {
+function PitchReadonly({
+  slots,
+  compact,
+  subPoints,
+}: {
+  slots: FormationSlot[];
+  compact: boolean;
+  subPoints?: { x: number; y: number; label?: string }[];
+}) {
   return (
     <div
       className={`relative w-full overflow-hidden rounded-xl border-2 border-emerald-600/60 shadow-inner ring-1 ring-white/10 ${
@@ -102,6 +110,29 @@ function PitchReadonly({ slots, compact }: { slots: FormationSlot[]; compact: bo
             </g>
           );
         })}
+        {subPoints?.map((sp, i) => (
+          <g key={`sub-ro-${i}-${sp.x}-${sp.y}`}>
+            <circle
+              cx={sp.x}
+              cy={sp.y}
+              r={2.4}
+              fill="rgba(249,115,22,0.4)"
+              stroke="rgba(251,146,60,0.95)"
+              strokeWidth="0.45"
+            />
+            <text
+              x={sp.x}
+              y={sp.y + 4.1}
+              textAnchor="middle"
+              fontSize={1.75}
+              fontWeight="700"
+              fill="rgba(255,247,237,0.95)"
+              style={{ fontFamily: "system-ui, sans-serif" }}
+            >
+              {sp.label ?? "교체"}
+            </text>
+          </g>
+        ))}
       </svg>
       <div className="pointer-events-none absolute left-1 top-1/2 -translate-y-1/2 rounded bg-black/35 px-1 py-0.5 text-[7px] text-white/90">
         수비
@@ -127,6 +158,15 @@ export function TaskCoachBlueprintView({ details, compact = false }: Props) {
   }
 
   const d = details;
+  const subMarkers = useMemo(() => {
+    const raw = d?.formationSubPoints;
+    if (!Array.isArray(raw)) return [];
+    return raw.map((p, i) => ({
+      x: p.x,
+      y: p.y,
+      label: `S${i + 1}`,
+    }));
+  }, [d?.formationSubPoints]);
   const formationLabel =
     d?.formation === "custom"
       ? d?.formationLabel?.trim() || "직접 배치"
@@ -172,6 +212,11 @@ export function TaskCoachBlueprintView({ details, compact = false }: Props) {
                   슬롯 배정 {d.formationPlayerAssignments.length}명
                 </span>
               )}
+            {Array.isArray(d?.formationSubPoints) && d.formationSubPoints.length > 0 && (
+              <span className="rounded border border-orange-500/45 bg-orange-500/10 px-2 py-0.5 text-[10px] text-orange-200">
+                교체 포인트 {d.formationSubPoints.length}명
+              </span>
+            )}
             {d?.preCheckTime && (
               <span className="rounded border border-slate-600 px-2 py-0.5 text-[10px] text-slate-300">
                 사전 점검 {d.preCheckTime}
@@ -197,10 +242,14 @@ export function TaskCoachBlueprintView({ details, compact = false }: Props) {
           )}
         </div>
 
-        {slots.length > 0 && (
+        {(slots.length > 0 || subMarkers.length > 0) && (
           <div className="min-w-0">
             <p className="mb-1 text-[10px] text-slate-500">미니 필드 (105×68m)</p>
-            <PitchReadonly slots={slots} compact={Boolean(compact)} />
+            <PitchReadonly
+              slots={slots}
+              compact={Boolean(compact)}
+              subPoints={subMarkers.length > 0 ? subMarkers : undefined}
+            />
           </div>
         )}
       </div>

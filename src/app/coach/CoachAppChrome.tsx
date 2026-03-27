@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { LogoutButton } from "@/components/LogoutButton";
 
 const navItems = [
   { href: "/coach", label: "대시보드" },
@@ -121,12 +122,15 @@ export function CoachAppChrome({
             )}
           </nav>
 
-          <Link
-            href="/"
-            className="block rounded-lg px-3 py-2 text-xs text-slate-500 transition hover:bg-slate-800 hover:text-slate-300"
-          >
-            ← 역할 선택
-          </Link>
+          <div className="space-y-2 border-t border-slate-800 pt-3">
+            <LogoutButton variant="coach" />
+            <Link
+              href="/"
+              className="block rounded-lg px-3 py-2 text-center text-xs text-slate-500 transition hover:bg-slate-800 hover:text-slate-300"
+            >
+              ← 역할 선택
+            </Link>
+          </div>
         </aside>
 
         <main className="min-w-0 flex-1">{children}</main>

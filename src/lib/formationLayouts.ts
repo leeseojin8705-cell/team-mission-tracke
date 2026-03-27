@@ -162,5 +162,10 @@ export function hasCoachBlueprintContent(
     d.formationPlayerAssignments.length > 0
   )
     return true;
+  if (
+    Array.isArray(d.formationSubPoints) &&
+    d.formationSubPoints.length > 0
+  )
+    return true;
   return false;
 }

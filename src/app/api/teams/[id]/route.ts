@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isValidAdminPin } from "@/lib/adminModePins";
+import { Prisma } from "@/generated/prisma/client";
 
 function parseOrganization(raw: string | null): { front: string[]; coaching: string[]; player: string[] } | null {
   if (!raw) return null;
@@ -95,21 +97,56 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const session = await getSession();
-  if (!session || (session.role !== "coach" && session.role !== "owner")) {
-    return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
+  const adminPin = req.headers.get("x-admin-pin")?.trim() ?? "";
+
+  let allowed = false;
+  if (session && (session.role === "coach" || session.role === "owner")) {
+    const ids = await getAccessibleTeamIds(session);
+    allowed = ids.includes(id);
+  } else if (isValidAdminPin(adminPin)) {
+    // 관리자 모드(홈): 로그인 없이 PIN으로 팀 정리 허용
+    allowed = true;
   }
-  const ids = await getAccessibleTeamIds(session);
-  if (!ids.includes(id)) {
-    return NextResponse.json({ error: "접근 가능한 팀이 아닙니다." }, { status: 403 });
+
+  if (!allowed) {
+    return NextResponse.json(
+      {
+        error:
+          session == null && !adminPin
+            ? "로그인이 필요하거나 관리자 PIN이 필요합니다."
+            : "권한이 없습니다.",
+      },
+      { status: 401 },
+    );
   }
-  await prisma.team.delete({
-    where: { id },
-  });
+
+  try {
+    await prisma.team.delete({
+      where: { id },
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      if (e.code === "P2003") {
+        return NextResponse.json(
+          {
+            error:
+              "연결된 데이터(일정·과제 등)가 있어 삭제할 수 없습니다. 데이터 정리 후 다시 시도해 주세요.",
+          },
+          { status: 409 },
+        );
+      }
+      if (e.code === "P2025") {
+        return NextResponse.json({ error: "팀을 찾을 수 없습니다." }, { status: 404 });
+      }
+    }
+    console.error("[DELETE /api/teams/[id]]", e);
+    return NextResponse.json({ error: "팀 삭제 처리 중 오류가 발생했습니다." }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

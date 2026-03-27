@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ADMIN_MODE_PINS } from "@/lib/adminModePins";
 import type { Player, Team } from "@/lib/types";
 
-const ADMIN_MODE_PINS = new Set(["3932", "0513"]);
+const ADMIN_PIN_STORAGE = "tmt:adminPin";
 
 export default function Home() {
   const [showWelcome, setShowWelcome] = useState(true);
@@ -66,6 +67,17 @@ export default function Home() {
           window.alert("비밀번호가 올바르지 않습니다.");
           return prev;
         }
+        try {
+          sessionStorage.setItem(ADMIN_PIN_STORAGE, pin);
+        } catch {
+          // ignore
+        }
+      } else {
+        try {
+          sessionStorage.removeItem(ADMIN_PIN_STORAGE);
+        } catch {
+          // ignore
+        }
       }
       try {
         window.localStorage.setItem("tmt:adminMode", next ? "on" : "off");
@@ -107,11 +119,44 @@ export default function Home() {
     try {
       setDeletingTeamId(team.id);
       setPickerError(null);
+
+      const headers: Record<string, string> = {};
+      if (adminMode) {
+        let pin = "";
+        try {
+          pin = sessionStorage.getItem(ADMIN_PIN_STORAGE) ?? "";
+        } catch {
+          pin = "";
+        }
+        if (!pin) {
+          const input = window.prompt(
+            "팀 삭제를 위해 관리자 PIN 4자리를 입력하세요.",
+          );
+          pin = (input ?? "").trim();
+          if (!ADMIN_MODE_PINS.has(pin)) {
+            setPickerError("PIN이 올바르지 않습니다.");
+            return;
+          }
+          try {
+            sessionStorage.setItem(ADMIN_PIN_STORAGE, pin);
+          } catch {
+            // ignore
+          }
+        }
+        headers["x-admin-pin"] = pin;
+      }
+
       const res = await fetch(`/api/teams/${encodeURIComponent(team.id)}`, {
         method: "DELETE",
+        headers,
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error("팀 삭제에 실패했습니다.");
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : "팀 삭제에 실패했습니다.",
+        );
       }
 
       setTeams((prev) => {

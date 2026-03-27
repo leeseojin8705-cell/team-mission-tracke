@@ -30,6 +30,8 @@ import { assignPlayerToUniqueSlot } from "@/lib/formationSlotAssignments";
 
 const categories: TaskCategory[] = ["기술", "체력", "멘탈", "전술"];
 
+const MAX_SUB_POINTS = 7;
+
 type TargetType = "team" | "player";
 type HtmlTaskType = "daily" | "single";
 type HtmlCategory = "selfcare" | "practice" | "practice_game" | "official" | null;
@@ -208,6 +210,13 @@ export default function CoachTasksPage() {
   const [dueDate, setDueDate] = useState("");
   const [targetType, setTargetType] = useState<TargetType>("team");
   const [targetId, setTargetId] = useState<string>("");
+  /** 선수 과제: 동일 내용으로 여러 명에게 일괄 생성 */
+  const [targetPlayerIds, setTargetPlayerIds] = useState<string[]>([]);
+  /** 교체(벤치) 필드 포인트 — 선발 슬롯과 별도 색상 */
+  const [formationSubPoints, setFormationSubPoints] = useState<
+    { playerId: string; x: number; y: number }[]
+  >([]);
+  const [subBenchPickId, setSubBenchPickId] = useState<string>("");
 
   // 확장 UI 상태 (HTML 템플릿 반영, 현재는 미리보기/UX 용)
   const [htmlTaskType, setHtmlTaskType] = useState<HtmlTaskType>("daily");
@@ -413,7 +422,12 @@ export default function CoachTasksPage() {
 
   const submitBlockedReason = useMemo(() => {
     if (submitting) return null;
-    if (!targetId) return "과제 대상(팀 또는 선수)을 선택해 주세요.";
+    if (targetType === "team" && !targetId) {
+      return "과제 대상(팀)을 선택해 주세요.";
+    }
+    if (targetType === "player" && targetPlayerIds.length === 0) {
+      return "과제 대상 선수를 한 명 이상 선택해 주세요.";
+    }
     if (targetType === "team" && teamOptions.length === 0) {
       return "등록된 팀이 없습니다. 조직·팀을 먼저 만든 뒤 다시 시도해 주세요.";
     }
@@ -430,6 +444,7 @@ export default function CoachTasksPage() {
   }, [
     submitting,
     targetId,
+    targetPlayerIds.length,
     targetType,
     teamOptions.length,
     playerOptions.length,
@@ -437,18 +452,15 @@ export default function CoachTasksPage() {
     assignmentRows,
   ]);
 
-  const currentTargetOptions =
-    targetType === "team" ? teamOptions : playerOptions;
-
-  // 현재 과제가 연결될 팀 id (팀 과제면 그 팀, 선수 과제면 해당 선수의 팀)
+  // 현재 과제가 연결될 팀 id (팀 과제면 그 팀, 선수 과제면 선택 선수들의 팀 — 동일 팀만 허용)
   const currentTeamIdForTask = useMemo(() => {
     if (targetType === "team" && targetId) return targetId;
-    if (targetType === "player" && targetId) {
-      const p = players.find((pl) => pl.id === targetId);
+    if (targetType === "player" && targetPlayerIds.length > 0) {
+      const p = players.find((pl) => pl.id === targetPlayerIds[0]);
       return p?.teamId ?? null;
     }
     return null;
-  }, [players, targetId, targetType]);
+  }, [players, targetPlayerIds, targetId, targetType]);
 
   // 엔트리/선수 지정 후보: 현재 팀 소속 선수들만
   const entryCandidatePlayers = useMemo(() => {
@@ -463,6 +475,28 @@ export default function CoachTasksPage() {
     () => new Set(Object.values(slotPlayerAssignments)),
     [slotPlayerAssignments],
   );
+
+  const subBenchCandidates = useMemo(
+    () =>
+      entryCandidatePlayers.filter(
+        (p) =>
+          rosterSelectedIds.has(p.id) &&
+          !assignedPlayerIds.has(p.id) &&
+          !formationSubPoints.some((s) => s.playerId === p.id),
+      ),
+    [
+      entryCandidatePlayers,
+      rosterSelectedIds,
+      assignedPlayerIds,
+      formationSubPoints,
+    ],
+  );
+
+  useEffect(() => {
+    setFormationSubPoints((prev) =>
+      prev.filter((sp) => !assignedPlayerIds.has(sp.playerId)),
+    );
+  }, [assignedPlayerIds]);
 
   const formationDragPlayers = useMemo(
     () =>
@@ -642,17 +676,19 @@ export default function CoachTasksPage() {
           }));
           setTasks(tasksData);
 
-          if (!targetId) {
-            if (targetType === "team") {
-              const firstTeam = lockedTeamId
-                ? teamsData.find((t) => t.id === lockedTeamId)
-                : teamsData[0];
-              if (firstTeam) setTargetId(firstTeam.id);
-            } else if (targetType === "player") {
-              const firstPlayer = lockedTeamId
-                ? playersData.find((p) => p.teamId === lockedTeamId)
-                : playersData[0];
-              if (firstPlayer) setTargetId(firstPlayer.id);
+          if (targetType === "team" && !targetId) {
+            const firstTeam = lockedTeamId
+              ? teamsData.find((t) => t.id === lockedTeamId)
+              : teamsData[0];
+            if (firstTeam) setTargetId(firstTeam.id);
+          } else if (targetType === "player") {
+            const firstPlayer = lockedTeamId
+              ? playersData.find((p) => p.teamId === lockedTeamId)
+              : playersData[0];
+            if (firstPlayer) {
+              setTargetPlayerIds((prev) =>
+                prev.length === 0 ? [firstPlayer.id] : prev,
+              );
             }
           }
         }
@@ -687,14 +723,18 @@ export default function CoachTasksPage() {
     if (targetType === "player") {
       const scopedPlayers = players.filter((p) => p.teamId === lockedTeamId);
       if (scopedPlayers.length === 0) {
-        if (targetId) setTargetId("");
+        setTargetPlayerIds([]);
         return;
       }
-      if (!scopedPlayers.some((p) => p.id === targetId)) {
-        setTargetId(scopedPlayers[0].id);
+      const allowed = new Set(scopedPlayers.map((p) => p.id));
+      const next = targetPlayerIds.filter((id) => allowed.has(id));
+      if (next.length === 0) {
+        setTargetPlayerIds([scopedPlayers[0].id]);
+      } else if (next.length !== targetPlayerIds.length) {
+        setTargetPlayerIds(next);
       }
     }
-  }, [lockedTeamId, players, targetId, targetType]);
+  }, [lockedTeamId, players, targetPlayerIds, targetType]);
 
   // 현재 대상 팀 기준으로 코칭 스텝(평가자 후보) 불러오기
   useEffect(() => {
@@ -706,8 +746,8 @@ export default function CoachTasksPage() {
         let teamIdForStaff: string | null = null;
         if (targetType === "team" && targetId) {
           teamIdForStaff = targetId;
-        } else if (targetType === "player" && targetId) {
-          const player = players.find((p) => p.id === targetId);
+        } else if (targetType === "player" && targetPlayerIds.length > 0) {
+          const player = players.find((p) => p.id === targetPlayerIds[0]);
           teamIdForStaff = player?.teamId ?? null;
         }
         if (!teamIdForStaff) {
@@ -737,7 +777,7 @@ export default function CoachTasksPage() {
     return () => {
       cancelled = true;
     };
-  }, [players, targetId, targetType]);
+  }, [players, targetId, targetType, targetPlayerIds]);
 
   useEffect(() => {
     if (!selectedTaskForModal?.id) {
@@ -824,11 +864,15 @@ export default function CoachTasksPage() {
     setCustomFormationSlots([]);
     setDraggingSlotId(null);
     setAssignmentRows([newAssignmentRow()]);
+    setTargetPlayerIds([]);
+    setFormationSubPoints([]);
+    setSubBenchPickId("");
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!targetId) return;
+    if (targetType === "team" && !targetId) return;
+    if (targetType === "player" && targetPlayerIds.length === 0) return;
 
     const assignmentLines = assignmentRows
       .filter((r) => r.text.trim())
@@ -871,6 +915,20 @@ export default function CoachTasksPage() {
       assignmentLines[0]?.text ||
       "";
     if (!resolvedTitle) return;
+
+    const starterIds = new Set(Object.values(slotPlayerAssignments));
+    if (formationSubPoints.length > MAX_SUB_POINTS) {
+      setError(`교체 포인트는 최대 ${MAX_SUB_POINTS}명까지 지정할 수 있습니다.`);
+      return;
+    }
+    for (const sp of formationSubPoints) {
+      if (starterIds.has(sp.playerId)) {
+        setError(
+          "교체 포인트는 선발 슬롯에 배치한 선수와 겹칠 수 없습니다. 슬롯에서 먼저 빼거나 교체 마커를 조정해 주세요.",
+        );
+        return;
+      }
+    }
 
     // HTML 과제 유형/분류 → 기존 Task 필드로 매핑
     const mappedCategory = mapHtmlCategoryToTaskCategory(htmlCategory);
@@ -926,6 +984,8 @@ export default function CoachTasksPage() {
         selectedEvaluatorIds.size > 0
           ? Array.from(selectedEvaluatorIds)
           : undefined,
+      formationSubPoints:
+        formationSubPoints.length > 0 ? formationSubPoints : undefined,
     };
 
     try {
@@ -933,6 +993,10 @@ export default function CoachTasksPage() {
       setError(null);
 
       if (editingId) {
+        const patchTargetId =
+          targetType === "team"
+            ? targetId
+            : targetPlayerIds[0] ?? targetId;
         const res = await fetch(`/api/tasks/${editingId}`, {
           method: "PATCH",
           headers: {
@@ -943,7 +1007,7 @@ export default function CoachTasksPage() {
             category: finalCategory,
             dueDate: finalDueDate,
             targetType,
-            targetId,
+            targetId: patchTargetId,
             details,
           }),
         });
@@ -975,7 +1039,9 @@ export default function CoachTasksPage() {
             category: finalCategory,
             dueDate: finalDueDate,
             targetType,
-            targetId,
+            targetId:
+              targetType === "player" ? targetPlayerIds[0] ?? "" : targetId,
+            targetIds: targetType === "player" ? targetPlayerIds : undefined,
             details,
           }),
         });
@@ -992,8 +1058,9 @@ export default function CoachTasksPage() {
           throw new Error(msg);
         }
 
-        const created: Task = await res.json();
-        setTasks((prev) => [...prev, created]);
+        const data = (await res.json()) as { created?: Task[] };
+        const created = Array.isArray(data.created) ? data.created : [];
+        setTasks((prev) => [...prev, ...created]);
       }
 
       resetForm();
@@ -1074,6 +1141,21 @@ export default function CoachTasksPage() {
       } else {
         setSlotPlayerAssignments({});
       }
+      {
+        const fsp = (task.details as TaskDetails)?.formationSubPoints;
+        if (Array.isArray(fsp)) {
+          setFormationSubPoints(
+            fsp.filter(
+              (x): x is { playerId: string; x: number; y: number } =>
+                typeof (x as { playerId?: unknown }).playerId === "string" &&
+                typeof (x as { x?: unknown }).x === "number" &&
+                typeof (x as { y?: unknown }).y === "number",
+            ),
+          );
+        } else {
+          setFormationSubPoints([]);
+        }
+      }
       setSubFocus(
         (task.details as { subFocus?: SubFocusOpt }).subFocus ?? null,
       );
@@ -1139,6 +1221,7 @@ export default function CoachTasksPage() {
       }
     } else {
       setSlotPlayerAssignments({});
+      setFormationSubPoints([]);
     }
 
     {
@@ -1171,9 +1254,11 @@ export default function CoachTasksPage() {
     if (task.teamId) {
       setTargetType("team");
       setTargetId(task.teamId);
+      setTargetPlayerIds([]);
     } else if (task.playerId) {
       setTargetType("player");
       setTargetId(task.playerId);
+      setTargetPlayerIds([task.playerId]);
     }
   }
 
@@ -1711,11 +1796,14 @@ export default function CoachTasksPage() {
                 onChange={(e) => {
                   const value = e.target.value as TargetType;
                   setTargetType(value);
-                  setTargetId(
-                    value === "team"
-                      ? teamOptions[0]?.id ?? ""
-                      : playerOptions[0]?.id ?? "",
-                  );
+                  if (value === "team") {
+                    setTargetId(teamOptions[0]?.id ?? "");
+                    setTargetPlayerIds([]);
+                  } else {
+                    setTargetId("");
+                    const first = playerOptions[0]?.id;
+                    setTargetPlayerIds(first ? [first] : []);
+                  }
                 }}
                 className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
               >
@@ -1724,19 +1812,76 @@ export default function CoachTasksPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-300">대상 선택</label>
-              <select
-                value={targetId}
-                onChange={(e) => setTargetId(e.target.value)}
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
-                disabled={currentTargetOptions.length === 0}
-              >
-                {currentTargetOptions.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.name}
-                  </option>
-                ))}
-              </select>
+              <label className="mb-1 block text-xs text-slate-300">
+                {targetType === "team" ? "대상 선택" : "대상 선택 (복수)"}
+              </label>
+              {targetType === "team" ? (
+                <select
+                  value={targetId}
+                  onChange={(e) => setTargetId(e.target.value)}
+                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                  disabled={teamOptions.length === 0}
+                >
+                  {teamOptions.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex max-h-36 flex-col gap-1 overflow-y-auto rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-slate-100">
+                  {playerOptions.length === 0 ? (
+                    <span className="text-xs text-slate-500">선수 없음</span>
+                  ) : (
+                    <>
+                      {playerOptions.map((opt) => (
+                        <label
+                          key={opt.id}
+                          className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-slate-900/80"
+                        >
+                          <input
+                            type="checkbox"
+                            className="accent-rose-500"
+                            checked={targetPlayerIds.includes(opt.id)}
+                            onChange={(e) => {
+                              setTargetPlayerIds((prev) => {
+                                if (e.target.checked) {
+                                  if (prev.includes(opt.id)) return prev;
+                                  return [...prev, opt.id];
+                                }
+                                return prev.filter((id) => id !== opt.id);
+                              });
+                            }}
+                          />
+                          <span className="text-xs">{opt.name}</span>
+                        </label>
+                      ))}
+                      <div className="mt-1 flex flex-wrap gap-1 border-t border-slate-700/80 pt-1">
+                        <button
+                          type="button"
+                          className="rounded border border-slate-600 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                          onClick={() =>
+                            setTargetPlayerIds(playerOptions.map((p) => p.id))
+                          }
+                        >
+                          전체 선택
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded border border-slate-600 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                          onClick={() => setTargetPlayerIds([])}
+                        >
+                          전체 해제
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        선택한 선수 수만큼 동일 과제가 생성됩니다. 각 선수
+                        화면에 개별로 표시됩니다.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             <div>
               <label className="mb-1 block text-xs text-slate-300">과제 제목</label>
@@ -2099,7 +2244,7 @@ export default function CoachTasksPage() {
                   축소 경기장 (105×68m)
                   {isCustomFormation
                     ? " · 직접 배치: 잔디 클릭=추가 · 드래그=이동 · 더블클릭=삭제"
-                    : " · 프리셋 선택 시 배치 · 선수 탭으로 대상 지정"}
+                    : " · 프리셋: 선발=연두 슬롯 · 교체(최대 7)=주황 포인트 · 선수 탭으로 슬롯 지정"}
                 </p>
                 {formation && (
                   <span className="max-w-[55%] truncate rounded border border-lime-500/40 bg-lime-500/10 px-2 py-0.5 text-[10px] font-semibold text-lime-200">
@@ -2342,6 +2487,34 @@ export default function CoachTasksPage() {
                         }}
                       />
                     )}
+                    {!isCustomFormation && formation && subBenchPickId ? (
+                      <rect
+                        x="0"
+                        y="0"
+                        width={PITCH_VB.w}
+                        height={PITCH_VB.h}
+                        fill="transparent"
+                        style={{ cursor: "crosshair" }}
+                        onPointerDown={(e) => {
+                          if (e.button !== 0) return;
+                          e.stopPropagation();
+                          if (formationSubPoints.length >= MAX_SUB_POINTS) return;
+                          const svg = pitchSvgRef.current;
+                          if (!svg) return;
+                          const p = clientToSvgPoint(svg, e.clientX, e.clientY);
+                          const c = clampPitch(p.x, p.y);
+                          setFormationSubPoints((prev) => [
+                            ...prev,
+                            {
+                              playerId: subBenchPickId,
+                              x: Math.round(c.x * 100) / 100,
+                              y: Math.round(c.y * 100) / 100,
+                            },
+                          ]);
+                          setSubBenchPickId("");
+                        }}
+                      />
+                    ) : null}
                     {/* 포메이션 슬롯 */}
                     {displayFormationSlots.map((slot, i) => {
                       const isGk = slot.label === "GK";
@@ -2508,6 +2681,57 @@ export default function CoachTasksPage() {
                         </g>
                       );
                     })}
+                    {formationSubPoints.map((sp, idx) => {
+                      const pl = entryPlayerMap[sp.playerId];
+                      const shortName = pl?.name
+                        ? pl.name.length > 4
+                          ? `${pl.name.slice(0, 4)}…`
+                          : pl.name
+                        : "?";
+                      return (
+                        <g
+                          key={`sub-${sp.playerId}-${idx}-${sp.x}-${sp.y}`}
+                          style={{ cursor: "pointer" }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setFormationSubPoints((prev) =>
+                              prev.filter((_, i) => i !== idx),
+                            );
+                          }}
+                        >
+                          <circle
+                            cx={sp.x}
+                            cy={sp.y}
+                            r={2.55}
+                            fill="rgba(249,115,22,0.42)"
+                            stroke="rgba(251,146,60,0.95)"
+                            strokeWidth="0.5"
+                          />
+                          <text
+                            x={sp.x}
+                            y={sp.y - 3.1}
+                            textAnchor="middle"
+                            fontSize={1.35}
+                            fontWeight="700"
+                            fill="rgba(254,215,170,0.95)"
+                            style={{ fontFamily: "system-ui, sans-serif" }}
+                          >
+                            교체
+                          </text>
+                          <text
+                            x={sp.x}
+                            y={sp.y + 4.1}
+                            textAnchor="middle"
+                            fontSize={1.65}
+                            fontWeight="700"
+                            fill="rgba(255,247,237,0.98)"
+                            style={{ fontFamily: "system-ui, sans-serif" }}
+                          >
+                            {shortName}
+                          </text>
+                        </g>
+                      );
+                    })}
                   </svg>
                   {/* 방향 라벨 */}
                   <div className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 rounded bg-black/35 px-1.5 py-0.5 text-[8px] font-medium text-white/90 backdrop-blur-[2px]">
@@ -2517,6 +2741,45 @@ export default function CoachTasksPage() {
                     공격 →
                   </div>
                 </div>
+                {!isCustomFormation && formation ? (
+                  <div className="rounded-lg border border-orange-500/35 bg-slate-950/80 px-2 py-2 text-[10px] text-slate-300">
+                    <p className="mb-1 font-semibold text-orange-200/95">
+                      교체 포인트 (최대 {MAX_SUB_POINTS}명 · 선발 슬롯과 색 구분)
+                    </p>
+                    <p className="mb-2 text-slate-500">
+                      명단 확정 후, 선발에 넣지 않은 선수를 고른 뒤 잔디를 클릭하면
+                      주황색 교체 포인트가 찍힙니다. 우클릭으로 삭제합니다. 직접
+                      배치(커스텀) 모드와는 함께 쓸 수 없습니다.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={subBenchPickId}
+                        onChange={(e) => setSubBenchPickId(e.target.value)}
+                        className="max-w-[min(100%,14rem)] rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-[11px] outline-none focus:border-orange-400"
+                      >
+                        <option value="">
+                          {subBenchCandidates.length === 0
+                            ? "교체로 둘 선수 없음 (명단·슬롯 확인)"
+                            : "선수 선택 후 필드 클릭"}
+                        </option>
+                        {subBenchCandidates.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                            {p.position ? ` · ${p.position}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-slate-500">
+                        찍은 교체 {formationSubPoints.length}/{MAX_SUB_POINTS}
+                      </span>
+                      {subBenchPickId ? (
+                        <span className="text-orange-300/90">
+                          → 필드 빈 곳을 클릭하세요
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="border-t border-slate-700/80 bg-slate-950/85 px-2 py-2">
                   {entryCandidatePlayers.length === 0 ? (
                     <div className="space-y-1 text-[10px] text-slate-500">
