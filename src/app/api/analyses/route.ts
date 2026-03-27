@@ -7,12 +7,65 @@ import {
   getTeamIdsForMatchAnalysisSession,
   matchAnalysisWhereForTeams,
 } from "@/lib/matchAnalysisAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 
 export async function GET(req: Request) {
   const session = await getSession();
   const { searchParams } = new URL(req.url);
   const teamIdParam = searchParams.get("teamId");
   const scheduleIdParam = searchParams.get("scheduleId");
+
+  if (isAdminApiRequest(req)) {
+    const allTeams = await prisma.team.findMany({ select: { id: true } });
+    const teamIdsForQuery = teamIdParam
+      ? allTeams.some((t) => t.id === teamIdParam)
+        ? [teamIdParam]
+        : []
+      : allTeams.map((t) => t.id);
+    if (teamIdsForQuery.length === 0) {
+      return NextResponse.json([]);
+    }
+    let where: Prisma.MatchAnalysisWhereInput =
+      matchAnalysisWhereForTeams(teamIdsForQuery);
+    if (scheduleIdParam) {
+      const sch = await prisma.schedule.findUnique({
+        where: { id: scheduleIdParam },
+        select: { teamId: true },
+      });
+      if (!sch?.teamId || !teamIdsForQuery.includes(sch.teamId)) {
+        return NextResponse.json([]);
+      }
+      where = { AND: [where, { scheduleId: scheduleIdParam }] };
+    }
+    const list = await prisma.matchAnalysis.findMany({
+      where,
+      orderBy: [{ matchDate: "desc" }, { updatedAt: "desc" }],
+      include: {
+        schedule: { select: { id: true, title: true, date: true } },
+        team: { select: { id: true, name: true } },
+      },
+    });
+    const items = list.map((a: (typeof list)[number]) => ({
+      id: a.id,
+      scheduleId: a.scheduleId ?? null,
+      teamId: a.teamId ?? null,
+      opponent: a.opponent ?? null,
+      matchDate: a.matchDate?.toISOString() ?? null,
+      matchName: a.matchName ?? null,
+      result: a.result ?? null,
+      events: JSON.parse(a.events) as {
+        atk: unknown[];
+        def: unknown[];
+        pass: unknown[];
+        gk: unknown[];
+      },
+      playerEvents: a.playerEvents ? (JSON.parse(a.playerEvents) as Record<string, unknown>) : null,
+      updatedAt: a.updatedAt.toISOString(),
+      schedule: a.schedule,
+      team: a.team,
+    }));
+    return NextResponse.json(items);
+  }
 
   const scopedIds = await getTeamIdsForMatchAnalysisSession(session);
 

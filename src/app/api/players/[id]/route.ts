@@ -7,6 +7,7 @@ import {
   canPatchPlayer,
   getPlayerReadAccess,
 } from "@/lib/playerApiAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 
 const SELECT_FULL = {
   id: true,
@@ -36,12 +37,20 @@ const SELECT_REDACTED = {
 } as const;
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   if (!id) {
     return NextResponse.json({ error: "잘못된 요청입니다. (id 없음)" }, { status: 400 });
+  }
+  if (isAdminApiRequest(req)) {
+    const player = await prisma.player.findUnique({
+      where: { id },
+      select: SELECT_FULL,
+    });
+    if (!player) return NextResponse.json(null, { status: 404 });
+    return NextResponse.json(player);
   }
   const session = await getSession();
   const access = await getPlayerReadAccess(id, session);
@@ -66,7 +75,7 @@ export async function PATCH(
     return NextResponse.json({ error: "잘못된 요청입니다. (id 없음)" }, { status: 400 });
   }
   const session = await getSession();
-  if (!(await canPatchPlayer(session, id))) {
+  if (!isAdminApiRequest(req) && !(await canPatchPlayer(session, id))) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
   try {
@@ -139,7 +148,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -147,7 +156,7 @@ export async function DELETE(
     return NextResponse.json({ error: "잘못된 요청입니다. (id 없음)" }, { status: 400 });
   }
   const session = await getSession();
-  if (!(await canDeletePlayer(session, id))) {
+  if (!isAdminApiRequest(req) && !(await canDeletePlayer(session, id))) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
   // 선수와 해당 선수에게만 걸린 과제를 함께 삭제

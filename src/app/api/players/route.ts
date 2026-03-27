@@ -2,11 +2,35 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const teamId = searchParams.get("teamId");
+    if (isAdminApiRequest(req)) {
+      const players = await prisma.player.findMany({
+        where: teamId ? { teamId } : {},
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          teamId: true,
+          position: true,
+          height: true,
+          weight: true,
+          dateOfBirth: true,
+          gender: true,
+          photo: true,
+          phone: true,
+          parentPhone: true,
+          address: true,
+          school: true,
+          loginId: true,
+        },
+      });
+      return NextResponse.json(players);
+    }
     let session: Awaited<ReturnType<typeof getSession>> = null;
     try {
       session = await getSession();

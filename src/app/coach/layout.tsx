@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { Suspense, useEffect, useState } from "react";
+import { installCoachAdminFetchInterceptor } from "@/lib/coachAdminFetch";
 import { CoachAppChrome } from "./CoachAppChrome";
 
 export default function CoachLayout({ children }: { children: ReactNode }) {
@@ -55,6 +56,16 @@ export default function CoachLayout({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!authorized) return;
+    try {
+      if (window.localStorage.getItem("tmt:adminMode") !== "on") return;
+    } catch {
+      return;
+    }
+    return installCoachAdminFetchInterceptor();
+  }, [authorized]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

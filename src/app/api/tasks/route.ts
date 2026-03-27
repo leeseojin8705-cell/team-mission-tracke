@@ -3,11 +3,19 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const qpPlayerId = searchParams.get("playerId");
+
+    if (isAdminApiRequest(req)) {
+      const tasks = await prisma.task.findMany({
+        orderBy: { title: "asc" },
+      });
+      return NextResponse.json(tasks);
+    }
 
     const session = await getSession();
     let where: Prisma.TaskWhereInput | undefined;
@@ -82,14 +90,16 @@ export async function POST(req: Request) {
     }
 
     const session = await getSession();
-    if (!session) {
+    const admin = isAdminApiRequest(req);
+
+    if (!admin && !session) {
       return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
     }
 
     const detailsStr = body.details ? JSON.stringify(body.details) : null;
 
     // 선수 본인 과제 등록 (단일)
-    if (session.role === "player") {
+    if (!admin && session?.role === "player") {
       if (
         body.targetType !== "player" ||
         typeof body.targetId !== "string" ||
@@ -114,11 +124,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ created: [created] }, { status: 201 });
     }
 
-    if (session.role !== "coach" && session.role !== "owner") {
+    if (
+      !admin &&
+      session &&
+      session.role !== "coach" &&
+      session.role !== "owner"
+    ) {
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     }
 
-    const accessibleIds = await getAccessibleTeamIds(session);
+    const accessibleIds = admin
+      ? (await prisma.team.findMany({ select: { id: true } })).map((t) => t.id)
+      : await getAccessibleTeamIds(session!);
 
     if (body.targetType === "team") {
       if (typeof body.targetId !== "string" || !body.targetId) {

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
-import { isValidAdminPin } from "@/lib/adminModePins";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 
 function parseOrganization(raw: string | null): { front: string[]; coaching: string[]; player: string[] } | null {
   if (!raw) return null;
@@ -51,8 +51,7 @@ export async function GET(req: Request) {
       );
     }
 
-    const adminPin = req.headers.get("x-admin-pin")?.trim() ?? "";
-    if (isValidAdminPin(adminPin)) {
+    if (isAdminApiRequest(req)) {
       const teams = await prisma.team.findMany({
         orderBy: { name: "asc" },
       });
@@ -208,7 +207,10 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const session = await getSession();
-    if (!session || (session.role !== "coach" && session.role !== "owner")) {
+    if (
+      !isAdminApiRequest(req) &&
+      (!session || (session.role !== "coach" && session.role !== "owner"))
+    ) {
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
     }
 

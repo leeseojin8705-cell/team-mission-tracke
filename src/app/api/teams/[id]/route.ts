@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
 import { isValidAdminPin } from "@/lib/adminModePins";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 import { Prisma } from "@/generated/prisma/client";
 
 function parseOrganization(raw: string | null): { front: string[]; coaching: string[]; player: string[] } | null {
@@ -64,12 +65,14 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const session = await getSession();
-  if (!session || (session.role !== "coach" && session.role !== "owner")) {
-    return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
-  }
-  const ids = await getAccessibleTeamIds(session);
-  if (!ids.includes(id)) {
-    return NextResponse.json({ error: "접근 가능한 팀이 아닙니다." }, { status: 403 });
+  if (!isAdminApiRequest(req)) {
+    if (!session || (session.role !== "coach" && session.role !== "owner")) {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
+    }
+    const ids = await getAccessibleTeamIds(session);
+    if (!ids.includes(id)) {
+      return NextResponse.json({ error: "접근 가능한 팀이 아닙니다." }, { status: 403 });
+    }
   }
   const body = await req.json();
 

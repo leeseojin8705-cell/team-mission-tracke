@@ -3,60 +3,19 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 
-/** GET /api/tasks 와 동일한 범위로 과제만 집계 (코치는 접근 가능한 팀만) */
-export async function GET() {
-  const session = await getSession();
-  let taskWhere: Prisma.TaskWhereInput | undefined;
-  let teamWhere: Prisma.TeamWhereInput | undefined;
-  let playerWhere: Prisma.PlayerWhereInput | undefined;
+type TeamRow = Awaited<ReturnType<typeof prisma.team.findMany>>[number];
+type PlayerRow = Awaited<ReturnType<typeof prisma.player.findMany>>[number];
+type TaskRow = Awaited<ReturnType<typeof prisma.task.findMany>>[number];
+type ProgressRow = Awaited<ReturnType<typeof prisma.taskProgress.findMany>>[number];
 
-  if (!session) {
-    return NextResponse.json({ teamTaskCounts: {}, playerTaskCounts: {} });
-  }
-
-  if (session.role === "player" && session.playerId) {
-    const player = await prisma.player.findUnique({
-      where: { id: session.playerId },
-      select: { teamId: true },
-    });
-    if (!player?.teamId) {
-      taskWhere = { playerId: session.playerId };
-      teamWhere = { id: { in: [] } };
-    } else {
-      taskWhere = {
-        OR: [
-          { playerId: session.playerId },
-          { teamId: player.teamId, playerId: null },
-        ],
-      };
-      teamWhere = { id: player.teamId };
-    }
-    playerWhere = { id: session.playerId };
-  } else if (session.role === "coach" || session.role === "owner") {
-    const ids = await getAccessibleTeamIds(session);
-    if (ids.length === 0) {
-      taskWhere = { teamId: null };
-      teamWhere = { id: { in: [] } };
-      playerWhere = { teamId: { in: [] } };
-    } else {
-      taskWhere = {
-        OR: [{ teamId: { in: ids } }, { teamId: null }],
-      };
-      teamWhere = { id: { in: ids } };
-      playerWhere = { teamId: { in: ids } };
-    }
-  } else {
-    return NextResponse.json({ teamTaskCounts: {}, playerTaskCounts: {} });
-  }
-
-  const [teams, players, tasks, progresses] = await Promise.all([
-    prisma.team.findMany({ where: teamWhere }),
-    prisma.player.findMany({ where: playerWhere }),
-    prisma.task.findMany({ where: taskWhere }),
-    prisma.taskProgress.findMany(),
-  ]);
-
+function buildDashboardSummary(
+  teams: TeamRow[],
+  players: PlayerRow[],
+  tasks: TaskRow[],
+  progresses: ProgressRow[],
+) {
   const teamMap = new Map(teams.map((t) => [t.id, t]));
   const playerMap = new Map(players.map((p) => [p.id, p]));
 
@@ -122,9 +81,71 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({
-    teamTaskCounts,
-    playerTaskCounts,
-  });
+  return { teamTaskCounts, playerTaskCounts };
 }
 
+/** GET /api/tasks 와 동일한 범위로 과제만 집계 (코치는 접근 가능한 팀만) */
+export async function GET(req: Request) {
+  if (isAdminApiRequest(req)) {
+    const [teams, players, tasks, progresses] = await Promise.all([
+      prisma.team.findMany(),
+      prisma.player.findMany(),
+      prisma.task.findMany(),
+      prisma.taskProgress.findMany(),
+    ]);
+    return NextResponse.json(buildDashboardSummary(teams, players, tasks, progresses));
+  }
+
+  const session = await getSession();
+  let taskWhere: Prisma.TaskWhereInput | undefined;
+  let teamWhere: Prisma.TeamWhereInput | undefined;
+  let playerWhere: Prisma.PlayerWhereInput | undefined;
+
+  if (!session) {
+    return NextResponse.json({ teamTaskCounts: {}, playerTaskCounts: {} });
+  }
+
+  if (session.role === "player" && session.playerId) {
+    const player = await prisma.player.findUnique({
+      where: { id: session.playerId },
+      select: { teamId: true },
+    });
+    if (!player?.teamId) {
+      taskWhere = { playerId: session.playerId };
+      teamWhere = { id: { in: [] } };
+    } else {
+      taskWhere = {
+        OR: [
+          { playerId: session.playerId },
+          { teamId: player.teamId, playerId: null },
+        ],
+      };
+      teamWhere = { id: player.teamId };
+    }
+    playerWhere = { id: session.playerId };
+  } else if (session.role === "coach" || session.role === "owner") {
+    const ids = await getAccessibleTeamIds(session);
+    if (ids.length === 0) {
+      taskWhere = { teamId: null };
+      teamWhere = { id: { in: [] } };
+      playerWhere = { teamId: { in: [] } };
+    } else {
+      taskWhere = {
+        OR: [{ teamId: { in: ids } }, { teamId: null }],
+      };
+      teamWhere = { id: { in: ids } };
+      playerWhere = { teamId: { in: ids } };
+    }
+  } else {
+    return NextResponse.json({ teamTaskCounts: {}, playerTaskCounts: {} });
+  }
+
+  const [teams, players, tasks, progresses] = await Promise.all([
+    prisma.team.findMany({ where: teamWhere }),
+    prisma.player.findMany({ where: playerWhere }),
+    prisma.task.findMany({ where: taskWhere }),
+    prisma.taskProgress.findMany(),
+  ]);
+
+  return NextResponse.json(buildDashboardSummary(teams, players, tasks, progresses));
+}

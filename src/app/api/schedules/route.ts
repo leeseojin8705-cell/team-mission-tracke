@@ -2,8 +2,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 
 export async function GET(req: Request) {
+  if (isAdminApiRequest(req)) {
+    const schedules = await prisma.schedule.findMany({
+      orderBy: { date: "asc" },
+    });
+    return NextResponse.json(schedules);
+  }
   const session = await getSession();
   const { searchParams } = new URL(req.url);
   const teamIdParam = searchParams.get("teamId");
@@ -37,7 +44,11 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const session = await getSession();
-  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+  const admin = isAdminApiRequest(req);
+  if (
+    !admin &&
+    (!session || (session.role !== "coach" && session.role !== "owner"))
+  ) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
   }
 
@@ -50,7 +61,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const ids = await getAccessibleTeamIds(session);
+  const ids = admin
+    ? (await prisma.team.findMany({ select: { id: true } })).map((t) => t.id)
+    : await getAccessibleTeamIds(session!);
   if (!ids.includes(body.teamId)) {
     return NextResponse.json(
       { error: "해당 팀에 일정을 등록할 수 없습니다." },
