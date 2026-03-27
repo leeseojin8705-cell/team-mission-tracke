@@ -239,3 +239,13 @@ model CoachInvitation {
   createdAt DateTime @default(now())
   usedAt    DateTime?
 }
+
+/// 홈 화면 일일 방문 집계 (DDL 없이 Prisma 마이그레이션으로만 생성)
+model EntryVisitDaily {
+  day         DateTime @db.Date
+  visitorKey  String   @map("visitor_key")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([day, visitorKey])
+  @@map("entry_visit_daily")
+}
