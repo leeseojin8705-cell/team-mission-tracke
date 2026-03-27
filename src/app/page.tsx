@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { FlowLogo } from "@/components/FlowLogo";
 import { ADMIN_MODE_PINS } from "@/lib/adminModePins";
+import {
+  clearAdminPinCookie,
+  syncAdminPinCookieFromSession,
+} from "@/lib/coachAdminFetch";
 import type { Player, Team } from "@/lib/types";
 
 const ADMIN_PIN_STORAGE = "tmt:adminPin";
@@ -73,12 +77,14 @@ export default function Home() {
         } catch {
           // ignore
         }
+        syncAdminPinCookieFromSession();
       } else {
         try {
           sessionStorage.removeItem(ADMIN_PIN_STORAGE);
         } catch {
           // ignore
         }
+        clearAdminPinCookie();
       }
       try {
         window.localStorage.setItem("tmt:adminMode", next ? "on" : "off");
@@ -123,16 +129,37 @@ export default function Home() {
           // ignore
         }
       }
-      const teamsRes = await fetch("/api/teams", {
-        headers: adminPin ? { "x-admin-pin": adminPin } : {},
-      });
-      const teamsData: Team[] = teamsRes.ok ? await teamsRes.json() : [];
-      setTeams(Array.isArray(teamsData) ? teamsData : []);
+      syncAdminPinCookieFromSession();
+      const teamsRes = await fetch(
+        `/api/teams${adminPin ? `?adminPin=${encodeURIComponent(adminPin)}` : ""}`,
+        {
+          headers: adminPin ? { "x-admin-pin": adminPin } : {},
+          cache: "no-store",
+          credentials: "same-origin",
+        },
+      );
+      const body = await teamsRes.json().catch(() => null);
+      if (!teamsRes.ok) {
+        const detail =
+          body &&
+          typeof body === "object" &&
+          body !== null &&
+          "error" in body &&
+          typeof (body as { error: unknown }).error === "string"
+            ? (body as { error: string }).error
+            : null;
+        setPickerError(
+          detail
+            ? `${detail} (HTTP ${teamsRes.status})`
+            : `팀 목록을 불러오지 못했습니다. (HTTP ${teamsRes.status})`,
+        );
+        setTeams([]);
+        return;
+      }
+      const teamsData = Array.isArray(body) ? (body as Team[]) : [];
+      setTeams(teamsData);
       if (teamsData[0]) {
         setSelectedTeamId(teamsData[0].id);
-      }
-      if (!teamsRes.ok) {
-        setPickerError("팀 목록을 불러오지 못했습니다.");
       }
     } catch (e) {
       setPickerError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");

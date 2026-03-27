@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { Suspense, useEffect, useState } from "react";
-import { installCoachAdminFetchInterceptor } from "@/lib/coachAdminFetch";
+import {
+  installCoachAdminFetchInterceptor,
+  syncAdminPinCookieFromSession,
+} from "@/lib/coachAdminFetch";
 import { CoachAppChrome } from "./CoachAppChrome";
 
 export default function CoachLayout({ children }: { children: ReactNode }) {
@@ -64,6 +67,7 @@ export default function CoachLayout({ children }: { children: ReactNode }) {
     } catch {
       return;
     }
+    syncAdminPinCookieFromSession();
     return installCoachAdminFetchInterceptor();
   }, [authorized]);
 

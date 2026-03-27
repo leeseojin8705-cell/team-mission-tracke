@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
-import { isValidAdminPin } from "@/lib/adminModePins";
 import { isAdminApiRequest } from "@/lib/adminApiRequest";
 import { Prisma } from "@/generated/prisma/client";
 
@@ -116,14 +115,14 @@ export async function DELETE(
 ) {
   const { id } = await params;
   const session = await getSession();
-  const adminPin = req.headers.get("x-admin-pin")?.trim() ?? "";
+  const adminOk = isAdminApiRequest(req);
 
   let allowed = false;
   if (session && (session.role === "coach" || session.role === "owner")) {
     const ids = await getAccessibleTeamIds(session);
     allowed = ids.includes(id);
-  } else if (isValidAdminPin(adminPin)) {
-    // 관리자 모드(홈): 로그인 없이 PIN으로 팀 정리 허용
+  } else if (adminOk) {
+    // 관리자 모드(홈): 로그인 없이 PIN으로 팀 정리 허용 (헤더·쿠키·쿼리)
     allowed = true;
   }
 
@@ -131,7 +130,7 @@ export async function DELETE(
     return NextResponse.json(
       {
         error:
-          session == null && !adminPin
+          session == null && !adminOk
             ? "로그인이 필요하거나 관리자 PIN이 필요합니다."
             : "권한이 없습니다.",
       },
