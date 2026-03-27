@@ -1523,17 +1523,17 @@ export default function CoachTasksPage() {
       </header>
 
       {/* 과제 현황 카드 */}
-      <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-200 md:grid-cols-4">
+      <div className="grid gap-3 rounded-2xl border border-sky-200/90 bg-white/92 p-3 text-xs text-slate-700 md:grid-cols-4">
         <button
           type="button"
           onClick={() => {
             setFilterType("all");
             setStatusFilter("all");
           }}
-          className="flex flex-col justify-between rounded-xl bg-slate-900/80 p-3 text-left hover:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 border border-transparent"
+          className="flex flex-col justify-between rounded-xl bg-sky-50/92 p-3 text-left hover:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 border border-transparent"
         >
           <div className="text-[11px] text-slate-400">전체 과제</div>
-          <div className="mt-1 text-2xl font-semibold text-emerald-400">
+          <div className="mt-1 text-2xl font-semibold text-sky-600">
             {summary.total}
           </div>
         </button>
@@ -1543,10 +1543,10 @@ export default function CoachTasksPage() {
             setFilterType("team");
             setStatusFilter("all");
           }}
-          className="flex flex-col justify-between rounded-xl bg-slate-900/80 p-3 text-left hover:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 border border-transparent"
+          className="flex flex-col justify-between rounded-xl bg-sky-50/92 p-3 text-left hover:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 border border-transparent"
         >
           <div className="text-[11px] text-slate-400">팀 과제</div>
-          <div className="mt-1 text-lg font-semibold text-slate-100">
+          <div className="mt-1 text-lg font-semibold text-slate-900">
             {summary.teamCount}
           </div>
           <div className="mt-0.5 text-[11px] text-slate-500">팀에 걸린 공통 과제 수</div>
@@ -1557,10 +1557,10 @@ export default function CoachTasksPage() {
             setFilterType("player");
             setStatusFilter("all");
           }}
-          className="flex flex-col justify-between rounded-xl bg-slate-900/80 p-3 text-left hover:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 border border-transparent"
+          className="flex flex-col justify-between rounded-xl bg-sky-50/92 p-3 text-left hover:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 border border-transparent"
         >
           <div className="text-[11px] text-slate-400">개인 과제</div>
-          <div className="mt-1 text-lg font-semibold text-slate-100">
+          <div className="mt-1 text-lg font-semibold text-slate-900">
             {summary.playerCount}
           </div>
           <div className="mt-0.5 text-[11px] text-slate-500">선수 개인별 과제 수</div>
@@ -1572,11 +1572,11 @@ export default function CoachTasksPage() {
               prev === "active" ? "overdue" : "active",
             )
           }
-          className="flex flex-col justify-between rounded-xl bg-slate-900/80 p-3 text-left hover:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 border border-transparent"
+          className="flex flex-col justify-between rounded-xl bg-sky-50/92 p-3 text-left hover:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 border border-transparent"
         >
           <div className="flex items-center justify-between text-[11px] text-slate-400">
             <span>진행 / 마감</span>
-            <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">
+            <span className="rounded-full bg-sky-200 px-2 py-0.5 text-[10px] text-slate-600">
               {statusFilter === "all"
                 ? "전체"
                 : statusFilter === "active"
@@ -1585,29 +1585,29 @@ export default function CoachTasksPage() {
             </span>
           </div>
           <div className="mt-1 flex items-baseline gap-3">
-            <span className="text-lg font-semibold text-emerald-400">
+            <span className="text-lg font-semibold text-sky-600">
               {summary.active}
             </span>
             <span className="text-sm text-slate-400">진행 중</span>
           </div>
-          <div className="mt-0.5 text-[11px] text-rose-300">
+          <div className="mt-0.5 text-[11px] text-rose-600">
             마감 지난 과제 {summary.overdue}개
           </div>
         </button>
       </div>
 
       {/* 선택된 조건 과제 요약 (위쪽에 바로 확인) */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-200">
+      <div className="rounded-2xl border border-sky-200/90 bg-sky-50/88 p-3 text-xs text-slate-700">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-slate-800 px-2 py-1 text-[11px] text-slate-200">
+            <span className="rounded-full bg-sky-200 px-2 py-1 text-[11px] text-slate-700">
               {filterType === "all"
                 ? "대상: 전체"
                 : filterType === "team"
                   ? "대상: 팀 과제"
                   : "대상: 개인 과제"}
             </span>
-            <span className="rounded-full bg-slate-800 px-2 py-1 text-[11px] text-slate-200">
+            <span className="rounded-full bg-sky-200 px-2 py-1 text-[11px] text-slate-700">
               상태:{" "}
               {statusFilter === "all"
                 ? "전체"
@@ -1629,17 +1629,17 @@ export default function CoachTasksPage() {
             {visibleTasks.slice(0, 6).map((task) => (
               <div
                 key={task.id}
-                className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-left"
+                className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50/92 px-3 py-1.5 text-left"
               >
                 <button
                   type="button"
                   onClick={() => setSelectedTaskForModal(task)}
-                  className="flex flex-1 items-center gap-2 text-left hover:text-emerald-300"
+                  className="flex flex-1 items-center gap-2 text-left hover:text-sky-800"
                 >
-                  <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">
+                  <span className="rounded-full bg-sky-200 px-2 py-0.5 text-[10px] text-slate-600">
                     {task.teamId ? "팀" : task.playerId ? "선수" : "기타"}
                   </span>
-                  <span className="text-[12px] font-medium text-slate-100">
+                  <span className="text-[12px] font-medium text-slate-900">
                     {task.title}
                   </span>
                   {task.dueDate && (
@@ -1651,7 +1651,7 @@ export default function CoachTasksPage() {
                 {task.teamId && (
                   <Link
                     href={`/coach/tasks/${task.id}/results`}
-                    className="rounded-md border border-slate-600 px-2 py-1 text-[10px] text-slate-200 hover:border-emerald-500 hover:text-emerald-300"
+                    className="rounded-md border border-sky-300 px-2 py-1 text-[10px] text-slate-700 hover:border-sky-500 hover:text-sky-800"
                   >
                     평가 결과
                   </Link>
@@ -1663,7 +1663,7 @@ export default function CoachTasksPage() {
       </div>
 
       {/* 상단 필터 */}
-      <div className="flex flex-col gap-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-300">
+      <div className="flex flex-col gap-2 rounded-2xl border border-sky-200/90 bg-sky-50/85 p-3 text-xs text-slate-600">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-[11px]">목록 필터</span>
           <input
@@ -1671,7 +1671,7 @@ export default function CoachTasksPage() {
             value={taskSearchQuery}
             onChange={(e) => setTaskSearchQuery(e.target.value)}
             placeholder="제목 검색"
-            className="w-28 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400 placeholder:text-slate-500"
+            className="w-28 rounded-md border border-sky-200 bg-white px-2 py-1 text-xs outline-none focus:border-sky-500 placeholder:text-slate-500"
           />
           <select
             value={filterType}
@@ -1679,7 +1679,7 @@ export default function CoachTasksPage() {
               const value = e.target.value as typeof filterType;
               setFilterType(value);
             }}
-            className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+            className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs outline-none focus:border-sky-500"
           >
             <option value="all">전체</option>
             <option value="team">팀 과제만</option>
@@ -1689,7 +1689,7 @@ export default function CoachTasksPage() {
             <select
               value={filterTeamId}
               onChange={(e) => setFilterTeamId(e.target.value)}
-              className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+              className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs outline-none focus:border-sky-500"
             >
               <option value="all">모든 팀</option>
               {teamOptions.map((t) => (
@@ -1703,7 +1703,7 @@ export default function CoachTasksPage() {
             <select
               value={filterPlayerId}
               onChange={(e) => setFilterPlayerId(e.target.value)}
-              className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+              className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs outline-none focus:border-sky-500"
             >
               <option value="all">모든 선수</option>
               {playerOptions.map((p) => (
@@ -1717,7 +1717,7 @@ export default function CoachTasksPage() {
           <select
             value={taskSortOrder}
             onChange={(e) => setTaskSortOrder(e.target.value as "dueDate" | "title")}
-            className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+            className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs outline-none focus:border-sky-500"
           >
             <option value="dueDate">마감일 순</option>
             <option value="title">제목 순</option>
@@ -1730,7 +1730,7 @@ export default function CoachTasksPage() {
             onChange={(e) =>
               setTaskPeriodPreset(e.target.value as "all" | "30d" | "custom")
             }
-            className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] outline-none focus:border-emerald-400"
+            className="rounded-md border border-sky-200 bg-white px-2 py-1 text-[11px] outline-none focus:border-sky-500"
           >
             <option value="all">전체</option>
             <option value="30d">최근 30일(마감 기준)</option>
@@ -1742,14 +1742,14 @@ export default function CoachTasksPage() {
                 type="date"
                 value={taskDateFrom}
                 onChange={(e) => setTaskDateFrom(e.target.value)}
-                className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-emerald-400"
+                className="rounded-md border border-sky-200 bg-white px-2 py-1 text-[11px] text-slate-900 outline-none focus:border-sky-500"
               />
               <span className="text-[11px] text-slate-500">~</span>
               <input
                 type="date"
                 value={taskDateTo}
                 onChange={(e) => setTaskDateTo(e.target.value)}
-                className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-emerald-400"
+                className="rounded-md border border-sky-200 bg-white px-2 py-1 text-[11px] text-slate-900 outline-none focus:border-sky-500"
               />
             </>
           )}
@@ -1762,9 +1762,9 @@ export default function CoachTasksPage() {
       {/* 과제 등록 폼 — 코치-선수 과제 등록(목업) */}
       <form
         onSubmit={handleSubmit}
-        className="rounded-2xl border-2 border-lime-400/40 bg-slate-900/90 text-sm shadow-lg shadow-lime-500/5"
+        className="rounded-2xl border-2 border-lime-400/40 bg-white/95 text-sm shadow-lg shadow-lime-500/5"
       >
-        <div className="bg-gradient-to-r from-lime-400 to-emerald-500 px-4 py-3 text-center">
+        <div className="bg-gradient-to-r from-sky-400 to-cyan-500 px-4 py-3 text-center">
           <p className="text-xs font-bold tracking-[0.2em] text-slate-900">
             TEAM MISSION TRACKER
           </p>
@@ -1773,20 +1773,20 @@ export default function CoachTasksPage() {
           </h2>
         </div>
         <div className="space-y-4 p-4 md:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/80 pb-3">
-          <span className="text-xs font-semibold text-slate-300">과제 등록</span>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-200/90 pb-3">
+          <span className="text-xs font-semibold text-slate-600">과제 등록</span>
           <div className="flex gap-2">
             <button
               type="button"
               onClick={resetForm}
-              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-700"
+              className="rounded-lg border border-sky-300 bg-sky-200 px-3 py-1.5 text-[11px] text-slate-700 hover:bg-sky-200"
             >
               새로 작성
             </button>
             <button
               type="button"
               onClick={() => setShowLoadFromTaskModal(true)}
-              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-700"
+              className="rounded-lg border border-sky-300 bg-sky-200 px-3 py-1.5 text-[11px] text-slate-700 hover:bg-sky-200"
             >
               불러오기
             </button>
@@ -1794,7 +1794,7 @@ export default function CoachTasksPage() {
         </div>
 
         {/* 과제 대상·제목: 먼저 고르면 아래 포메이션·선수 목록이 맞춰집니다 */}
-        <section className="space-y-3 rounded-xl border border-lime-500/35 bg-slate-900/75 p-4">
+        <section className="space-y-3 rounded-xl border border-lime-500/35 bg-white/93 p-4">
           <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-lime-200/95">
             <span className="h-2 w-2 rounded-full bg-lime-400" />
             과제 대상 및 제목
@@ -1803,7 +1803,7 @@ export default function CoachTasksPage() {
             팀 또는 선수를 먼저 지정한 뒤 전술판에 선수를 배치할 수 있습니다. 선수 이름은 여기서 직접 입력하지 않고,{" "}
             <Link
               href="/coach/players"
-              className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
+              className="text-sky-600 underline underline-offset-2 hover:text-sky-800"
             >
               선수 관리
             </Link>
@@ -1811,7 +1811,7 @@ export default function CoachTasksPage() {
           </p>
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),minmax(0,1fr),minmax(0,1.2fr)]">
             <div>
-              <label className="mb-1 block text-xs text-slate-300">대상 종류</label>
+              <label className="mb-1 block text-xs text-slate-600">대상 종류</label>
               <select
                 value={targetType}
                 onChange={(e) => {
@@ -1826,21 +1826,21 @@ export default function CoachTasksPage() {
                     setTargetPlayerIds(first ? [first] : []);
                   }
                 }}
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
               >
                 <option value="team">팀</option>
                 <option value="player">선수</option>
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-300">
+              <label className="mb-1 block text-xs text-slate-600">
                 {targetType === "team" ? "대상 선택" : "대상 선택 (복수)"}
               </label>
               {targetType === "team" ? (
                 <select
                   value={targetId}
                   onChange={(e) => setTargetId(e.target.value)}
-                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                  className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
                   disabled={teamOptions.length === 0}
                 >
                   {teamOptions.map((opt) => (
@@ -1850,7 +1850,7 @@ export default function CoachTasksPage() {
                   ))}
                 </select>
               ) : (
-                <div className="flex max-h-36 flex-col gap-1 overflow-y-auto rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-slate-100">
+                <div className="flex max-h-36 flex-col gap-1 overflow-y-auto rounded-md border border-sky-200 bg-white px-2 py-2 text-sm text-slate-900">
                   {playerOptions.length === 0 ? (
                     <span className="text-xs text-slate-500">선수 없음</span>
                   ) : (
@@ -1858,7 +1858,7 @@ export default function CoachTasksPage() {
                       {playerOptions.map((opt) => (
                         <label
                           key={opt.id}
-                          className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-slate-900/80"
+                          className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-sky-50/92"
                         >
                           <input
                             type="checkbox"
@@ -1877,10 +1877,10 @@ export default function CoachTasksPage() {
                           <span className="text-xs">{opt.name}</span>
                         </label>
                       ))}
-                      <div className="mt-1 flex flex-wrap gap-1 border-t border-slate-700/80 pt-1">
+                      <div className="mt-1 flex flex-wrap gap-1 border-t border-sky-200/90 pt-1">
                         <button
                           type="button"
-                          className="rounded border border-slate-600 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                          className="rounded border border-sky-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-sky-100"
                           onClick={() =>
                             setTargetPlayerIds(playerOptions.map((p) => p.id))
                           }
@@ -1889,7 +1889,7 @@ export default function CoachTasksPage() {
                         </button>
                         <button
                           type="button"
-                          className="rounded border border-slate-600 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                          className="rounded border border-sky-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-sky-100"
                           onClick={() => setTargetPlayerIds([])}
                         >
                           전체 해제
@@ -1905,11 +1905,11 @@ export default function CoachTasksPage() {
               )}
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-300">과제 제목</label>
+              <label className="mb-1 block text-xs text-slate-600">과제 제목</label>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
                 placeholder="목록에 표시될 제목 (비우면 첫 과제 줄 사용)"
               />
             </div>
@@ -1917,7 +1917,7 @@ export default function CoachTasksPage() {
         </section>
 
         {/* ① 반복 / 단일 */}
-        <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+        <section className="rounded-xl border border-sky-200 bg-sky-50/88 p-4">
           <div className="mb-2 text-[11px] font-semibold text-slate-400">과제 형태</div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -1926,7 +1926,7 @@ export default function CoachTasksPage() {
               className={`rounded-lg border px-4 py-2 text-xs font-medium ${
                 htmlTaskType === "daily"
                   ? "border-lime-400 bg-lime-400/20 text-lime-100"
-                  : "border-slate-600 text-slate-300"
+                  : "border-sky-300 text-slate-600"
               }`}
             >
               매일 과제
@@ -1937,7 +1937,7 @@ export default function CoachTasksPage() {
               className={`rounded-lg border px-4 py-2 text-xs font-medium ${
                 htmlTaskType === "single"
                   ? "border-lime-400 bg-lime-400/20 text-lime-100"
-                  : "border-slate-600 text-slate-300"
+                  : "border-sky-300 text-slate-600"
               }`}
             >
               단일 과제
@@ -1946,7 +1946,7 @@ export default function CoachTasksPage() {
         </section>
 
         {/* Row1 유형 */}
-        <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+        <section className="rounded-xl border border-sky-200 bg-sky-50/88 p-4">
           <div className="mb-1 text-[11px] font-semibold text-slate-400">유형</div>
           <p className="mb-2 text-[10px] text-slate-500">복수 선택 가능 (최소 1개, 첫 번째가 초점 행 기준)</p>
           <div className="flex flex-wrap gap-2">
@@ -1965,7 +1965,7 @@ export default function CoachTasksPage() {
                 className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
                   taskTypeSelections.includes(t)
                     ? "border-lime-400 bg-lime-400 text-slate-950"
-                    : "border-slate-600 text-slate-200 hover:border-lime-500/60"
+                    : "border-sky-300 text-slate-700 hover:border-lime-500/60"
                 }`}
               >
                 {t}
@@ -1975,7 +1975,7 @@ export default function CoachTasksPage() {
         </section>
 
         {/* Row2 초점: 복수 선택 → contents */}
-        <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+        <section className="rounded-xl border border-sky-200 bg-sky-50/88 p-4">
           <div className="mb-1 text-[11px] font-semibold text-slate-400">초점</div>
           <p className="mb-2 text-[10px] text-slate-500">복수 선택 가능</p>
           {!htmlCategory ? (
@@ -1997,7 +1997,7 @@ export default function CoachTasksPage() {
                     className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
                       on
                         ? "border-lime-400 bg-lime-400 text-slate-950"
-                        : "border-slate-600 text-slate-200"
+                        : "border-sky-300 text-slate-700"
                     }`}
                   >
                     {opt.label}
@@ -2017,7 +2017,7 @@ export default function CoachTasksPage() {
                     className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
                       on
                         ? "border-lime-400 bg-lime-400 text-slate-950"
-                        : "border-slate-600 text-slate-200"
+                        : "border-sky-300 text-slate-700"
                     }`}
                   >
                     {opt.label}
@@ -2029,7 +2029,7 @@ export default function CoachTasksPage() {
         </section>
 
         {/* Row3 세부 초점: 단일 선택(한 번에 하나만) */}
-        <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+        <section className="rounded-xl border border-sky-200 bg-sky-50/88 p-4">
           <div className="mb-2 text-[11px] font-semibold text-slate-400">세부 초점</div>
           <div className="flex flex-wrap gap-2">
             {subFocusOptions.map((sf) => (
@@ -2040,7 +2040,7 @@ export default function CoachTasksPage() {
                 className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
                   subFocus === sf
                     ? "border-sky-400 bg-sky-500/20 text-sky-100"
-                    : "border-slate-600 text-slate-200"
+                    : "border-sky-300 text-slate-700"
                 }`}
               >
                 {sf}
@@ -2050,9 +2050,9 @@ export default function CoachTasksPage() {
         </section>
 
         {/* ② 기간 / 요일 / 시간 */}
-        <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+        <section className="space-y-3 rounded-xl border border-sky-200 bg-sky-50/92 p-4">
+          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+            <span className="h-2 w-2 rounded-full bg-sky-500" />
             기간 · 요일 · 시간
           </div>
           {htmlTaskType === "daily" ? (
@@ -2062,26 +2062,26 @@ export default function CoachTasksPage() {
               </p>
               <div className="flex flex-wrap items-center gap-3 text-xs">
                 <label className="flex items-center gap-2">
-                  <span className="text-slate-300">시작일</span>
+                  <span className="text-slate-600">시작일</span>
                   <input
                     type="date"
                     value={dailyStart}
                     onChange={(e) => setDailyStart(e.target.value)}
-                    className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                    className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-sky-500"
                   />
                 </label>
                 <span className="text-slate-500">~</span>
                 <label className="flex items-center gap-2">
-                  <span className="text-slate-300">종료일</span>
+                  <span className="text-slate-600">종료일</span>
                   <input
                     type="date"
                     value={dailyEnd}
                     onChange={(e) => setDailyEnd(e.target.value)}
-                    className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                    className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-sky-500"
                   />
                 </label>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
                 <span>요일</span>
                 {["일", "월", "화", "수", "목", "금", "토"].map((label, idx) => {
                   const key = String(idx);
@@ -2100,8 +2100,8 @@ export default function CoachTasksPage() {
                       }
                       className={`min-w-[2rem] rounded-full border px-2 py-0.5 text-center ${
                         on
-                          ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
-                          : "border-slate-700 bg-slate-950 text-slate-300 hover:border-emerald-400"
+                          ? "border-sky-500 bg-sky-500/10 text-sky-900"
+                          : "border-sky-200 bg-white text-slate-600 hover:border-sky-500"
                       }`}
                     >
                       {label}
@@ -2111,21 +2111,21 @@ export default function CoachTasksPage() {
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
                 <label className="flex items-center gap-2">
-                  <span className="text-slate-300">시작 시간</span>
+                  <span className="text-slate-600">시작 시간</span>
                   <input
                     type="time"
                     value={timeStart}
                     onChange={(e) => setTimeStart(e.target.value)}
-                    className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                    className="h-8 rounded-md border border-sky-200 bg-white px-2 text-xs text-slate-900 outline-none focus:border-sky-500"
                   />
                 </label>
                 <label className="flex items-center gap-2">
-                  <span className="text-slate-300">종료 시간</span>
+                  <span className="text-slate-600">종료 시간</span>
                   <input
                     type="time"
                     value={timeEnd}
                     onChange={(e) => setTimeEnd(e.target.value)}
-                    className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                    className="h-8 rounded-md border border-sky-200 bg-white px-2 text-xs text-slate-900 outline-none focus:border-sky-500"
                   />
                 </label>
               </div>
@@ -2137,30 +2137,30 @@ export default function CoachTasksPage() {
               </p>
               <div className="flex flex-wrap items-center gap-3 text-xs">
                 <label className="flex items-center gap-2">
-                  <span className="text-slate-300">일자</span>
+                  <span className="text-slate-600">일자</span>
                   <input
                     type="date"
                     value={singleDate}
                     onChange={(e) => setSingleDate(e.target.value)}
-                    className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                    className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-sky-500"
                   />
                 </label>
                 <label className="flex items-center gap-2">
-                  <span className="text-slate-300">시작 시간</span>
+                  <span className="text-slate-600">시작 시간</span>
                   <input
                     type="time"
                     value={timeStart}
                     onChange={(e) => setTimeStart(e.target.value)}
-                    className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                    className="h-8 rounded-md border border-sky-200 bg-white px-2 text-xs text-slate-900 outline-none focus:border-sky-500"
                   />
                 </label>
                 <label className="flex items-center gap-2">
-                  <span className="text-slate-300">종료 시간</span>
+                  <span className="text-slate-600">종료 시간</span>
                   <input
                     type="time"
                     value={timeEnd}
                     onChange={(e) => setTimeEnd(e.target.value)}
-                    className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                    className="h-8 rounded-md border border-sky-200 bg-white px-2 text-xs text-slate-900 outline-none focus:border-sky-500"
                   />
                 </label>
               </div>
@@ -2169,30 +2169,30 @@ export default function CoachTasksPage() {
         </section>
 
         {/* 전술 · 포메이션 · 미니 필드 · 과제 줄 (목업) */}
-        <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+        <section className="rounded-xl border border-sky-200 bg-sky-50/88 p-4">
           <div className="mb-3 text-[11px] font-semibold text-slate-400">
             전술 · 포메이션 · 대상 선수
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-xs text-slate-300">오늘의 전술</label>
+                <label className="mb-1 block text-xs text-slate-600">오늘의 전술</label>
                 <textarea
                   value={todayStrategy}
                   onChange={(e) => setTodayStrategy(e.target.value)}
                   rows={3}
-                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100 outline-none focus:border-lime-400"
+                  className="w-full rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-sky-500"
                   placeholder="전술 메모를 입력하세요"
                 />
               </div>
               <div className="space-y-2">
-                <label className="mb-1 block text-xs text-slate-300">
+                <label className="mb-1 block text-xs text-slate-600">
                   포메이션 (프리셋 또는 직접 배치)
                 </label>
                 <select
                   value={formation}
                   onChange={(e) => handleFormationSelect(e.target.value)}
-                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100 outline-none focus:border-lime-400"
+                  className="w-full rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-sky-500"
                 >
                   <option value="">선택 안 함</option>
                   {FORMATION_PRESET_OPTIONS.map((opt) => (
@@ -2208,7 +2208,7 @@ export default function CoachTasksPage() {
                       type="text"
                       value={formationNote}
                       onChange={(e) => setFormationNote(e.target.value)}
-                      className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100 outline-none focus:border-lime-400"
+                      className="w-full rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-sky-500"
                       placeholder="전술 이름 (선택, 예: 3-2-3-2 변형, 역삼각 미드)"
                     />
                     <div className="flex flex-wrap items-center gap-2">
@@ -2216,7 +2216,7 @@ export default function CoachTasksPage() {
                         프리셋을 불러온 뒤 필드에서 옮기기:
                       </span>
                       <select
-                        className="max-w-[10rem] rounded border border-slate-600 bg-slate-950 px-2 py-1 text-[10px] text-slate-200"
+                        className="max-w-[10rem] rounded border border-sky-300 bg-white px-2 py-1 text-[10px] text-slate-700"
                         defaultValue=""
                         onChange={(e) => {
                           const v = e.target.value;
@@ -2243,7 +2243,7 @@ export default function CoachTasksPage() {
                             },
                           ])
                         }
-                        className="rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-800"
+                        className="rounded border border-sky-300 px-2 py-1 text-[10px] text-slate-600 hover:bg-sky-100"
                       >
                         GK만
                       </button>
@@ -2795,7 +2795,7 @@ export default function CoachTasksPage() {
                   </div>
                 </div>
                 {!isCustomFormation && formation ? (
-                  <div className="rounded-lg border border-orange-500/35 bg-slate-950/80 px-2 py-2 text-[10px] text-slate-300">
+                  <div className="rounded-lg border border-orange-500/35 bg-white/95 px-2 py-2 text-[10px] text-slate-600">
                     <p className="mb-1 font-semibold text-orange-200/95">
                       교체 포인트 (최대 {MAX_SUB_POINTS}명 · 선발 슬롯과 색 구분)
                     </p>
@@ -2809,7 +2809,7 @@ export default function CoachTasksPage() {
                       <select
                         value={subBenchPickId}
                         onChange={(e) => setSubBenchPickId(e.target.value)}
-                        className="max-w-[min(100%,14rem)] rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-[11px] outline-none focus:border-orange-400"
+                        className="max-w-[min(100%,14rem)] rounded-md border border-sky-300 bg-white px-2 py-1 text-[11px] outline-none focus:border-orange-400"
                       >
                         <option value="">
                           {subBenchCandidates.length === 0
@@ -2834,7 +2834,7 @@ export default function CoachTasksPage() {
                     </div>
                   </div>
                 ) : null}
-                <div className="border-t border-slate-700/80 bg-slate-950/85 px-2 py-2">
+                <div className="border-t border-sky-200/90 bg-sky-50/95 px-2 py-2">
                   {entryCandidatePlayers.length === 0 ? (
                     <div className="space-y-1 text-[10px] text-slate-500">
                       <p>
@@ -2845,7 +2845,7 @@ export default function CoachTasksPage() {
                       <p>
                         <Link
                           href="/coach/players"
-                          className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
+                          className="text-sky-600 underline underline-offset-2 hover:text-sky-800"
                         >
                           선수 관리
                         </Link>
@@ -2858,14 +2858,14 @@ export default function CoachTasksPage() {
                         팀 전체 명단에서 이번 과제에 넣을 선수를 체크한 뒤, 명단을
                         확정하면 필드에 드래그할 수 있습니다.
                       </p>
-                      <div className="max-h-52 overflow-y-auto rounded border border-slate-700/90 bg-slate-950/80 px-2 py-2">
+                      <div className="max-h-52 overflow-y-auto rounded border border-sky-200 bg-white/95 px-2 py-2">
                         <ul className="space-y-1.5">
                           {entryCandidatePlayers.map((p) => (
                             <li key={p.id}>
-                              <label className="flex cursor-pointer items-center gap-2 text-[11px] text-slate-200">
+                              <label className="flex cursor-pointer items-center gap-2 text-[11px] text-slate-700">
                                 <input
                                   type="checkbox"
-                                  className="rounded border-slate-600"
+                                  className="rounded border-sky-300"
                                   checked={rosterSelectedIds.has(p.id)}
                                   onChange={() => {
                                     setRosterSelectedIds((prev) => {
@@ -2897,14 +2897,14 @@ export default function CoachTasksPage() {
                               ),
                             )
                           }
-                          className="rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-200 hover:bg-slate-800"
+                          className="rounded border border-sky-300 px-2 py-1 text-[10px] text-slate-700 hover:bg-sky-100"
                         >
                           전체 선택
                         </button>
                         <button
                           type="button"
                           onClick={() => setRosterSelectedIds(new Set())}
-                          className="rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-200 hover:bg-slate-800"
+                          className="rounded border border-sky-300 px-2 py-1 text-[10px] text-slate-700 hover:bg-sky-100"
                         >
                           전체 해제
                         </button>
@@ -2939,7 +2939,7 @@ export default function CoachTasksPage() {
                         <button
                           type="button"
                           onClick={() => setRosterPickMode(true)}
-                          className="shrink-0 rounded border border-slate-600 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                          className="shrink-0 rounded border border-sky-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-sky-100"
                         >
                           명단 다시 고르기
                         </button>
@@ -2978,7 +2978,7 @@ export default function CoachTasksPage() {
                               className={`cursor-grab rounded-md border px-1.5 py-0.5 text-[10px] transition active:cursor-grabbing ${
                                 on
                                   ? "border-lime-400 bg-lime-400 font-medium text-slate-950 shadow-sm shadow-lime-500/20"
-                                  : "border-slate-600/80 bg-slate-900/95 text-slate-200 hover:border-slate-500"
+                                  : "border-sky-300/90 bg-white/92 text-slate-700 hover:border-sky-400"
                               }`}
                             >
                               {p.name}
@@ -3022,7 +3022,7 @@ export default function CoachTasksPage() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+        <section className="rounded-xl border border-sky-200 bg-sky-50/88 p-4">
           <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-slate-400">
             <span>과제 줄 (공통 / 포지션 / 개인)</span>
             <button
@@ -3030,24 +3030,24 @@ export default function CoachTasksPage() {
               onClick={() =>
                 setAssignmentRows((prev) => [...prev, newAssignmentRow()])
               }
-              className="rounded border border-slate-500 px-2 py-0.5 text-slate-200 hover:bg-slate-700"
+              className="rounded border border-sky-300 px-2 py-0.5 text-slate-700 hover:bg-sky-200"
             >
               + 줄 추가
             </button>
           </div>
-          <div className="mb-2 space-y-1 rounded-lg border border-slate-700/80 bg-slate-950/60 px-2 py-1.5 text-[10px] text-slate-400">
+          <div className="mb-2 space-y-1 rounded-lg border border-sky-200/90 bg-sky-50/88 px-2 py-1.5 text-[10px] text-slate-400">
             <p>
               FW {assignmentWeightTotals.FW}% / MF {assignmentWeightTotals.MF}% / DF{" "}
               {assignmentWeightTotals.DF}% / GK {assignmentWeightTotals.GK}%
               {hasAssignmentWeightOverflow && (
-                <span className="ml-2 text-rose-300">
+                <span className="ml-2 text-rose-600">
                   포지션별 합계는 100%를 넘을 수 없습니다.
                 </span>
               )}
             </p>
             <p className="text-slate-500">
               비율(%) 입력란은{" "}
-              <span className="text-slate-300">FW·MF·DF·GK</span> 칸을 먼저 켠 뒤에만
+              <span className="text-slate-600">FW·MF·DF·GK</span> 칸을 먼저 켠 뒤에만
               활성화됩니다. 꺼져 있으면 해당 포지션에 과제 줄이 없다는 뜻입니다.
             </p>
           </div>
@@ -3055,7 +3055,7 @@ export default function CoachTasksPage() {
             {assignmentRows.map((row, idx) => (
               <div
                 key={row.id}
-                className="rounded-lg border border-slate-600 bg-slate-900/80 p-3"
+                className="rounded-lg border border-sky-300 bg-sky-50/92 p-3"
               >
                 <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
                   <input
@@ -3067,10 +3067,10 @@ export default function CoachTasksPage() {
                         ),
                       )
                     }
-                    className="min-w-[220px] flex-1 rounded border border-slate-600 bg-slate-950 px-2.5 py-2 text-xs text-slate-100"
+                    className="min-w-[220px] flex-1 rounded border border-sky-300 bg-white px-2.5 py-2 text-xs text-slate-900"
                     placeholder="예: 볼 뺏기지 않기, 미드 프레싱"
                   />
-                  <div className="flex flex-nowrap items-center gap-1 rounded bg-slate-950/40 px-1 py-1">
+                  <div className="flex flex-nowrap items-center gap-1 rounded bg-sky-100/55 px-1 py-1">
                     {(
                       [
                         ["common", "공통", row.common] as const,
@@ -3095,14 +3095,14 @@ export default function CoachTasksPage() {
                         className={`rounded border px-2 py-1 text-[10px] ${
                           on
                             ? "border-lime-400 bg-lime-400/20 text-lime-100"
-                            : "border-slate-600 text-slate-400"
+                            : "border-sky-300 text-slate-400"
                         }`}
                       >
                         {label}
                       </button>
                     ))}
                   </div>
-                  <div className="flex flex-nowrap items-center gap-1 rounded bg-slate-950/40 px-1 py-1">
+                  <div className="flex flex-nowrap items-center gap-1 rounded bg-sky-100/55 px-1 py-1">
                     {(
                       [
                         ["fw", "FW", row.fw, row.fwWeight, "fwWeight"] as const,
@@ -3115,8 +3115,8 @@ export default function CoachTasksPage() {
                         key={key}
                         className={`flex items-center gap-1 rounded border px-1.5 py-1 ${
                           on
-                            ? "border-slate-600 bg-slate-950 text-slate-200"
-                            : "border-slate-800 bg-slate-950/50 text-slate-500"
+                            ? "border-sky-300 bg-white text-slate-700"
+                            : "border-sky-200/90 bg-sky-50/75 text-slate-500"
                         }`}
                       >
                         <button
@@ -3158,7 +3158,7 @@ export default function CoachTasksPage() {
                               ),
                             );
                           }}
-                          className="h-7 w-12 rounded border border-slate-700 bg-slate-900 px-1.5 text-[10px] text-slate-100 outline-none disabled:opacity-40"
+                          className="h-7 w-12 rounded border border-sky-200 bg-white px-1.5 text-[10px] text-slate-900 outline-none disabled:opacity-40"
                         />
                         <span className="text-[10px]">%</span>
                       </div>
@@ -3172,7 +3172,7 @@ export default function CoachTasksPage() {
                           prev.filter((r) => r.id !== row.id),
                         )
                       }
-                      className="rounded border border-rose-700/50 px-2 text-rose-300"
+                      className="rounded border border-rose-700/50 px-2 text-rose-600"
                     >
                       −
                     </button>
@@ -3184,56 +3184,56 @@ export default function CoachTasksPage() {
         </section>
 
         {/* ③ 일정: 과제 일정 + 공개 일정(한 박스) */}
-        <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+        <section className="space-y-3 rounded-xl border border-sky-200 bg-sky-50/92 p-4">
+          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+            <span className="h-2 w-2 rounded-full bg-sky-500" />
             일정
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-lg border border-slate-700/80 bg-slate-950/50 p-3">
-              <p className="mb-2 text-xs font-semibold text-slate-300">과제 일정</p>
+            <div className="rounded-lg border border-sky-200/90 bg-sky-50/75 p-3">
+              <p className="mb-2 text-xs font-semibold text-slate-600">과제 일정</p>
               {htmlTaskType === "daily" ? (
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-xs text-slate-300">시작 날짜</label>
+                    <label className="mb-1 block text-xs text-slate-600">시작 날짜</label>
                     <input
                       type="date"
                       value={dailyStart}
                       onChange={(e) => setDailyStart(e.target.value)}
-                      className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                      className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-slate-300">종료 날짜</label>
+                    <label className="mb-1 block text-xs text-slate-600">종료 날짜</label>
                     <input
                       type="date"
                       value={dailyEnd}
                       onChange={(e) => setDailyEnd(e.target.value)}
-                      className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                      className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
                     />
                   </div>
                 </div>
               ) : (
                 <div>
-                  <label className="mb-1 block text-xs text-slate-300">날짜</label>
+                  <label className="mb-1 block text-xs text-slate-600">날짜</label>
                   <input
                     type="date"
                     value={singleDate}
                     onChange={(e) => setSingleDate(e.target.value)}
-                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                    className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
                   />
                 </div>
               )}
             </div>
 
-            <div className="rounded-lg border border-slate-700/80 bg-slate-950/50 p-3">
-              <p className="mb-2 text-xs font-semibold text-slate-300">공개 일정</p>
-              <label className="mb-1 block text-xs text-slate-300">공개일</label>
+            <div className="rounded-lg border border-sky-200/90 bg-sky-50/75 p-3">
+              <p className="mb-2 text-xs font-semibold text-slate-600">공개 일정</p>
+              <label className="mb-1 block text-xs text-slate-600">공개일</label>
               <input
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
               />
               <p className="mt-2 text-[10px] text-slate-500">
                 비워두면 과제 일정 기준으로 자동 계산됩니다.
@@ -3243,9 +3243,9 @@ export default function CoachTasksPage() {
         </section>
 
         {/* ⑥ 평가자 지정 */}
-        <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+        <section className="space-y-3 rounded-xl border border-sky-200 bg-sky-50/92 p-4">
+          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+            <span className="h-2 w-2 rounded-full bg-sky-500" />
             평가자 지정
           </div>
           <p className="text-[11px] text-slate-500">
@@ -3256,7 +3256,7 @@ export default function CoachTasksPage() {
             <span>선택: {selectedEvaluatorIds.size}명</span>
           </div>
           {staff.length === 0 ? (
-            <div className="mt-2 rounded-lg border border-slate-700 bg-slate-900/80 p-2 text-[11px] text-slate-400">
+            <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50/92 p-2 text-[11px] text-slate-400">
               현재 선택된 팀에 등록된 코칭 스텝이 없습니다. 팀 관리에서 코칭 스텝을 먼저 추가해 주세요.
             </div>
           ) : (
@@ -3277,8 +3277,8 @@ export default function CoachTasksPage() {
                     }
                     className={`flex flex-col rounded-md border px-2 py-1.5 text-left text-[11px] transition ${
                       on
-                        ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
-                        : "border-slate-700 bg-slate-950 text-slate-200 hover:border-emerald-400"
+                        ? "border-sky-500 bg-sky-500/10 text-sky-900"
+                        : "border-sky-200 bg-white text-slate-700 hover:border-sky-500"
                     }`}
                   >
                     <span className="truncate">{s.name}</span>
@@ -3293,24 +3293,24 @@ export default function CoachTasksPage() {
         </div>
 
         {/* 하단 버튼 */}
-        <div className="flex flex-wrap justify-end gap-2 border-t border-slate-700/80 bg-slate-950/40 px-4 py-4 md:px-5">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-sky-200/90 bg-sky-100/55 px-4 py-4 md:px-5">
           <button
             type="button"
             onClick={() => setShowLoadFromTaskModal(true)}
-            className="rounded-lg border border-slate-500 px-4 py-2 text-xs text-slate-300 hover:bg-slate-800"
+            className="rounded-lg border border-sky-300 px-4 py-2 text-xs text-slate-600 hover:bg-sky-100"
           >
             이전 과제에서 불러오기
           </button>
           <button
             type="button"
             onClick={resetForm}
-            className="rounded-lg border border-slate-600 px-4 py-2 text-xs text-slate-200 hover:bg-slate-800"
+            className="rounded-lg border border-sky-300 px-4 py-2 text-xs text-slate-700 hover:bg-sky-100"
           >
             {editingId ? "취소" : "초기화"}
           </button>
           <div className="flex w-full flex-col items-end gap-2">
             {(submitBlockedReason || hasAssignmentWeightOverflow) && (
-              <p className="max-w-md text-right text-[11px] text-amber-200/90">
+              <p className="max-w-md text-right text-[11px] text-amber-800">
                 {hasAssignmentWeightOverflow
                   ? "포지션별 과제 가중치 합이 100%를 넘었습니다. 줄의 비율을 조정한 뒤 저장할 수 있습니다."
                   : submitBlockedReason}
@@ -3323,7 +3323,7 @@ export default function CoachTasksPage() {
                 !!submitBlockedReason ||
                 hasAssignmentWeightOverflow
               }
-              className="min-w-[140px] rounded-lg bg-slate-950 px-6 py-2.5 text-sm font-bold text-white shadow-inner ring-1 ring-slate-600 hover:bg-black disabled:opacity-50"
+              className="min-w-[140px] rounded-lg bg-sky-500 px-6 py-2.5 text-sm font-bold text-white shadow-inner ring-1 ring-sky-400/50 hover:bg-sky-600 disabled:opacity-50"
             >
               {submitting
                 ? "저장 중..."
@@ -3338,15 +3338,15 @@ export default function CoachTasksPage() {
       {/* 이전 과제 불러오기 모달 */}
       {showLoadFromTaskModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm"
           onClick={() => setShowLoadFromTaskModal(false)}
         >
           <div
-            className="max-h-[80vh] w-full max-w-lg overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-xl"
+            className="max-h-[80vh] w-full max-w-lg overflow-hidden rounded-2xl border border-sky-200 bg-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="border-b border-slate-700 p-4">
-              <h3 className="text-lg font-semibold text-slate-50">이전 과제에서 불러오기</h3>
+            <div className="border-b border-sky-200 p-4">
+              <h3 className="text-lg font-semibold text-slate-900">이전 과제에서 불러오기</h3>
               <p className="mt-1 text-xs text-slate-400">
                 선택한 과제의 제목·분류·일정·전술·대상 선수·평가자 설정이 폼에 채워집니다. 수정 후 새로 등록하면 됩니다.
               </p>
@@ -3361,9 +3361,9 @@ export default function CoachTasksPage() {
                       <button
                         type="button"
                         onClick={() => loadFromTask(task)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2.5 text-left text-sm hover:bg-slate-700/60"
+                        className="w-full rounded-lg border border-sky-200 bg-sky-100/80 px-3 py-2.5 text-left text-sm hover:bg-sky-200/70"
                       >
-                        <span className="font-medium text-slate-100">{task.title}</span>
+                        <span className="font-medium text-slate-900">{task.title}</span>
                         <span className="ml-2 text-xs text-slate-500">
                           {task.dueDate
                             ? String(task.dueDate).slice(0, 10)
@@ -3377,11 +3377,11 @@ export default function CoachTasksPage() {
                 </ul>
               )}
             </div>
-            <div className="border-t border-slate-700 p-3 text-right">
+            <div className="border-t border-sky-200 p-3 text-right">
               <button
                 type="button"
                 onClick={() => setShowLoadFromTaskModal(false)}
-                className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
+                className="rounded-lg border border-sky-300 px-4 py-2 text-sm text-slate-600 hover:bg-sky-100"
               >
                 닫기
               </button>
@@ -3393,14 +3393,14 @@ export default function CoachTasksPage() {
       {/* 과제 상세 모달 */}
       {selectedTaskForModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm"
           onClick={() => setSelectedTaskForModal(null)}
         >
           <div
-            className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-xl"
+            className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-sky-200 bg-white p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="mb-1 text-lg font-semibold text-slate-50">
+            <h3 className="mb-1 text-lg font-semibold text-slate-900">
               과제 정보 — {selectedTaskForModal.title}
             </h3>
             <p className="mb-4 text-xs text-slate-400">
@@ -3411,7 +3411,7 @@ export default function CoachTasksPage() {
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <div className="text-slate-400">대상</div>
-                  <div className="mt-1 text-slate-100">
+                  <div className="mt-1 text-slate-900">
                     {selectedTaskForModal.teamId
                       ? "팀 과제"
                       : selectedTaskForModal.playerId
@@ -3421,7 +3421,7 @@ export default function CoachTasksPage() {
                 </div>
                 <div>
                   <div className="text-slate-400">마감일</div>
-                  <div className="mt-1 text-slate-100">
+                  <div className="mt-1 text-slate-900">
                     {selectedTaskForModal.dueDate
                       ? String(selectedTaskForModal.dueDate).slice(0, 10)
                       : "—"}
@@ -3432,18 +3432,18 @@ export default function CoachTasksPage() {
               <div>
                 <div className="mb-1 text-xs text-slate-400">과제 유형 / 분류</div>
                 <div className="flex flex-wrap gap-2 text-xs">
-                  <span className="rounded-full bg-slate-800 px-2 py-1 text-slate-100">
+                  <span className="rounded-full bg-sky-200 px-2 py-1 text-slate-900">
                     유형:{" "}
                     {selectedTaskForModal.details?.htmlTaskType === "single"
                       ? "단일 과제"
                       : "매일 과제"}
                   </span>
                   {selectedTaskForModal.details?.htmlCategory && (
-                    <span className="rounded-full bg-slate-800 px-2 py-1 text-slate-100">
+                    <span className="rounded-full bg-sky-200 px-2 py-1 text-slate-900">
                       분류: {selectedTaskForModal.details.htmlCategory}
                     </span>
                   )}
-                  <span className="rounded-full bg-slate-800 px-2 py-1 text-slate-100">
+                  <span className="rounded-full bg-sky-200 px-2 py-1 text-slate-900">
                     저장 카테고리: {selectedTaskForModal.category}
                   </span>
                 </div>
@@ -3457,14 +3457,14 @@ export default function CoachTasksPage() {
                     {selectedTaskForModal.details.contents.map((c) => (
                       <span
                         key={c}
-                        className="rounded-full bg-slate-800 px-2 py-1 text-[11px] text-slate-100"
+                        className="rounded-full bg-sky-200 px-2 py-1 text-[11px] text-slate-900"
                       >
                         {c}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-2 text-xs text-slate-400">
+                  <div className="rounded-lg border border-sky-200 bg-sky-50/92 p-2 text-xs text-slate-400">
                     선택된 평가 항목이 없습니다.
                   </div>
                 )}
@@ -3475,7 +3475,7 @@ export default function CoachTasksPage() {
                 selectedTaskForModal.details?.singleDate) && (
                 <div>
                   <div className="mb-1 text-xs text-slate-400">일정</div>
-                  <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-xs text-slate-100">
+                  <div className="rounded-lg border border-sky-200 bg-sky-50/92 p-3 text-xs text-slate-900">
                     {selectedTaskForModal.details?.htmlTaskType === "single" ? (
                       <>
                         <div>단일 날짜: {selectedTaskForModal.details?.singleDate ?? "—"}</div>
@@ -3502,7 +3502,7 @@ export default function CoachTasksPage() {
                       return (
                         <span
                           key={pid}
-                          className="rounded-full bg-slate-800 px-2 py-1 text-[11px] text-slate-100"
+                          className="rounded-full bg-sky-200 px-2 py-1 text-[11px] text-slate-900"
                         >
                           {player?.name ?? pid}
                         </span>
@@ -3510,7 +3510,7 @@ export default function CoachTasksPage() {
                     })}
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-2 text-xs text-slate-400">
+                  <div className="rounded-lg border border-sky-200 bg-sky-50/92 p-2 text-xs text-slate-400">
                     이 과제에 지정된 선수가 없습니다.
                   </div>
                 )}
@@ -3555,7 +3555,7 @@ export default function CoachTasksPage() {
                       return (
                         <span
                           key={sid}
-                          className="rounded-full bg-slate-800 px-2 py-1 text-[11px] text-slate-100"
+                          className="rounded-full bg-sky-200 px-2 py-1 text-[11px] text-slate-900"
                         >
                           {s?.name ?? sid}
                         </span>
@@ -3563,7 +3563,7 @@ export default function CoachTasksPage() {
                     })}
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-2 text-xs text-slate-400">
+                  <div className="rounded-lg border border-sky-200 bg-sky-50/92 p-2 text-xs text-slate-400">
                     이 과제에 지정된 평가자가 없습니다.
                   </div>
                 )}
@@ -3584,10 +3584,10 @@ export default function CoachTasksPage() {
                 return (
                   <div>
                     <div className="mb-2 text-xs text-slate-400">선수별 진행도</div>
-                    <div className="rounded-lg border border-slate-700 bg-slate-900/80 overflow-hidden">
+                    <div className="rounded-lg border border-sky-200 bg-sky-50/92 overflow-hidden">
                       <table className="w-full text-left text-sm">
                         <thead>
-                          <tr className="border-b border-slate-700 bg-slate-800/60">
+                          <tr className="border-b border-sky-200 bg-sky-100/80">
                             <th className="px-3 py-2 text-slate-400 font-medium">선수</th>
                             <th className="px-3 py-2 text-slate-400 font-medium w-24">완료</th>
                             <th className="px-3 py-2 text-slate-400 font-medium">메모</th>
@@ -3601,8 +3601,8 @@ export default function CoachTasksPage() {
                             const note = prog?.note ?? "";
                             const isSaving = progressSaving === pid;
                             return (
-                              <tr key={pid} className="border-b border-slate-700/80 last:border-0">
-                                <td className="px-3 py-2 text-slate-100">
+                              <tr key={pid} className="border-b border-sky-200/90 last:border-0">
+                                <td className="px-3 py-2 text-slate-900">
                                   {player?.name ?? pid}
                                   {player?.position && (
                                     <span className="ml-1 text-xs text-slate-500">{player.position}</span>
@@ -3616,7 +3616,7 @@ export default function CoachTasksPage() {
                                       saveTaskProgress(pid, e.target.checked, note)
                                     }
                                     disabled={isSaving}
-                                    className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-emerald-500"
+                                    className="h-4 w-4 rounded border-sky-300 bg-sky-200 text-sky-600"
                                   />
                                 </td>
                                 <td className="px-3 py-2">
@@ -3645,7 +3645,7 @@ export default function CoachTasksPage() {
                                     }}
                                     placeholder="메모"
                                     disabled={isSaving}
-                                    className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500"
+                                    className="w-full rounded border border-sky-300 bg-sky-200 px-2 py-1 text-xs text-slate-900 placeholder:text-slate-500"
                                   />
                                 </td>
                               </tr>
@@ -3666,14 +3666,14 @@ export default function CoachTasksPage() {
                   handleEdit(selectedTaskForModal);
                   setSelectedTaskForModal(null);
                 }}
-                className="rounded-lg border border-emerald-500 px-4 py-2 text-xs font-medium text-emerald-300 hover:bg-emerald-500/10"
+                className="rounded-lg border border-sky-500 px-4 py-2 text-xs font-medium text-sky-700 hover:bg-sky-100"
               >
                 이 과제 수정
               </button>
               <button
                 type="button"
                 onClick={() => setSelectedTaskForModal(null)}
-                className="rounded-lg border border-slate-600 px-4 py-2 text-xs text-slate-200 hover:bg-slate-800"
+                className="rounded-lg border border-sky-300 px-4 py-2 text-xs text-slate-700 hover:bg-sky-100"
               >
                 닫기
               </button>
@@ -3683,14 +3683,14 @@ export default function CoachTasksPage() {
       )}
 
       {error && (
-        <p className="text-sm text-rose-300">
+        <p className="text-sm text-rose-600">
           {error}
         </p>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
+      <div className="overflow-hidden rounded-2xl border border-sky-200/90 bg-sky-50/85">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-900">
+          <thead className="bg-sky-100">
             <tr>
               <th className="px-4 py-2 text-left">제목</th>
               <th className="px-4 py-2 text-left">대상(팀/선수)</th>
@@ -3741,16 +3741,16 @@ export default function CoachTasksPage() {
                 const targetName = team?.name ?? player?.name ?? "-";
 
                 return (
-                  <tr key={task.id} className="border-t border-slate-800">
+                  <tr key={task.id} className="border-t border-sky-200/90">
                     <td className="px-4 py-2">{task.title}</td>
-                    <td className="px-4 py-2 text-slate-200">{targetName}</td>
-                    <td className="px-4 py-2 text-slate-300">
+                    <td className="px-4 py-2 text-slate-700">{targetName}</td>
+                    <td className="px-4 py-2 text-slate-600">
                       {task.category ?? "-"}
                     </td>
-                    <td className="px-4 py-2 text-slate-300">
+                    <td className="px-4 py-2 text-slate-600">
                       {task.dueDate ?? "-"}
                     </td>
-                    <td className="px-4 py-2 text-xs text-slate-200">
+                    <td className="px-4 py-2 text-xs text-slate-700">
                       {(() => {
                         const s = taskSummaries[task.id];
                         if (!s) return <span className="text-slate-500">요약 계산 중…</span>;
@@ -3762,28 +3762,28 @@ export default function CoachTasksPage() {
                         return (
                           <div className="space-y-1.5">
                             <div className="flex items-center justify-between text-[11px]">
-                              <span className="text-slate-300">
+                              <span className="text-slate-600">
                                 완료 {s.completed}/{s.total}
                               </span>
-                              <span className="font-semibold text-emerald-400">
+                              <span className="font-semibold text-sky-600">
                                 {rate}%
                               </span>
                             </div>
-                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-sky-200">
                               <div
-                                className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500"
+                                className="h-full rounded-full bg-gradient-to-r from-sky-400 to-sky-600"
                                 style={{ width: `${rate}%` }}
                               />
                             </div>
-                            <div className="mt-1 grid grid-cols-3 gap-2 text-[10px] text-slate-300">
+                            <div className="mt-1 grid grid-cols-3 gap-2 text-[10px] text-slate-600">
                               <div>
                                 <div className="flex items-center justify-between">
                                   <span className="text-slate-400">이해</span>
                                   <span>{safeU.toFixed(1)}%</span>
                                 </div>
-                                <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-slate-800">
+                                <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-sky-200">
                                   <div
-                                    className="h-full rounded-full bg-emerald-400/90"
+                                    className="h-full rounded-full bg-sky-500/90"
                                     style={{ width: `${safeU}%` }}
                                   />
                                 </div>
@@ -3793,9 +3793,9 @@ export default function CoachTasksPage() {
                                   <span className="text-slate-400">달성</span>
                                   <span>{safeA.toFixed(1)}%</span>
                                 </div>
-                                <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-slate-800">
+                                <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-sky-200">
                                   <div
-                                    className="h-full rounded-full bg-emerald-500"
+                                    className="h-full rounded-full bg-sky-600"
                                     style={{ width: `${safeA}%` }}
                                   />
                                 </div>
@@ -3805,7 +3805,7 @@ export default function CoachTasksPage() {
                                   <span className="text-slate-400">코치</span>
                                   <span>{safeE.toFixed(1)}%</span>
                                 </div>
-                                <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-slate-800">
+                                <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-sky-200">
                                   <div
                                     className="h-full rounded-full bg-sky-500"
                                     style={{ width: `${safeE}%` }}
@@ -3821,7 +3821,7 @@ export default function CoachTasksPage() {
                       <button
                         type="button"
                         onClick={() => handleEdit(task)}
-                        className="rounded-md border border-slate-600 px-2 py-1 hover:bg-slate-800"
+                        className="rounded-md border border-sky-300 px-2 py-1 hover:bg-sky-100"
                       >
                         수정
                       </button>

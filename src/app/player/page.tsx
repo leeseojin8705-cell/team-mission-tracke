@@ -565,7 +565,7 @@ function PlayerHomeInner() {
           )}
 
           {error && (
-            <p className="text-sm text-rose-300">
+            <p className="text-sm text-rose-600">
               {error}
             </p>
           )}
@@ -701,7 +701,7 @@ function PlayerHomeInner() {
             <p className="text-sm text-slate-400">데이터를 불러오는 중입니다...</p>
           ) : !me ? (
             <div className="rounded-2xl border border-sky-100 bg-white/95 p-6 text-center space-y-2">
-              <p className="text-slate-300">
+              <p className="text-slate-600">
                 등록된 선수는 본인만 볼 수 있습니다.
               </p>
               <p className="text-sm text-slate-500">
@@ -756,7 +756,7 @@ function PlayerHomeInner() {
                           ? `/player/report?playerId=${encodeURIComponent(currentPlayerId)}`
                           : "/player"
                       }
-                      className="rounded-full border border-slate-600 px-3 py-1 text-[11px] text-slate-200 hover:border-emerald-500 hover:text-emerald-300"
+                      className="rounded-full border border-sky-300 px-3 py-1 text-[11px] text-sky-800 hover:border-sky-500 hover:text-sky-950"
                     >
                       리포트 보기
                     </Link>
@@ -770,7 +770,7 @@ function PlayerHomeInner() {
                         values={statValues}
                       />
                     </div>
-                    <div className="md:w-1/2 space-y-1 text-[11px] text-slate-300">
+                    <div className="md:w-1/2 space-y-1 text-[11px] text-slate-600">
                       {statDef.categories
                         .filter((c) => !isMeasurementCategory(statDef, c.id))
                         .map((c) => {
@@ -781,7 +781,7 @@ function PlayerHomeInner() {
                               className="flex items-center justify-between gap-2"
                             >
                               <span style={{ color: c.color }}>{c.label}</span>
-                              <span className="text-slate-100">{v.toFixed(1)} / 5.0</span>
+                              <span className="text-slate-800">{v.toFixed(1)} / 5.0</span>
                             </div>
                           );
                         })}
@@ -802,11 +802,11 @@ function PlayerHomeInner() {
                       {mySchedule.map((s) => (
                         <li
                           key={s.id}
-                          className="rounded-lg bg-slate-900 px-3 py-2 flex items-start justify-between gap-2"
+                          className="rounded-lg border border-sky-100 bg-sky-50/80 px-3 py-2 flex items-start justify-between gap-2"
                         >
                           <div>
                             <p className="font-medium">{s.title}</p>
-                            <p className="text-xs text-slate-300">{s.date}</p>
+                            <p className="text-xs text-slate-500">{s.date}</p>
                             {absenceSubmittedIds.has(s.id) && (
                               <span className="mt-1 inline-block text-[10px] text-amber-400">불참 신청함</span>
                             )}
@@ -814,7 +814,7 @@ function PlayerHomeInner() {
                           <button
                             type="button"
                             onClick={() => setAbsenceModalSchedule(s)}
-                            className="shrink-0 rounded border border-slate-600 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+                            className="shrink-0 rounded border border-sky-200 px-2 py-1 text-xs text-sky-800 hover:bg-sky-100"
                           >
                             불참 의사
                           </button>
@@ -827,7 +827,7 @@ function PlayerHomeInner() {
                 <div className="rounded-2xl border border-sky-100 bg-white/95 p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <h2 className="text-lg font-semibold">내 과제</h2>
-                    <div className="flex items-center gap-2 text-[11px] text-slate-300">
+                    <div className="flex items-center gap-2 text-[11px] text-slate-600">
                       <select
                         value={taskFilter}
                         onChange={(e) =>
@@ -835,7 +835,7 @@ function PlayerHomeInner() {
                             e.target.value as "all" | "team" | "personal",
                           )
                         }
-                        className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 outline-none focus:border-emerald-400"
+                        className="rounded-md border border-sky-200 bg-white px-2 py-1 text-slate-800 outline-none focus:border-sky-500"
                       >
                         <option value="all">전체</option>
                         <option value="team">팀 과제</option>
@@ -844,7 +844,7 @@ function PlayerHomeInner() {
                       <label className="inline-flex items-center gap-1">
                         <input
                           type="checkbox"
-                          className="h-3 w-3 rounded border-slate-600 bg-slate-900"
+                          className="h-3 w-3 rounded border-sky-300 bg-white"
                           checked={overdueOnly}
                           onChange={(e) => setOverdueOnly(e.target.checked)}
                         />
@@ -875,12 +875,12 @@ function PlayerHomeInner() {
                         return (
                           <li
                             key={t.id}
-                            className="rounded-lg bg-slate-900 px-3 py-2 space-y-2"
+                            className="rounded-lg border border-sky-100 bg-sky-50/80 px-3 py-2 space-y-2"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div>
                                 <p className="font-medium">{t.title}</p>
-                                <p className="text-xs text-slate-300">
+                                <p className="text-xs text-slate-600">
                                   카테고리: {t.category}
                                   {t.dueDate && ` · 마감일: ${String(t.dueDate).slice(0, 10)}`}
                                 </p>
@@ -892,15 +892,15 @@ function PlayerHomeInner() {
                                     onClick={() =>
                                       setExpandedTaskId(isExpanded ? null : t.id)
                                     }
-                                    className="text-xs text-slate-400 hover:text-emerald-400"
+                                    className="text-xs text-slate-500 hover:text-sky-600"
                                   >
                                     {isExpanded ? "접기" : "상세 보기"}
                                   </button>
                                 )}
-                                <label className="flex items-center gap-1 text-xs text-emerald-300">
+                                <label className="flex items-center gap-1 text-xs text-sky-700">
                                   <input
                                     type="checkbox"
-                                    className="h-4 w-4 rounded border-slate-600 bg-slate-900"
+                                    className="h-4 w-4 rounded border-sky-300 bg-white"
                                     checked={!!completedMap[t.id]}
                                     onChange={() => toggleCompleted(t.id)}
                                   />
@@ -909,11 +909,11 @@ function PlayerHomeInner() {
                               </div>
                             </div>
                             {isExpanded && hasDetails && details && (
-                              <div className="rounded-lg border border-slate-700 bg-slate-950/80 p-3 text-xs space-y-2">
+                              <div className="rounded-lg border border-sky-200 bg-white p-3 text-xs space-y-2">
                                 {details.detailText?.trim() && (
                                   <div>
                                     <p className="text-slate-500 mb-0.5">세부 과제</p>
-                                    <p className="text-slate-200 whitespace-pre-wrap">
+                                    <p className="text-slate-800 whitespace-pre-wrap">
                                       {details.detailText}
                                     </p>
                                   </div>
@@ -921,7 +921,7 @@ function PlayerHomeInner() {
                                 {details.goalText?.trim() && (
                                   <div>
                                     <p className="text-slate-500 mb-0.5">과제 목표</p>
-                                    <p className="text-slate-200 whitespace-pre-wrap">
+                                    <p className="text-slate-800 whitespace-pre-wrap">
                                       {details.goalText}
                                     </p>
                                   </div>
@@ -929,7 +929,7 @@ function PlayerHomeInner() {
                                 {details.contents && details.contents.length > 0 && (
                                   <div>
                                     <p className="text-slate-500 mb-0.5">평가 항목</p>
-                                    <p className="text-slate-200">
+                                    <p className="text-slate-800">
                                       {details.contents.join(", ")}
                                     </p>
                                   </div>
@@ -938,7 +938,7 @@ function PlayerHomeInner() {
                                   (details.dailyStart && details.dailyEnd)) && (
                                   <div>
                                     <p className="text-slate-500 mb-0.5">일정</p>
-                                    <p className="text-slate-200">
+                                    <p className="text-slate-800">
                                       {details.singleDate
                                         ? `단일: ${details.singleDate}`
                                         : `${details.dailyStart} ~ ${details.dailyEnd}`}
@@ -952,7 +952,7 @@ function PlayerHomeInner() {
                                 value={noteMap[t.id] ?? ""}
                                 onChange={(e) => updateNote(t.id, e.target.value)}
                                 placeholder="오늘 과제를 하면서 느낀 점이나 기록을 간단히 적어보세요."
-                                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs outline-none focus:border-emerald-400"
+                                className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-sky-500"
                                 rows={2}
                               />
                             </div>
@@ -970,14 +970,14 @@ function PlayerHomeInner() {
 
       {absenceModalSchedule && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm"
           onClick={() => setAbsenceModalSchedule(null)}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-xl"
+            className="w-full max-w-md rounded-2xl border border-sky-200 bg-white p-6 shadow-xl shadow-sky-900/10"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="mb-2 text-lg font-semibold text-slate-100">
+            <h3 className="mb-2 text-lg font-semibold text-slate-900">
               불참 의사 — {absenceModalSchedule.title}
             </h3>
             <p className="mb-4 text-xs text-slate-400">
@@ -989,15 +989,15 @@ function PlayerHomeInner() {
                 {ABSENCE_REASON_OPTIONS.map((opt) => (
                   <label
                     key={opt.value}
-                    className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm cursor-pointer hover:bg-slate-700"
+                    className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm cursor-pointer hover:bg-sky-100"
                   >
                     <input
                       type="checkbox"
                       checked={absenceReasons.has(opt.value)}
                       onChange={() => toggleAbsenceReason(opt.value)}
-                      className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-emerald-500"
+                      className="h-4 w-4 rounded border-sky-300 bg-white text-sky-600"
                     />
-                    <span className="text-slate-200">{opt.label}</span>
+                    <span className="text-slate-800">{opt.label}</span>
                   </label>
                 ))}
               </div>
@@ -1008,7 +1008,7 @@ function PlayerHomeInner() {
                   onChange={(e) => setAbsenceReasonText(e.target.value)}
                   placeholder="기타 사유를 입력하세요"
                   rows={2}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                  className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
                 />
               </div>
             </div>
@@ -1016,7 +1016,7 @@ function PlayerHomeInner() {
               <button
                 type="button"
                 onClick={() => setAbsenceModalSchedule(null)}
-                className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
+                className="rounded-lg border border-sky-200 px-4 py-2 text-sm text-slate-600 hover:bg-sky-50"
               >
                 닫기
               </button>
@@ -1024,7 +1024,7 @@ function PlayerHomeInner() {
                 type="button"
                 onClick={submitAbsence}
                 disabled={absenceSaving}
-                className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
+                className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-600 disabled:opacity-60"
               >
                 {absenceSaving ? "저장 중…" : "저장"}
               </button>

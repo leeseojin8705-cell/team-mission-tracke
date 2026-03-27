@@ -277,9 +277,9 @@ export function TaskBlueprintEditor({
 
   return (
     <section
-      className={`space-y-4 rounded-2xl border border-lime-500/25 bg-slate-950/50 p-4 ${className ?? ""}`}
+      className={`space-y-4 rounded-2xl border border-sky-200/80 bg-white/95 p-4 shadow-sm shadow-sky-900/5 ${className ?? ""}`}
     >
-      <div className="bg-gradient-to-r from-lime-400/90 to-emerald-500/90 px-3 py-2 text-center rounded-lg">
+      <div className="rounded-lg bg-gradient-to-r from-sky-400/95 to-cyan-500/95 px-3 py-2 text-center">
         <p className="text-[10px] font-bold tracking-[0.12em] text-slate-900">
           TEAM MISSION TRACKER
         </p>
@@ -291,8 +291,8 @@ export function TaskBlueprintEditor({
         </p>
       </div>
 
-      <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
-        <div className="mb-2 text-[11px] font-semibold text-slate-400">세부 초점</div>
+      <div className="rounded-xl border border-sky-200 bg-sky-50/90 p-4">
+        <div className="mb-2 text-[11px] font-semibold text-slate-500">세부 초점</div>
         <div className="flex flex-wrap gap-2">
           {subFocusOptions.map((sf) => (
             <button
@@ -301,8 +301,8 @@ export function TaskBlueprintEditor({
               onClick={() => setSubFocus(subFocus === sf ? null : sf)}
               className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
                 subFocus === sf
-                  ? "border-sky-400 bg-sky-500/20 text-sky-100"
-                  : "border-slate-600 text-slate-200"
+                  ? "border-sky-500 bg-sky-500/15 text-sky-900"
+                  : "border-sky-200 text-slate-700 hover:bg-white/80"
               }`}
             >
               {sf}
@@ -311,30 +311,30 @@ export function TaskBlueprintEditor({
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
-        <div className="mb-3 text-[11px] font-semibold text-slate-400">
+      <div className="rounded-xl border border-sky-200 bg-white/95 p-4">
+        <div className="mb-3 text-[11px] font-semibold text-slate-500">
           전술 · 포메이션 · 미니 필드
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-3">
             <div>
-              <label className="mb-1 block text-xs text-slate-300">오늘의 전술</label>
+              <label className="mb-1 block text-xs text-slate-600">오늘의 전술</label>
               <textarea
                 value={todayStrategy}
                 onChange={(e) => setTodayStrategy(e.target.value)}
                 rows={3}
-                className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100 outline-none focus:border-lime-400"
+                className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-sky-500"
                 placeholder="전술 메모를 입력하세요"
               />
             </div>
             <div className="space-y-2">
-              <label className="mb-1 block text-xs text-slate-300">
+              <label className="mb-1 block text-xs text-slate-600">
                 포메이션 (프리셋 또는 직접 배치)
               </label>
               <select
                 value={formation}
                 onChange={(e) => handleFormationSelect(e.target.value)}
-                className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100 outline-none focus:border-lime-400"
+                className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-sky-500"
               >
                 <option value="">선택 안 함</option>
                 {FORMATION_PRESET_OPTIONS.map((opt) => (
@@ -350,7 +350,7 @@ export function TaskBlueprintEditor({
                     type="text"
                     value={formationNote}
                     onChange={(e) => setFormationNote(e.target.value)}
-                    className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100 outline-none focus:border-lime-400"
+                    className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-sky-500"
                     placeholder="전술 이름 (선택, 예: 3-2-3-2 변형)"
                   />
                   <div className="flex flex-wrap items-center gap-2">
@@ -358,7 +358,7 @@ export function TaskBlueprintEditor({
                       프리셋을 불러온 뒤 필드에서 옮기기:
                     </span>
                     <select
-                      className="max-w-[10rem] rounded border border-slate-600 bg-slate-950 px-2 py-1 text-[10px] text-slate-200"
+                      className="max-w-[10rem] rounded border border-sky-200 bg-white px-2 py-1 text-[10px] text-slate-800"
                       defaultValue=""
                       onChange={(e) => {
                         const v = e.target.value;
@@ -385,7 +385,7 @@ export function TaskBlueprintEditor({
                           },
                         ])
                       }
-                      className="rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-800"
+                      className="rounded border border-sky-200 px-2 py-1 text-[10px] text-slate-600 hover:bg-sky-50"
                     >
                       GK만
                     </button>
@@ -400,13 +400,13 @@ export function TaskBlueprintEditor({
                 </>
               )}
             </div>
-            <label className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+            <label className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
               <span>사전 점검 시각</span>
               <input
                 type="time"
                 value={preCheckTime}
                 onChange={(e) => setPreCheckTime(e.target.value)}
-                className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-sky-500"
               />
             </label>
           </div>
@@ -427,7 +427,7 @@ export function TaskBlueprintEditor({
                 </span>
               ) : null}
             </div>
-            <div className="relative w-full overflow-hidden rounded-xl border-2 border-emerald-600/70 shadow-inner shadow-black/40 ring-1 ring-white/10">
+            <div className="relative w-full overflow-hidden rounded-xl border-2 border-sky-400/60 shadow-inner shadow-sky-900/10 ring-1 ring-sky-200/50">
               <div
                 className="relative w-full"
                 style={{ aspectRatio: `${PITCH_VB.w} / ${PITCH_VB.h}` }}
@@ -811,8 +811,8 @@ export function TaskBlueprintEditor({
                 : ""}
             </p>
             {candidatePlayers.length > 0 ? (
-              <div className="border-t border-slate-700/80 bg-slate-950/85 px-2 py-2">
-                <p className="mb-1.5 text-[10px] text-slate-500">
+              <div className="border-t border-sky-200/90 bg-sky-50/95 px-2 py-2">
+                <p className="mb-1.5 text-[10px] text-slate-600">
                   대상 선수 (드래그 또는 탭 후 프리셋 슬롯 클릭 · 슬롯 우클릭 해제)
                 </p>
                 <div className="flex max-h-[4.5rem] flex-wrap gap-1 overflow-y-auto pr-0.5">
@@ -845,7 +845,7 @@ export function TaskBlueprintEditor({
                         className={`cursor-grab rounded-md border px-1.5 py-0.5 text-[10px] transition active:cursor-grabbing ${
                           pending
                             ? "border-lime-400 bg-lime-400 font-medium text-slate-950 shadow-sm shadow-lime-500/20"
-                            : "border-slate-600/80 bg-slate-900/95 text-slate-200 hover:border-slate-500"
+                            : "border-sky-200 bg-white text-slate-700 hover:border-sky-400"
                         }`}
                       >
                         {p.name}
@@ -858,12 +858,12 @@ export function TaskBlueprintEditor({
                 </div>
               </div>
             ) : (
-              <div className="border-t border-slate-700/80 bg-slate-950/85 px-2 py-2 text-[10px] text-slate-500">
+              <div className="border-t border-sky-200/90 bg-sky-50/95 px-2 py-2 text-[10px] text-slate-600">
                 <p className="mb-1">이 과제에 연결할 선수 명단이 없습니다.</p>
                 <p>
                   <Link
                     href="/coach/players"
-                    className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
+                    className="text-sky-700 underline underline-offset-2 hover:text-sky-900"
                   >
                     선수 관리
                   </Link>
@@ -875,15 +875,15 @@ export function TaskBlueprintEditor({
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
-        <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-slate-400">
+      <div className="rounded-xl border border-sky-200 bg-white/95 p-4">
+        <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-slate-500">
           <span>과제 줄 (공통 / 포지션 / 개인)</span>
           <button
             type="button"
             onClick={() =>
               setAssignmentRows((prev) => [...prev, newAssignmentRow()])
             }
-            className="rounded border border-slate-500 px-2 py-0.5 text-slate-200 hover:bg-slate-700"
+            className="rounded border border-sky-300 px-2 py-0.5 text-slate-700 hover:bg-sky-50"
           >
             + 줄 추가
           </button>
@@ -892,7 +892,7 @@ export function TaskBlueprintEditor({
           {assignmentRows.map((row) => (
             <div
               key={row.id}
-              className="rounded-lg border border-slate-600 bg-slate-900/80 p-3"
+              className="rounded-lg border border-sky-200 bg-sky-50/80 p-3"
             >
               <div className="flex flex-wrap items-start gap-2">
                 <input
@@ -904,7 +904,7 @@ export function TaskBlueprintEditor({
                       ),
                     )
                   }
-                  className="min-w-[200px] flex-1 rounded border border-slate-600 bg-slate-950 px-2 py-1.5 text-xs text-slate-100"
+                  className="min-w-[200px] flex-1 rounded border border-sky-200 bg-white px-2 py-1.5 text-xs text-slate-900"
                   placeholder="예: 볼 뺏기지 않기, 미드 프레싱"
                 />
                 <div className="flex flex-wrap gap-1">
@@ -935,8 +935,8 @@ export function TaskBlueprintEditor({
                       }
                       className={`rounded px-1.5 py-0.5 text-[10px] ${
                         on
-                          ? "bg-lime-500/20 text-lime-100"
-                          : "bg-slate-950 text-slate-400"
+                          ? "bg-lime-500/20 text-lime-900"
+                          : "bg-white text-slate-500 ring-1 ring-sky-200"
                       }`}
                     >
                       {label}
