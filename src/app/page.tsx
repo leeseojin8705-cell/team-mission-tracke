@@ -210,23 +210,23 @@ export default function Home() {
         className="min-h-screen cursor-pointer bg-gradient-to-br from-sky-200 via-sky-300 to-sky-400 text-slate-900 flex items-center justify-center px-4"
         onClick={() => setShowWelcome(false)}
       >
-        <div className="w-full max-w-3xl rounded-3xl border border-sky-200/80 bg-white/90 px-6 py-14 md:px-10 text-center shadow-xl shadow-sky-500/20 backdrop-blur-sm">
-          <p className="text-xs md:text-sm tracking-[0.2em] text-sky-600/80">
-            TEAM MISSION TRACKER
-          </p>
-          <div className="mt-6 flex justify-center">
-            <FlowLogo className="h-14 w-auto md:h-20 text-sky-500 drop-shadow-sm" />
+        <div className="w-full max-w-lg rounded-3xl border border-sky-200/80 bg-white/92 px-8 py-12 md:px-12 md:py-14 text-center shadow-xl shadow-sky-500/25 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3">
+            <FlowLogo className="h-12 w-[min(100%,13rem)] md:h-16 text-sky-500" />
+            <p className="text-[10px] md:text-xs font-semibold tracking-[0.32em] text-sky-600/85">
+              TEAM MISSION TRACKER
+            </p>
           </div>
-          <p className="mt-5 text-sm md:text-base font-medium text-sky-800/90">
+          <p className="mt-6 text-sm md:text-[15px] font-medium leading-relaxed text-sky-900/85">
             축구 팀 미션 · 훈련 · 과제를 한곳에서
           </p>
-          <p className="mt-6 text-xs md:text-sm text-sky-700/80">
+          <p className="mt-7 text-xs md:text-sm text-sky-700/85">
             오늘 입장 인원{" "}
-            <span className="font-semibold text-sky-900">
+            <span className="font-semibold tabular-nums text-sky-900">
               {todayEntryCount ?? "..."}명
             </span>
           </p>
-          <p className="mt-8 text-xs text-sky-600/90">
+          <p className="mt-9 text-[11px] text-sky-600/90">
             화면을 터치/클릭하면 역할 선택으로 이동합니다
           </p>
         </div>
@@ -236,18 +236,18 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-sky-300 via-sky-400 to-sky-500 text-slate-900 flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-2xl rounded-2xl border border-white/40 bg-white/90 shadow-xl shadow-sky-600/20 p-8 md:p-10 space-y-8 backdrop-blur-sm">
-        <header className="text-center space-y-3">
-          <div className="flex justify-center">
-            <FlowLogo className="h-10 w-auto md:h-12 text-sky-500" />
+      <div className="w-full max-w-2xl rounded-2xl border border-white/45 bg-white/92 shadow-xl shadow-sky-600/20 p-8 md:p-10 space-y-8 backdrop-blur-sm">
+        <header className="text-center space-y-4">
+          <div className="flex flex-col items-center gap-2">
+            <FlowLogo className="h-9 w-[min(100%,11rem)] md:h-11 text-sky-500" />
+            <p className="text-[11px] font-semibold tracking-[0.28em] text-sky-600/80">
+              TEAM MISSION TRACKER
+            </p>
           </div>
-          <p className="text-sm font-semibold tracking-wide text-sky-700">
-            TEAM MISSION TRACKER
-          </p>
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
             역할을 선택하세요
           </h1>
-          <p className="text-sm text-sky-900/75">
+          <p className="text-sm text-sky-900/78">
             코치로 들어갈지, 선수로 들어갈지 선택합니다.
           </p>
           <div className="mt-1 flex items-center justify-center gap-2 text-[11px] text-sky-800/70">

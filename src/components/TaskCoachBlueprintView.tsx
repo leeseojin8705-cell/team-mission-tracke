@@ -8,6 +8,7 @@ import {
   hasCoachBlueprintContent,
   type FormationSlot,
 } from "@/lib/formationLayouts";
+import { FlowPitchWatermark } from "@/components/FlowLogo";
 
 function PitchReadonly({
   slots,
@@ -56,6 +57,7 @@ function PitchReadonly({
         <line x1="52.5" y1="0" x2="52.5" y2="68" stroke="rgba(255,255,255,0.88)" strokeWidth="0.45" />
         <circle cx="52.5" cy="34" r="9.15" fill="none" stroke="rgba(255,255,255,0.88)" strokeWidth="0.45" />
         <circle cx="52.5" cy="34" r="0.55" fill="rgba(255,255,255,0.95)" />
+        <FlowPitchWatermark />
         <rect x="0" y="13.84" width="16.5" height="40.32" fill="none" stroke="rgba(255,255,255,0.88)" strokeWidth="0.45" />
         <rect x="0" y="24.84" width="5.5" height="18.32" fill="none" stroke="rgba(255,255,255,0.88)" strokeWidth="0.45" />
         <circle cx="11" cy="34" r="0.5" fill="rgba(255,255,255,0.95)" />

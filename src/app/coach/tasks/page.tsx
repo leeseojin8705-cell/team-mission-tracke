@@ -27,6 +27,7 @@ import {
   type EvaluationRow,
 } from "@/lib/taskScore";
 import { assignPlayerToUniqueSlot } from "@/lib/formationSlotAssignments";
+import { FlowPitchWatermark } from "@/components/FlowLogo";
 
 const categories: TaskCategory[] = ["기술", "체력", "멘탈", "전술"];
 
@@ -2374,6 +2375,7 @@ export default function CoachTasksPage() {
                       r="0.55"
                       fill="rgba(255,255,255,0.95)"
                     />
+                    <FlowPitchWatermark />
                     {/* 좌측(자기) 페널티 · 골 에어리어 */}
                     <rect
                       x="0"
