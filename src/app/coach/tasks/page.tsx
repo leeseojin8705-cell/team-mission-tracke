@@ -1795,7 +1795,7 @@ export default function CoachTasksPage() {
 
         {/* 과제 대상·제목: 먼저 고르면 아래 포메이션·선수 목록이 맞춰집니다 */}
         <section className="space-y-3 rounded-xl border border-lime-500/35 bg-white/93 p-4">
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-lime-200/95">
+          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-lime-800/95">
             <span className="h-2 w-2 rounded-full bg-lime-400" />
             과제 대상 및 제목
           </div>
@@ -1925,8 +1925,8 @@ export default function CoachTasksPage() {
               onClick={() => setHtmlTaskType("daily")}
               className={`rounded-lg border px-4 py-2 text-xs font-medium ${
                 htmlTaskType === "daily"
-                  ? "border-lime-400 bg-lime-400/20 text-lime-100"
-                  : "border-sky-300 text-slate-600"
+                  ? "border-lime-500 bg-lime-200 text-lime-900"
+                  : "border-sky-300 text-slate-700"
               }`}
             >
               매일 과제
@@ -1936,8 +1936,8 @@ export default function CoachTasksPage() {
               onClick={() => setHtmlTaskType("single")}
               className={`rounded-lg border px-4 py-2 text-xs font-medium ${
                 htmlTaskType === "single"
-                  ? "border-lime-400 bg-lime-400/20 text-lime-100"
-                  : "border-sky-300 text-slate-600"
+                  ? "border-lime-500 bg-lime-200 text-lime-900"
+                  : "border-sky-300 text-slate-700"
               }`}
             >
               단일 과제
@@ -2268,7 +2268,7 @@ export default function CoachTasksPage() {
                     : " · 프리셋: 선발=연두 슬롯 · 교체(최대 7)=주황 포인트 · 선수 탭으로 슬롯 지정"}
                 </p>
                 {formation && (
-                  <span className="max-w-[55%] truncate rounded border border-lime-500/40 bg-lime-500/10 px-2 py-0.5 text-[10px] font-semibold text-lime-200">
+                  <span className="max-w-[55%] truncate rounded border border-lime-500/40 bg-lime-500/10 px-2 py-0.5 text-[10px] font-semibold text-lime-800">
                     {formation === "custom"
                       ? formationNote.trim() || "직접 배치"
                       : formation}
@@ -2923,7 +2923,7 @@ export default function CoachTasksPage() {
                               return next;
                             });
                           }}
-                          className="rounded border border-lime-500/70 bg-lime-500/15 px-2 py-1 text-[10px] font-medium text-lime-100 hover:bg-lime-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="rounded border border-lime-500/70 bg-lime-500/15 px-2 py-1 text-[10px] font-medium text-lime-900 hover:bg-lime-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           이 명단으로 포메이션 배치
                         </button>
@@ -3094,7 +3094,7 @@ export default function CoachTasksPage() {
                         }
                         className={`rounded border px-2 py-1 text-[10px] ${
                           on
-                            ? "border-lime-400 bg-lime-400/20 text-lime-100"
+                            ? "border-lime-500 bg-lime-200 text-lime-900"
                             : "border-sky-300 text-slate-400"
                         }`}
                       >
@@ -3135,7 +3135,7 @@ export default function CoachTasksPage() {
                             )
                           }
                           className={`rounded px-1.5 py-0.5 text-[10px] ${
-                            on ? "text-lime-200" : "text-slate-400"
+                            on ? "text-lime-800" : "text-slate-400"
                           }`}
                         >
                           {label}
@@ -3533,7 +3533,7 @@ export default function CoachTasksPage() {
                           return (
                             <span
                               key={`${row.slot}-${row.playerId}`}
-                              className="rounded-full border border-lime-500/40 bg-lime-500/10 px-2 py-1 text-[11px] text-lime-100"
+                              className="rounded-full border border-lime-500/40 bg-lime-500/10 px-2 py-1 text-[11px] text-lime-900"
                             >
                               슬롯 {row.slot + 1}: {player?.name ?? row.playerId}
                               {player?.position ? ` (${player.position})` : ""}

@@ -420,7 +420,7 @@ export function TaskBlueprintEditor({
                   : " · 프리셋을 선택하면 배치가 표시됩니다"}
               </p>
               {formation ? (
-                <span className="max-w-[55%] truncate rounded border border-lime-500/40 bg-lime-500/10 px-2 py-0.5 text-[10px] font-semibold text-lime-200">
+                <span className="max-w-[55%] truncate rounded border border-lime-500/40 bg-lime-500/10 px-2 py-0.5 text-[10px] font-semibold text-lime-800">
                   {formation === "custom"
                     ? formationNote.trim() || "직접 배치"
                     : formation}

@@ -60,8 +60,8 @@ export default function CoachLayout({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // 관리자 모드일 때는 자식 페이지 fetch보다 먼저 인터셉터를 설치한다.
   useEffect(() => {
-    if (!authorized) return;
     try {
       if (window.localStorage.getItem("tmt:adminMode") !== "on") return;
     } catch {
@@ -69,7 +69,7 @@ export default function CoachLayout({ children }: { children: ReactNode }) {
     }
     syncAdminPinCookieFromSession();
     return installCoachAdminFetchInterceptor();
-  }, [authorized]);
+  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
