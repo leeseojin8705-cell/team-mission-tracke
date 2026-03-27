@@ -15,7 +15,7 @@ These defaults are optimized for AI coding agents (and humans) working on apps t
 - Use Runtime Cache for fast **regional** caching + tag invalidation (don't treat it as global KV)
 - Use Cron Jobs for schedules; cron runs in UTC and triggers your production URL via HTTP GET
 - Use Vercel Blob for uploads/media; Use Edge Config for small, globally-read config
-- If Enable Deployment Protection is enabled, use a bypass secret to directly access them
+- Public production apps: avoid requiring Vercel login for every visitor—scope Deployment Protection to Preview only or adjust Production; per-user app signup does not involve Vercel team approval. If protection stays on previews/CI, use a bypass secret to access them
 - Add OpenTelemetry via `@vercel/otel` on Node; don't expect OTEL support on the Edge runtime
 - Enable Web Analytics + Speed Insights early
 - Use AI Gateway for model routing, set AI_GATEWAY_API_KEY, using a model string (e.g. 'anthropic/claude-sonnet-4.6'), Gateway is already default in AI SDK

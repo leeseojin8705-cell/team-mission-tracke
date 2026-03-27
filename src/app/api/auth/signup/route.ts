@@ -84,6 +84,20 @@ export async function POST(req: Request) {
     );
   } catch (e) {
     console.error("[POST /api/auth/signup]", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    if (
+      /denied access|Can't reach database server|P1001|P1017|ECONNREFUSED|ETIMEDOUT|password authentication failed/i.test(
+        msg,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "데이터베이스에 연결할 수 없습니다. 서버(예: Vercel) 환경 변수 DATABASE_URL이 올바른지 확인해 주세요. 개발자 접근 권한이 아니라 DB 연결 설정 문제일 때가 많습니다.",
+        },
+        { status: 503 },
+      );
+    }
     if (e instanceof Prisma.PrismaClientKnownRequestError) {
       // P2002: Unique constraint failed
       if (e.code === "P2002") {

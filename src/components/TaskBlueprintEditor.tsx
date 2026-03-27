@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -14,6 +15,7 @@ import {
   PITCH_VB,
   type FormationSlot,
 } from "@/lib/formationLayouts";
+import { assignPlayerToUniqueSlot } from "@/lib/formationSlotAssignments";
 
 export type TaskBlueprintDraft = Partial<
   Pick<
@@ -682,10 +684,9 @@ export function TaskBlueprintEditor({
                           e.stopPropagation();
                           if (editable) return;
                           if (!pendingSlotPlayerId) return;
-                          setSlotPlayerAssignments((prev) => ({
-                            ...prev,
-                            [i]: pendingSlotPlayerId,
-                          }));
+                          setSlotPlayerAssignments((prev) =>
+                            assignPlayerToUniqueSlot(prev, i, pendingSlotPlayerId),
+                          );
                           setPendingSlotPlayerId(null);
                         }}
                         onDrop={(e) => {
@@ -695,10 +696,9 @@ export function TaskBlueprintEditor({
                             e.dataTransfer.getData("text/player-id") ||
                             e.dataTransfer.getData("text/plain");
                           if (!playerId) return;
-                          setSlotPlayerAssignments((prev) => ({
-                            ...prev,
-                            [i]: playerId,
-                          }));
+                          setSlotPlayerAssignments((prev) =>
+                            assignPlayerToUniqueSlot(prev, i, playerId),
+                          );
                           setPendingSlotPlayerId(null);
                         }}
                         onContextMenu={(e) => {
@@ -808,7 +808,7 @@ export function TaskBlueprintEditor({
                 ? ` · 배정 ${Object.keys(normalizedSlotPlayerAssignments).length}명`
                 : ""}
             </p>
-            {candidatePlayers.length > 0 && (
+            {candidatePlayers.length > 0 ? (
               <div className="border-t border-slate-700/80 bg-slate-950/85 px-2 py-2">
                 <p className="mb-1.5 text-[10px] text-slate-500">
                   대상 선수 (드래그 또는 탭 후 프리셋 슬롯 클릭 · 슬롯 우클릭 해제)
@@ -854,6 +854,19 @@ export function TaskBlueprintEditor({
                     );
                   })}
                 </div>
+              </div>
+            ) : (
+              <div className="border-t border-slate-700/80 bg-slate-950/85 px-2 py-2 text-[10px] text-slate-500">
+                <p className="mb-1">이 과제에 연결할 선수 명단이 없습니다.</p>
+                <p>
+                  <Link
+                    href="/coach/players"
+                    className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
+                  >
+                    선수 관리
+                  </Link>
+                  에서 팀에 선수를 등록한 뒤, 이 블록을 쓰는 화면을 새로고침해 주세요.
+                </p>
               </div>
             )}
           </div>

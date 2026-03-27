@@ -26,6 +26,7 @@ import {
   getTaskScores,
   type EvaluationRow,
 } from "@/lib/taskScore";
+import { assignPlayerToUniqueSlot } from "@/lib/formationSlotAssignments";
 
 const categories: TaskCategory[] = ["기술", "체력", "멘탈", "전술"];
 
@@ -232,6 +233,12 @@ export default function CoachTasksPage() {
   const [slotPlayerAssignments, setSlotPlayerAssignments] = useState<
     Record<number, string>
   >({});
+  /** true: 전체 명단에서 체크만 / false: 확정된 명단만 드래그·탭 배치 */
+  const [rosterPickMode, setRosterPickMode] = useState(true);
+  const [rosterSelectedIds, setRosterSelectedIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const skipRosterResetRef = useRef(false);
 
   /** 목업(코치-선수 과제 등록) 확장 필드 */
   type SubFocusOpt = "이해" | "응용" | "활용" | "전략" | "점검" | "평가";
@@ -403,6 +410,33 @@ export default function CoachTasksPage() {
         .map((p) => ({ id: p.id, name: p.name })),
     [players, lockedTeamId],
   );
+
+  const submitBlockedReason = useMemo(() => {
+    if (submitting) return null;
+    if (!targetId) return "과제 대상(팀 또는 선수)을 선택해 주세요.";
+    if (targetType === "team" && teamOptions.length === 0) {
+      return "등록된 팀이 없습니다. 조직·팀을 먼저 만든 뒤 다시 시도해 주세요.";
+    }
+    if (targetType === "player" && playerOptions.length === 0) {
+      return "등록된 선수가 없습니다. 선수 관리에서 선수를 등록해 주세요.";
+    }
+    if (
+      !title.trim() &&
+      !assignmentRows.some((r) => r.text.trim())
+    ) {
+      return "과제 제목을 입력하거나, 과제 줄에 최소 한 줄 이상 입력해 주세요.";
+    }
+    return null;
+  }, [
+    submitting,
+    targetId,
+    targetType,
+    teamOptions.length,
+    playerOptions.length,
+    title,
+    assignmentRows,
+  ]);
+
   const currentTargetOptions =
     targetType === "team" ? teamOptions : playerOptions;
 
@@ -428,6 +462,27 @@ export default function CoachTasksPage() {
   const assignedPlayerIds = useMemo(
     () => new Set(Object.values(slotPlayerAssignments)),
     [slotPlayerAssignments],
+  );
+
+  const formationDragPlayers = useMemo(
+    () =>
+      rosterPickMode
+        ? []
+        : entryCandidatePlayers.filter((p) => rosterSelectedIds.has(p.id)),
+    [rosterPickMode, entryCandidatePlayers, rosterSelectedIds],
+  );
+
+  const slotAllowedPlayerIds = useMemo(() => {
+    if (rosterPickMode) {
+      return new Set(entryCandidatePlayers.map((p) => p.id));
+    }
+    return rosterSelectedIds;
+  }, [rosterPickMode, entryCandidatePlayers, rosterSelectedIds]);
+
+  const entryRosterKey = useMemo(
+    () =>
+      `${currentTeamIdForTask ?? "none"}:${entryCandidatePlayers.map((p) => p.id).join(",")}`,
+    [currentTeamIdForTask, entryCandidatePlayers],
   );
 
   const displayFormationSlots = useMemo(() => {
@@ -491,7 +546,7 @@ export default function CoachTasksPage() {
   useEffect(() => {
     setSlotPlayerAssignments((prev) => {
       const maxSlot = Math.max(0, displayFormationSlots.length - 1);
-      const allowedIds = new Set(entryCandidatePlayers.map((p) => p.id));
+      const allowedIds = slotAllowedPlayerIds;
       const next: Record<number, string> = {};
       for (const [k, v] of Object.entries(prev)) {
         const idx = Number(k);
@@ -501,7 +556,22 @@ export default function CoachTasksPage() {
       }
       return next;
     });
-  }, [displayFormationSlots, entryCandidatePlayers]);
+  }, [displayFormationSlots, slotAllowedPlayerIds]);
+
+  useEffect(() => {
+    if (skipRosterResetRef.current) {
+      skipRosterResetRef.current = false;
+      return;
+    }
+    const list = entryCandidatePlayers;
+    if (list.length === 0) {
+      setRosterSelectedIds(new Set());
+      setRosterPickMode(true);
+      return;
+    }
+    setRosterSelectedIds(new Set(list.map((p) => p.id)));
+    setRosterPickMode(true);
+  }, [entryRosterKey]);
 
   const [filterType, setFilterType] = useState<TargetType | "all">("all");
   const [filterTeamId, setFilterTeamId] = useState<string>("all");
@@ -733,6 +803,19 @@ export default function CoachTasksPage() {
     setContentTags([]);
     setSelectedPlayerIds(new Set());
     setSelectedEvaluatorIds(new Set());
+    skipRosterResetRef.current = true;
+    {
+      const tid = teams[0]?.id ?? "";
+      const list = tid
+        ? players.filter(
+            (p) =>
+              p.teamId === tid &&
+              (!lockedTeamId || p.teamId === lockedTeamId),
+          )
+        : [];
+      setRosterSelectedIds(new Set(list.map((p) => p.id)));
+      setRosterPickMode(true);
+    }
     setSlotPlayerAssignments({});
     setSubFocus(null);
     setTodayStrategy("");
@@ -769,6 +852,17 @@ export default function CoachTasksPage() {
 
     if (hasAssignmentWeightOverflow) {
       setError("포지션별 과제 가중치 합이 100%를 넘었습니다. 과제 줄 가중치를 조정해 주세요.");
+      return;
+    }
+
+    const assignmentTexts = assignmentLines.map((l) => l.text);
+    if (
+      assignmentTexts.length > 1 &&
+      new Set(assignmentTexts).size !== assignmentTexts.length
+    ) {
+      setError(
+        "과제 줄에 동일한 문구가 중복되었습니다. 각 줄의 내용을 구분해 주세요.",
+      );
       return;
     }
 
@@ -825,8 +919,8 @@ export default function CoachTasksPage() {
           : undefined,
       assignmentLines: assignmentLines.length ? assignmentLines : undefined,
       players:
-        selectedPlayerIds.size > 0
-          ? Array.from(selectedPlayerIds)
+        rosterSelectedIds.size > 0
+          ? Array.from(rosterSelectedIds)
           : undefined,
       evaluators:
         selectedEvaluatorIds.size > 0
@@ -1045,6 +1139,33 @@ export default function CoachTasksPage() {
       }
     } else {
       setSlotPlayerAssignments({});
+    }
+
+    {
+      const teamIdForRoster =
+        task.teamId ??
+        (task.playerId
+          ? players.find((pl) => pl.id === task.playerId)?.teamId
+          : null);
+      const candidates = teamIdForRoster
+        ? players.filter(
+            (pl) =>
+              pl.teamId === teamIdForRoster &&
+              (!lockedTeamId || pl.teamId === lockedTeamId),
+          )
+        : [];
+      const savedPl =
+        task.details && Array.isArray((task.details as TaskDetails).players)
+          ? ((task.details as TaskDetails).players as string[])
+          : [];
+      skipRosterResetRef.current = true;
+      if (savedPl.length > 0) {
+        setRosterSelectedIds(new Set(savedPl));
+        setRosterPickMode(false);
+      } else {
+        setRosterSelectedIds(new Set(candidates.map((c) => c.id)));
+        setRosterPickMode(true);
+      }
     }
 
     if (task.teamId) {
@@ -1565,6 +1686,69 @@ export default function CoachTasksPage() {
             </button>
           </div>
         </div>
+
+        {/* 과제 대상·제목: 먼저 고르면 아래 포메이션·선수 목록이 맞춰집니다 */}
+        <section className="space-y-3 rounded-xl border border-lime-500/35 bg-slate-900/75 p-4">
+          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-lime-200/95">
+            <span className="h-2 w-2 rounded-full bg-lime-400" />
+            과제 대상 및 제목
+          </div>
+          <p className="text-[10px] text-slate-500">
+            팀 또는 선수를 먼저 지정한 뒤 전술판에 선수를 배치할 수 있습니다. 선수 이름은 여기서 직접 입력하지 않고,{" "}
+            <Link
+              href="/coach/players"
+              className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
+            >
+              선수 관리
+            </Link>
+            에서 등록한 명단을 불러옵니다.
+          </p>
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),minmax(0,1fr),minmax(0,1.2fr)]">
+            <div>
+              <label className="mb-1 block text-xs text-slate-300">대상 종류</label>
+              <select
+                value={targetType}
+                onChange={(e) => {
+                  const value = e.target.value as TargetType;
+                  setTargetType(value);
+                  setTargetId(
+                    value === "team"
+                      ? teamOptions[0]?.id ?? ""
+                      : playerOptions[0]?.id ?? "",
+                  );
+                }}
+                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+              >
+                <option value="team">팀</option>
+                <option value="player">선수</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-300">대상 선택</label>
+              <select
+                value={targetId}
+                onChange={(e) => setTargetId(e.target.value)}
+                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                disabled={currentTargetOptions.length === 0}
+              >
+                {currentTargetOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-300">과제 제목</label>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                placeholder="목록에 표시될 제목 (비우면 첫 과제 줄 사용)"
+              />
+            </div>
+          </div>
+        </section>
 
         {/* ① 반복 / 단일 */}
         <section className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
@@ -2208,26 +2392,26 @@ export default function CoachTasksPage() {
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (editable) return;
+                            if (editable || rosterPickMode) return;
                             if (selectedPlayerIds.size !== 1) return;
                             const [onlyId] = Array.from(selectedPlayerIds);
-                            if (!onlyId) return;
-                            setSlotPlayerAssignments((prev) => ({
-                              ...prev,
-                              [i]: onlyId,
-                            }));
+                            if (!onlyId || !rosterSelectedIds.has(onlyId)) return;
+                            setSlotPlayerAssignments((prev) =>
+                              assignPlayerToUniqueSlot(prev, i, onlyId),
+                            );
                           }}
                           onDrop={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
+                            if (rosterPickMode) return;
                             const playerId =
                               e.dataTransfer.getData("text/player-id") ||
                               e.dataTransfer.getData("text/plain");
-                            if (!playerId) return;
-                            setSlotPlayerAssignments((prev) => ({
-                              ...prev,
-                              [i]: playerId,
-                            }));
+                            if (!playerId || !rosterSelectedIds.has(playerId))
+                              return;
+                            setSlotPlayerAssignments((prev) =>
+                              assignPlayerToUniqueSlot(prev, i, playerId),
+                            );
                             setSelectedPlayerIds((prev) => {
                               const n = new Set(prev);
                               n.add(playerId);
@@ -2334,68 +2518,177 @@ export default function CoachTasksPage() {
                   </div>
                 </div>
                 <div className="border-t border-slate-700/80 bg-slate-950/85 px-2 py-2">
-                  <p className="mb-1.5 text-[10px] text-slate-500">
-                    대상 선수 (탭 선택 · 드래그 또는 선수 1명만 선택 후 슬롯 클릭)
-                  </p>
-                  <div className="flex max-h-[4.5rem] flex-wrap gap-1 overflow-y-auto pr-0.5">
-                    {entryCandidatePlayers.length === 0 ? (
-                      <span className="text-[10px] text-slate-500">
-                        팀/대상을 먼저 선택하면 선수가 표시됩니다.
-                      </span>
-                    ) : (
-                      entryCandidatePlayers.slice(0, 18).map((p) => {
-                        const on = selectedPlayerIds.has(p.id);
-                        const toggle = () =>
-                          setSelectedPlayerIds((prev) => {
-                            const n = new Set(prev);
-                            if (n.has(p.id)) n.delete(p.id);
-                            else n.add(p.id);
-                            return n;
-                          });
-                        return (
-                          <div
-                            key={p.id}
-                            role="button"
-                            tabIndex={0}
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData("text/plain", p.id);
-                              e.dataTransfer.setData("text/player-id", p.id);
-                              e.dataTransfer.effectAllowed = "copyMove";
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                toggle();
+                  {entryCandidatePlayers.length === 0 ? (
+                    <div className="space-y-1 text-[10px] text-slate-500">
+                      <p>
+                        {currentTeamIdForTask
+                          ? "이 팀에 등록된 선수가 없습니다."
+                          : "위에서 과제 대상(팀·선수)을 먼저 선택하면 해당 팀 선수가 표시됩니다."}
+                      </p>
+                      <p>
+                        <Link
+                          href="/coach/players"
+                          className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
+                        >
+                          선수 관리
+                        </Link>
+                        에서 선수를 등록한 뒤 다시 이 화면을 열어 주세요.
+                      </p>
+                    </div>
+                  ) : rosterPickMode ? (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-slate-500">
+                        팀 전체 명단에서 이번 과제에 넣을 선수를 체크한 뒤, 명단을
+                        확정하면 필드에 드래그할 수 있습니다.
+                      </p>
+                      <div className="max-h-52 overflow-y-auto rounded border border-slate-700/90 bg-slate-950/80 px-2 py-2">
+                        <ul className="space-y-1.5">
+                          {entryCandidatePlayers.map((p) => (
+                            <li key={p.id}>
+                              <label className="flex cursor-pointer items-center gap-2 text-[11px] text-slate-200">
+                                <input
+                                  type="checkbox"
+                                  className="rounded border-slate-600"
+                                  checked={rosterSelectedIds.has(p.id)}
+                                  onChange={() => {
+                                    setRosterSelectedIds((prev) => {
+                                      const n = new Set(prev);
+                                      if (n.has(p.id)) n.delete(p.id);
+                                      else n.add(p.id);
+                                      return n;
+                                    });
+                                  }}
+                                />
+                                <span>{p.name}</span>
+                                {p.position ? (
+                                  <span className="text-[10px] text-slate-500">
+                                    {p.position}
+                                  </span>
+                                ) : null}
+                              </label>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setRosterSelectedIds(
+                              new Set(
+                                entryCandidatePlayers.map((p) => p.id),
+                              ),
+                            )
+                          }
+                          className="rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-200 hover:bg-slate-800"
+                        >
+                          전체 선택
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRosterSelectedIds(new Set())}
+                          className="rounded border border-slate-600 px-2 py-1 text-[10px] text-slate-200 hover:bg-slate-800"
+                        >
+                          전체 해제
+                        </button>
+                        <button
+                          type="button"
+                          disabled={rosterSelectedIds.size === 0}
+                          onClick={() => {
+                            setSelectedPlayerIds(new Set(rosterSelectedIds));
+                            setRosterPickMode(false);
+                            setSlotPlayerAssignments((prev) => {
+                              const allowed = rosterSelectedIds;
+                              const next = { ...prev };
+                              for (const [k, v] of Object.entries(next)) {
+                                if (!allowed.has(v)) delete next[Number(k)];
                               }
-                            }}
-                            onClick={toggle}
-                            className={`cursor-grab rounded-md border px-1.5 py-0.5 text-[10px] transition active:cursor-grabbing ${
-                              on
-                                ? "border-lime-400 bg-lime-400 font-medium text-slate-950 shadow-sm shadow-lime-500/20"
-                                : "border-slate-600/80 bg-slate-900/95 text-slate-200 hover:border-slate-500"
-                            }`}
-                          >
-                            {p.name}
-                            {assignedPlayerIds.has(p.id) && (
-                              <span className="ml-1 text-[9px] text-amber-300">●</span>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
+                              return next;
+                            });
+                          }}
+                          className="rounded border border-lime-500/70 bg-lime-500/15 px-2 py-1 text-[10px] font-medium text-lime-100 hover:bg-lime-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          이 명단으로 포메이션 배치
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[10px] text-slate-500">
+                          확정 명단 ({formationDragPlayers.length}명) — 탭 선택 ·
+                          드래그 또는 선수 1명만 선택 후 슬롯 클릭
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setRosterPickMode(true)}
+                          className="shrink-0 rounded border border-slate-600 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                        >
+                          명단 다시 고르기
+                        </button>
+                      </div>
+                      <div className="flex max-h-[6rem] flex-wrap gap-1 overflow-y-auto pr-0.5">
+                        {formationDragPlayers.map((p) => {
+                          const on = selectedPlayerIds.has(p.id);
+                          const toggle = () =>
+                            setSelectedPlayerIds((prev) => {
+                              const n = new Set(prev);
+                              if (n.has(p.id)) n.delete(p.id);
+                              else n.add(p.id);
+                              return n;
+                            });
+                          return (
+                            <div
+                              key={p.id}
+                              role="button"
+                              tabIndex={0}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData("text/plain", p.id);
+                                e.dataTransfer.setData(
+                                  "text/player-id",
+                                  p.id,
+                                );
+                                e.dataTransfer.effectAllowed = "copyMove";
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  toggle();
+                                }
+                              }}
+                              onClick={toggle}
+                              className={`cursor-grab rounded-md border px-1.5 py-0.5 text-[10px] transition active:cursor-grabbing ${
+                                on
+                                  ? "border-lime-400 bg-lime-400 font-medium text-slate-950 shadow-sm shadow-lime-500/20"
+                                  : "border-slate-600/80 bg-slate-900/95 text-slate-200 hover:border-slate-500"
+                              }`}
+                            >
+                              {p.name}
+                              {assignedPlayerIds.has(p.id) && (
+                                <span className="ml-1 text-[9px] text-amber-300">
+                                  ●
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <p className="text-[10px] text-slate-500">
-                선택 {selectedPlayerIds.size}명
+                {rosterPickMode
+                  ? `명단 선택 중 (체크 ${rosterSelectedIds.size}명 / 전체 ${entryCandidatePlayers.length}명)`
+                  : `탭 선택 ${selectedPlayerIds.size}명 · 확정 명단 ${formationDragPlayers.length}명`}
                 {displayFormationSlots.length > 0
                   ? ` · 필드 ${displayFormationSlots.length}포지션 표시`
                   : " · 프리셋 또는 직접 배치를 선택하면 표시됩니다"}
                 {Object.keys(slotPlayerAssignments).length > 0
                   ? ` · 배정 ${Object.keys(slotPlayerAssignments).length}명`
                   : ""}
-                {" · 슬롯 우클릭으로 배정 해제"}
+                {!rosterPickMode ? " · 슬롯 우클릭으로 배정 해제" : ""}
               </p>
               {Object.keys(slotPlayerAssignments).length > 0 && (
                 <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
@@ -2425,14 +2718,21 @@ export default function CoachTasksPage() {
               + 줄 추가
             </button>
           </div>
-          <div className="mb-2 rounded-lg border border-slate-700/80 bg-slate-950/60 px-2 py-1.5 text-[10px] text-slate-400">
-            FW {assignmentWeightTotals.FW}% / MF {assignmentWeightTotals.MF}% / DF{" "}
-            {assignmentWeightTotals.DF}% / GK {assignmentWeightTotals.GK}%
-            {hasAssignmentWeightOverflow && (
-              <span className="ml-2 text-rose-300">
-                포지션별 합계는 100%를 넘을 수 없습니다.
-              </span>
-            )}
+          <div className="mb-2 space-y-1 rounded-lg border border-slate-700/80 bg-slate-950/60 px-2 py-1.5 text-[10px] text-slate-400">
+            <p>
+              FW {assignmentWeightTotals.FW}% / MF {assignmentWeightTotals.MF}% / DF{" "}
+              {assignmentWeightTotals.DF}% / GK {assignmentWeightTotals.GK}%
+              {hasAssignmentWeightOverflow && (
+                <span className="ml-2 text-rose-300">
+                  포지션별 합계는 100%를 넘을 수 없습니다.
+                </span>
+              )}
+            </p>
+            <p className="text-slate-500">
+              비율(%) 입력란은{" "}
+              <span className="text-slate-300">FW·MF·DF·GK</span> 칸을 먼저 켠 뒤에만
+              활성화됩니다. 꺼져 있으면 해당 포지션에 과제 줄이 없다는 뜻입니다.
+            </p>
           </div>
           <div className="space-y-3">
             {assignmentRows.map((row, idx) => (
@@ -2566,57 +2866,6 @@ export default function CoachTasksPage() {
           </div>
         </section>
 
-        {/* ② 과제 기본 정보 (분류는 상단 유형·초점과 연동) */}
-        <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            과제 기본 정보
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-slate-300">과제 제목</label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
-              placeholder="목록에 표시될 제목 (비우면 첫 과제 줄 사용)"
-            />
-          </div>
-
-          <div className="rounded-lg border border-slate-700/80 bg-slate-950/50 p-3">
-            <p className="text-[11px] text-slate-400">
-              <strong className="text-slate-300">유형·초점</strong>은 복수 선택,
-              <strong className="text-slate-300"> 세부 초점</strong>은 하나만 선택합니다.
-            </p>
-            {htmlCategory ? (
-              <p className="mt-2 text-xs text-slate-200">
-                현재 유형: {taskTypeSelections.join(" · ") || "—"}
-                {contentTags.length > 0
-                  ? ` · 초점: ${contentTags
-                      .map((id) =>
-                        htmlCategory === "selfcare"
-                          ? (
-                              {
-                                routine: "루틴",
-                                nutrition: "식단",
-                                sleep: "수면",
-                                recovery: "회복",
-                              } as Record<string, string>
-                            )[id] ?? id
-                          : focusAxisOptions.find((o) => o.id === id)?.label ??
-                            id,
-                      )
-                      .join(", ")}`
-                  : " · 초점: 미선택"}
-                {subFocus ? ` · 세부 초점: ${subFocus}` : ""}
-              </p>
-            ) : (
-              <p className="mt-2 text-[11px] text-amber-200/90">
-                상단에서 유형을 먼저 선택해 주세요.
-              </p>
-            )}
-          </div>
-        </section>
-
         {/* ③ 일정: 과제 일정 + 공개 일정(한 박스) */}
         <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
           <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
@@ -2724,52 +2973,6 @@ export default function CoachTasksPage() {
           )}
         </section>
 
-        {/* ⑦ 대상 (팀 / 선수) */}
-        <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/80 p-4">
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            대상 지정
-          </div>
-          <div className="grid gap-3 md:grid-cols-[1fr,2fr]">
-            <div>
-              <label className="mb-1 block text-xs text-slate-300">대상 종류</label>
-              <select
-                value={targetType}
-                onChange={(e) => {
-                  const value = e.target.value as TargetType;
-                  setTargetType(value);
-                  setTargetId(
-                    value === "team"
-                      ? teamOptions[0]?.id ?? ""
-                      : playerOptions[0]?.id ?? "",
-                  );
-                }}
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
-              >
-                <option value="team">팀</option>
-                <option value="player">선수</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-300">
-                대상 선택
-              </label>
-              <select
-                value={targetId}
-                onChange={(e) => setTargetId(e.target.value)}
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
-                disabled={currentTargetOptions.length === 0}
-              >
-                {currentTargetOptions.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </section>
-
         </div>
 
         {/* 하단 버튼 */}
@@ -2788,24 +2991,30 @@ export default function CoachTasksPage() {
           >
             {editingId ? "취소" : "초기화"}
           </button>
-          <button
-            type="submit"
-            disabled={
-              submitting ||
-              (!title.trim() &&
-                !assignmentRows.some((r) => r.text.trim())) ||
-              !targetId ||
-              (targetType === "team" && teamOptions.length === 0) ||
-              (targetType === "player" && playerOptions.length === 0)
-            }
-            className="min-w-[140px] rounded-lg bg-slate-950 px-6 py-2.5 text-sm font-bold text-white shadow-inner ring-1 ring-slate-600 hover:bg-black disabled:opacity-50"
-          >
-            {submitting
-              ? "저장 중..."
-              : editingId
-                ? "수정 완료"
-                : "작성 완료"}
-          </button>
+          <div className="flex w-full flex-col items-end gap-2">
+            {(submitBlockedReason || hasAssignmentWeightOverflow) && (
+              <p className="max-w-md text-right text-[11px] text-amber-200/90">
+                {hasAssignmentWeightOverflow
+                  ? "포지션별 과제 가중치 합이 100%를 넘었습니다. 줄의 비율을 조정한 뒤 저장할 수 있습니다."
+                  : submitBlockedReason}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={
+                submitting ||
+                !!submitBlockedReason ||
+                hasAssignmentWeightOverflow
+              }
+              className="min-w-[140px] rounded-lg bg-slate-950 px-6 py-2.5 text-sm font-bold text-white shadow-inner ring-1 ring-slate-600 hover:bg-black disabled:opacity-50"
+            >
+              {submitting
+                ? "저장 중..."
+                : editingId
+                  ? "수정 완료"
+                  : "작성 완료"}
+            </button>
+          </div>
         </div>
       </form>
 

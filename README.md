@@ -128,5 +128,13 @@ npx prisma db push
 3. 프로덕션 환경에서 `NODE_ENV=production` 으로 실행 (`npm run build && npm run start`)
 4. 백업이 필요한 경우 `dev.db` 파일을 정기적으로 스냅샷/백업
 
+### Vercel로 공개 서비스할 때 (회원가입·일반 사용자)
+
+일반 사용자가 **회원가입할 때마다 Vercel 로그인·승인**이 필요해지면, 앱 코드가 아니라 **배포 접근 제한** 때문인 경우가 많습니다. 사용자 등록 한 번마다 Vercel에서 개발자 승인이 오가는 구조가 되어서는 안 됩니다.
+
+1. Vercel 대시보드 → 해당 프로젝트 → **Settings** → **Deployment Protection**
+2. **Production** 은 누구나 접속할 수 있도록 보호 수준을 조정하거나, 배포 보호를 **Preview(미리보기)만** 적용하는 방식을 검토합니다.
+3. **Settings** → **Environment Variables** 에 `DATABASE_URL`, `SESSION_SECRET` 등을 프로덕션에 설정합니다 (`vercel env pull` 로 로컬과 맞출 수 있음).
+
 이 정도 설정으로, 로컬 개발 환경과 단일 서버 배포 환경에서 안정적으로 서비스를 구동할 수 있습니다.
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -24,14 +25,36 @@ export default function SignupPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, organizationName, season }),
       });
-      const data = await res.json().catch(() => ({}));
+      const ct = res.headers.get("content-type") ?? "";
+      if (!ct.includes("application/json")) {
+        setError(
+          "서버에 연결되지 않았습니다. 사이트 주소와 호스팅 설정을 확인해 주세요.",
+        );
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+      };
       if (!res.ok) {
         setError(data.error ?? "회원가입에 실패했습니다.");
         return;
       }
+
+      const loginRes = await fetch("/api/auth/login-coach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+        }),
+      });
+      if (loginRes.ok) {
+        router.replace("/coach");
+        return;
+      }
       setDone(true);
     } catch {
-      setError("회원가입 처리 중 오류가 발생했습니다.");
+      setError("회원가입 처리 중 오류가 발생했습니다. 네트워크를 확인해 주세요.");
     } finally {
       setLoading(false);
     }
@@ -46,7 +69,8 @@ export default function SignupPage() {
           </p>
           <h1 className="text-xl font-bold">구단 / 팀 소유자 회원가입</h1>
           <p className="text-sm text-slate-400">
-            이메일과 비밀번호로 계정을 만들고, 첫 번째 팀을 생성합니다.
+            가입이 완료되면 바로 코치 화면으로 이동합니다. 테스트용으로 만든 팀은 홈의
+            관리자 모드에서 삭제할 수 있습니다.
           </p>
         </header>
 
@@ -97,8 +121,11 @@ export default function SignupPage() {
           {error && <p className="text-sm text-rose-300">{error}</p>}
           {done && (
             <p className="text-sm text-emerald-300">
-              조직과 팀이 생성되었습니다. 추후 코치용 로그인/관리 화면에서 이 계정으로
-              사용할 수 있습니다.
+              조직과 팀이 생성되었습니다.{" "}
+              <Link href="/login/coach" className="underline underline-offset-2">
+                코치 로그인
+              </Link>
+              에서 같은 이메일로 로그인해 주세요.
             </p>
           )}
 
@@ -107,7 +134,7 @@ export default function SignupPage() {
             disabled={loading}
             className="w-full rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
           >
-            {loading ? "생성 중…" : "조직 생성"}
+            {loading ? "처리 중…" : "가입하고 시작하기"}
           </button>
         </form>
       </div>
