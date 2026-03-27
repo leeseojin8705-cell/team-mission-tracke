@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { Player, StatCategory, StatDefinition, Team } from "@/lib/types";
 import { DEFAULT_STAT_DEFINITION, isMeasurementCategory } from "@/lib/statDefinition";
@@ -69,6 +70,8 @@ function MiniRadar({
 }
 
 export default function CoachHome() {
+  const searchParams = useSearchParams();
+  const contextTeamId = searchParams.get("teamId");
   const [teamCount, setTeamCount] = useState<number | null>(null);
   const [playerCount, setPlayerCount] = useState<number | null>(null);
   const [scheduleCount, setScheduleCount] = useState<number | null>(null);
@@ -116,6 +119,12 @@ export default function CoachHome() {
   }, [upcomingSchedules, selectedTeamId]);
 
   useEffect(() => {
+    if (contextTeamId && selectedTeamId === "all") {
+      setSelectedTeamId(contextTeamId);
+    }
+  }, [contextTeamId, selectedTeamId]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function load() {
@@ -123,13 +132,17 @@ export default function CoachHome() {
         setLoading(true);
         setError(null);
 
+        const activeTeamId = selectedTeamId !== "all" ? selectedTeamId : contextTeamId;
+        const teamQs = activeTeamId
+          ? `?teamId=${encodeURIComponent(activeTeamId)}`
+          : "";
         const [teamsRes, playersRes, schedulesRes, tasksRes, annRes, analysesRes] = await Promise.all([
           fetch("/api/teams"),
           fetch("/api/players"),
           fetch("/api/schedules"),
           fetch("/api/tasks"),
-          fetch("/api/announcements"),
-          fetch("/api/analyses"),
+          fetch(`/api/announcements${teamQs}`),
+          fetch(`/api/analyses${teamQs}`),
         ]);
 
         const teams = teamsRes.ok ? await teamsRes.json() : [];
@@ -143,15 +156,28 @@ export default function CoachHome() {
         if (!cancelled) {
           const teamList: Team[] = Array.isArray(teams) ? teams : [];
           const playerList: Player[] = Array.isArray(playersData) ? playersData : [];
-          setTeamCount(teamList.length);
-          setPlayerCount(playerList.length);
-          setScheduleCount(Array.isArray(schedules) ? schedules.length : 0);
-          setTaskCount(Array.isArray(tasks) ? tasks.length : 0);
+          const scopedTeams = activeTeamId
+            ? teamList.filter((t) => t.id === activeTeamId)
+            : teamList;
+          const scopedPlayers = activeTeamId
+            ? playerList.filter((p) => p.teamId === activeTeamId)
+            : playerList;
+          const schedulesList = Array.isArray(schedules) ? schedules : [];
+          const scopedSchedules = activeTeamId
+            ? schedulesList.filter((s: { teamId?: string }) => s.teamId === activeTeamId)
+            : schedulesList;
+          const tasksList = Array.isArray(tasks) ? tasks : [];
+          const scopedTasks = activeTeamId
+            ? tasksList.filter((t: { teamId?: string | null }) => t.teamId === activeTeamId)
+            : tasksList;
+          setTeamCount(scopedTeams.length);
+          setPlayerCount(scopedPlayers.length);
+          setScheduleCount(scopedSchedules.length);
+          setTaskCount(scopedTasks.length);
           setAnnouncementCount(annRes.ok ? (await annRes.json()).length : 0);
           setAnalysisCount(analysesRes.ok ? (await analysesRes.json()).length : 0);
-          setTeamsForStats(teamList);
-          const scheduleList = Array.isArray(schedules) ? schedules : [];
-          const withDate = scheduleList
+          setTeamsForStats(scopedTeams);
+          const withDate = scopedSchedules
             .map((s: { id: string; title?: string; date?: string | Date; teamId?: string }) => ({
               id: s.id,
               title: s.title ?? "—",
@@ -171,7 +197,7 @@ export default function CoachHome() {
           }
         }
 
-        const summaryRes = await fetch("/api/dashboard/summary");
+        const summaryRes = await fetch(`/api/dashboard/summary${teamQs}`);
         if (summaryRes.ok) {
           const summary = await summaryRes.json();
           if (!cancelled) {
@@ -217,7 +243,7 @@ export default function CoachHome() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [contextTeamId, selectedTeamId]);
 
   useEffect(() => {
     function readAdminMode() {

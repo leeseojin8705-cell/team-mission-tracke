@@ -86,6 +86,34 @@ function buildDashboardSummary(
 
 /** GET /api/tasks 와 동일한 범위로 과제만 집계 (코치는 접근 가능한 팀만) */
 export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const teamIdParam = searchParams.get("teamId");
+
+  const filterByTeam = (
+    input: {
+      teamTaskCounts: Record<string, { total: number; completed: number; name: string }>;
+      playerTaskCounts: Record<
+        string,
+        {
+          total: number;
+          completed: number;
+          name: string;
+          teamName: string | null;
+          teamId: string | null;
+        }
+      >;
+    },
+  ) => {
+    if (!teamIdParam) return input;
+    const teamTaskCounts = input.teamTaskCounts[teamIdParam]
+      ? { [teamIdParam]: input.teamTaskCounts[teamIdParam] }
+      : {};
+    const playerTaskCounts = Object.fromEntries(
+      Object.entries(input.playerTaskCounts).filter(([, v]) => v.teamId === teamIdParam),
+    );
+    return { teamTaskCounts, playerTaskCounts };
+  };
+
   if (isAdminApiRequest(req)) {
     const [teams, players, tasks, progresses] = await Promise.all([
       prisma.team.findMany(),
@@ -93,7 +121,9 @@ export async function GET(req: Request) {
       prisma.task.findMany(),
       prisma.taskProgress.findMany(),
     ]);
-    return NextResponse.json(buildDashboardSummary(teams, players, tasks, progresses));
+    return NextResponse.json(
+      filterByTeam(buildDashboardSummary(teams, players, tasks, progresses)),
+    );
   }
 
   const session = await getSession();
@@ -110,6 +140,9 @@ export async function GET(req: Request) {
       where: { id: session.playerId },
       select: { teamId: true },
     });
+    if (teamIdParam && player?.teamId !== teamIdParam) {
+      return NextResponse.json({ teamTaskCounts: {}, playerTaskCounts: {} });
+    }
     if (!player?.teamId) {
       taskWhere = { playerId: session.playerId };
       teamWhere = { id: { in: [] } };
@@ -125,6 +158,9 @@ export async function GET(req: Request) {
     playerWhere = { id: session.playerId };
   } else if (session.role === "coach" || session.role === "owner") {
     const ids = await getAccessibleTeamIds(session);
+    if (teamIdParam && !ids.includes(teamIdParam)) {
+      return NextResponse.json({ teamTaskCounts: {}, playerTaskCounts: {} });
+    }
     if (ids.length === 0) {
       taskWhere = { teamId: null };
       teamWhere = { id: { in: [] } };
@@ -147,5 +183,7 @@ export async function GET(req: Request) {
     prisma.taskProgress.findMany(),
   ]);
 
-  return NextResponse.json(buildDashboardSummary(teams, players, tasks, progresses));
+  return NextResponse.json(
+    filterByTeam(buildDashboardSummary(teams, players, tasks, progresses)),
+  );
 }
