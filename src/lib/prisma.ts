@@ -36,6 +36,11 @@ const isLikelyLocalPostgres =
   /localhost|127\.0\.0\.1/.test(sanitizedConnectionString) ||
   /localhost|127\.0\.0\.1/.test(connectionString);
 
+/** Supabase 직접/풀러 호스트 — Vercel 등에서 기본 CA로 체인 검증 시 "self-signed certificate in certificate chain" 이 나는 경우가 있어 완화 */
+const isSupabasePostgres =
+  /supabase\.co|pooler\.supabase\.com/i.test(sanitizedConnectionString) ||
+  /supabase\.co|pooler\.supabase\.com/i.test(connectionString);
+
 const sslCaRaw = process.env.SUPABASE_SSL_CA;
 const sslCa = (() => {
   if (!sslCaRaw) return undefined;
@@ -66,17 +71,21 @@ if (process.env.NODE_ENV === "production") {
 
 /**
  * Supabase/Neon 등은 TLS 필수. dev에서 sslmode를 URL에서 뺐으므로 Pool에 명시해야 함.
- * - production: CA 있으면 검증, 없으면 호스트 검증
- * - dev + 원격: CA 있으면 사용, 없으면 rejectUnauthorized: false (로컬 개발 편의)
+ * - Supabase + CA 없음: 연결은 TLS 유지, 체인 검증만 완화 (풀러·서버리스에서 흔함)
+ * - CA 있으면: 검증
+ * - 기타 원격 production: 호스트 검증
+ * - dev + 원격: CA 있으면 사용, 없으면 rejectUnauthorized: false
  * - dev + localhost: SSL 끔
  */
 const sslConfig = isLikelyLocalPostgres
   ? undefined
   : sslCa
     ? { ca: sslCa, rejectUnauthorized: true }
-    : process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: true }
-      : { rejectUnauthorized: false };
+    : isSupabasePostgres
+      ? { rejectUnauthorized: false }
+      : process.env.NODE_ENV === "production"
+        ? { rejectUnauthorized: true }
+        : { rejectUnauthorized: false };
 
 const pool = new Pool({
   connectionString: sanitizedConnectionString,
