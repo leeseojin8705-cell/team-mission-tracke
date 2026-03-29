@@ -33,6 +33,53 @@ const categories: TaskCategory[] = ["기술", "체력", "멘탈", "전술"];
 
 const MAX_SUB_POINTS = 7;
 
+function toDatetimeLocalValue(isoOrDate: string | Date | null | undefined): string {
+  if (!isoOrDate) return "";
+  const d = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromDatetimeLocalValue(v: string): string | undefined {
+  const t = v?.trim();
+  if (!t) return undefined;
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
+/** 과제 줄 중복: 동일 문구 + 동일 적용 범위(저장 시 scopes 와 동일한 기준) */
+function hasDuplicateAssignmentRows(
+  rows: {
+    text: string;
+    common: boolean;
+    fw: boolean;
+    mf: boolean;
+    df: boolean;
+    gk: boolean;
+    individual: boolean;
+  }[],
+): boolean {
+  const keys: string[] = [];
+  for (const r of rows) {
+    const t = r.text.trim();
+    if (!t) continue;
+    const scopes = [
+      r.common && "공통과제",
+      r.fw && "FW",
+      r.mf && "MF",
+      r.df && "DF",
+      r.gk && "GK",
+      r.individual && "개인과제",
+    ]
+      .filter(Boolean)
+      .sort();
+    keys.push(`${t.toLowerCase()}::${scopes.join("|")}`);
+  }
+  return keys.length > 1 && new Set(keys).size !== keys.length;
+}
+
 type TargetType = "team" | "player";
 type HtmlTaskType = "daily" | "single";
 type HtmlCategory = "selfcare" | "practice" | "practice_game" | "official" | null;
@@ -216,7 +263,9 @@ export default function CoachTasksPage() {
   // 공통 필드 (DB에 실제로 저장되는 값)
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<TaskCategory>("기술");
-  const [dueDate, setDueDate] = useState("");
+  /** 측정 일정: datetime-local 문자열 — details.publicAt / Task.dueDate(마감) */
+  const [measurementPublicAt, setMeasurementPublicAt] = useState("");
+  const [measurementDeadlineAt, setMeasurementDeadlineAt] = useState("");
   const [targetType, setTargetType] = useState<TargetType>("team");
   const [targetId, setTargetId] = useState<string>("");
   /** 선수 과제: 동일 내용으로 여러 명에게 일괄 생성 */
@@ -448,6 +497,9 @@ export default function CoachTasksPage() {
       !assignmentRows.some((r) => r.text.trim())
     ) {
       return "과제 제목을 입력하거나, 과제 줄에 최소 한 줄 이상 입력해 주세요.";
+    }
+    if (hasDuplicateAssignmentRows(assignmentRows)) {
+      return "내용과 적용 범위(공통·포지션·개인)가 동일한 과제 줄이 중복되었습니다. 한 줄로 합치거나 구분해 주세요.";
     }
     return null;
   }, [
@@ -837,7 +889,8 @@ export default function CoachTasksPage() {
     setEditingId(null);
     setTitle("");
     setCategory("기술");
-    setDueDate("");
+    setMeasurementPublicAt("");
+    setMeasurementDeadlineAt("");
     setTargetType("team");
     setTargetId(teams[0]?.id ?? "");
     setHtmlTaskType("daily");
@@ -908,13 +961,16 @@ export default function CoachTasksPage() {
       return;
     }
 
-    const assignmentTexts = assignmentLines.map((l) => l.text);
+    const assignmentFingerprints = assignmentLines.map((l) => {
+      const scopes = [...l.scopes].sort();
+      return `${l.text.toLowerCase()}::${scopes.join("|")}`;
+    });
     if (
-      assignmentTexts.length > 1 &&
-      new Set(assignmentTexts).size !== assignmentTexts.length
+      assignmentFingerprints.length > 1 &&
+      new Set(assignmentFingerprints).size !== assignmentFingerprints.length
     ) {
       setError(
-        "과제 줄에 동일한 문구가 중복되었습니다. 각 줄의 내용을 구분해 주세요.",
+        "내용과 적용 범위(공통·포지션·개인)가 동일한 과제 줄이 두 줄 이상 있습니다. 한 줄로 합치거나 구분해 주세요.",
       );
       return;
     }
@@ -941,13 +997,16 @@ export default function CoachTasksPage() {
 
     // HTML 과제 유형/분류 → 기존 Task 필드로 매핑
     const mappedCategory = mapHtmlCategoryToTaskCategory(htmlCategory);
-    const mappedDueDate =
-      htmlTaskType === "single"
-        ? singleDate || dueDate
-        : dailyEnd || dueDate;
+    const measurementDeadlineIso = fromDatetimeLocalValue(measurementDeadlineAt);
+    const measurementPublicIso = fromDatetimeLocalValue(measurementPublicAt);
+    const legacyDateOnly =
+      htmlTaskType === "single" ? singleDate : dailyEnd;
+    let finalDueDate: string | undefined = measurementDeadlineIso;
+    if (!finalDueDate && legacyDateOnly) {
+      finalDueDate = new Date(`${legacyDateOnly}T23:59:59`).toISOString();
+    }
 
     const finalCategory = mappedCategory ?? category;
-    const finalDueDate = mappedDueDate || undefined;
 
     const details = {
       htmlTaskType,
@@ -963,6 +1022,7 @@ export default function CoachTasksPage() {
       weekdays: weekdaySet.size ? Array.from(weekdaySet) : undefined,
       timeStart: timeStart || undefined,
       timeEnd: timeEnd || undefined,
+      publicAt: measurementPublicIso || undefined,
       subFocus: subFocus || undefined,
       todayStrategy: todayStrategy.trim() || undefined,
       formation: formation.trim() || undefined,
@@ -1085,8 +1145,15 @@ export default function CoachTasksPage() {
     else setEditingId(null);
     setTitle(task.title);
     setCategory(task.category);
-    setDueDate(
-      task.dueDate && typeof task.dueDate === "string" ? task.dueDate : "",
+    setMeasurementDeadlineAt(
+      task.dueDate ? toDatetimeLocalValue(task.dueDate as string) : "",
+    );
+    setMeasurementPublicAt(
+      task.details &&
+        typeof (task.details as TaskDetails).publicAt === "string" &&
+        (task.details as TaskDetails).publicAt
+        ? toDatetimeLocalValue((task.details as TaskDetails).publicAt as string)
+        : "",
     );
 
     if (task.details) {
@@ -1644,7 +1711,10 @@ export default function CoachTasksPage() {
                   </span>
                   {task.dueDate && (
                     <span className="text-[10px] text-slate-400">
-                      마감 {String(task.dueDate).slice(0, 10)}
+                      마감{" "}
+                      {String(task.dueDate).includes("T")
+                        ? String(task.dueDate).slice(0, 16).replace("T", " ")
+                        : String(task.dueDate).slice(0, 10)}
                     </span>
                   )}
                 </button>
@@ -1775,20 +1845,20 @@ export default function CoachTasksPage() {
         <div className="space-y-4 p-4 md:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-200/90 pb-3">
           <span className="text-xs font-semibold text-slate-600">과제 등록</span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowLoadFromTaskModal(true)}
+              className="rounded-lg border border-sky-400 bg-white px-3 py-1.5 text-[11px] font-medium text-sky-800 shadow-sm hover:bg-sky-50"
+            >
+              이전 과제에서 불러오기
+            </button>
             <button
               type="button"
               onClick={resetForm}
               className="rounded-lg border border-sky-300 bg-sky-200 px-3 py-1.5 text-[11px] text-slate-700 hover:bg-sky-200"
             >
               새로 작성
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowLoadFromTaskModal(true)}
-              className="rounded-lg border border-sky-300 bg-sky-200 px-3 py-1.5 text-[11px] text-slate-700 hover:bg-sky-200"
-            >
-              불러오기
             </button>
           </div>
         </div>
@@ -2028,7 +2098,7 @@ export default function CoachTasksPage() {
           )}
         </section>
 
-        {/* Row3 세부 초점: 단일 선택(한 번에 하나만) */}
+        {/* Row3 세부 초점: 단일 선택 · 같은 버튼 다시 누르면 해제 */}
         <section className="rounded-xl border border-sky-200 bg-sky-50/88 p-4">
           <div className="mb-2 text-[11px] font-semibold text-slate-400">세부 초점</div>
           <div className="flex flex-wrap gap-2">
@@ -2036,7 +2106,7 @@ export default function CoachTasksPage() {
               <button
                 key={sf}
                 type="button"
-                onClick={() => setSubFocus(sf)}
+                onClick={() => setSubFocus((prev) => (prev === sf ? null : sf))}
                 className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
                   subFocus === sf
                     ? "border-sky-400 bg-sky-500/20 text-sky-100"
@@ -2047,6 +2117,9 @@ export default function CoachTasksPage() {
               </button>
             ))}
           </div>
+          <p className="mt-2 text-[10px] text-slate-500">
+            선택한 항목을 다시 누르면 선택이 해제됩니다. 한 번에 하나만 지정됩니다.
+          </p>
         </section>
 
         {/* ② 기간 / 요일 / 시간 */}
@@ -3046,10 +3119,16 @@ export default function CoachTasksPage() {
               )}
             </p>
             <p className="text-slate-500">
-              비율(%) 입력란은{" "}
-              <span className="text-slate-600">FW·MF·DF·GK</span> 칸을 먼저 켠 뒤에만
-              활성화됩니다. 꺼져 있으면 해당 포지션에 과제 줄이 없다는 뜻입니다.
+              <span className="text-slate-600">가중치(%)</span>는 바로 입력할 수 있습니다.{" "}
+              0보다 큰 값을 넣으면 해당 포지션이 자동으로 켜집니다. 포지션 버튼을 끄면 그 줄의
+              비율은 0으로 돌아갑니다.
             </p>
+            {hasDuplicateAssignmentRows(assignmentRows) && (
+              <p className="text-rose-600">
+                내용과 적용 범위가 같은 줄이 두 줄 이상 있습니다. 중복을 제거한 뒤 저장할 수
+                있습니다.
+              </p>
+            )}
           </div>
           <div className="space-y-3">
             {assignmentRows.map((row, idx) => (
@@ -3145,20 +3224,24 @@ export default function CoachTasksPage() {
                           min={0}
                           max={100}
                           step={1}
-                          disabled={!on}
-                          value={on ? val : 0}
+                          value={val}
                           onChange={(e) => {
                             const next = Math.max(
                               0,
                               Math.min(100, Number(e.target.value) || 0),
                             );
                             setAssignmentRows((prev) =>
-                              prev.map((r) =>
-                                r.id === row.id ? { ...r, [weightKey]: next } : r,
-                              ),
+                              prev.map((r) => {
+                                if (r.id !== row.id) return r;
+                                return {
+                                  ...r,
+                                  [weightKey]: next,
+                                  ...(next > 0 ? { [key]: true } : {}),
+                                };
+                              }),
                             );
                           }}
-                          className="h-7 w-12 rounded border border-sky-200 bg-white px-1.5 text-[10px] text-slate-900 outline-none disabled:opacity-40"
+                          className="h-7 w-12 rounded border border-sky-200 bg-white px-1.5 text-[10px] text-slate-900 outline-none"
                         />
                         <span className="text-[10px]">%</span>
                       </div>
@@ -3183,61 +3266,34 @@ export default function CoachTasksPage() {
           </div>
         </section>
 
-        {/* ③ 일정: 과제 일정 + 공개 일정(한 박스) */}
+        {/* ③ 측정 일정: 공개일시 · 마감일시 (선수 화면 기준, 과제 일정 블록은 상단 기간·요일·시간과 통합) */}
         <section className="space-y-3 rounded-xl border border-sky-200 bg-sky-50/92 p-4">
           <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
             <span className="h-2 w-2 rounded-full bg-sky-500" />
-            일정
+            측정 일정
           </div>
+          <p className="text-[11px] text-slate-500">
+            공개일시·마감일시는 시간까지 지정합니다. 비워 두면 위「기간·요일·시간」의 단일/반복
+            날짜만으로 마감이 보정될 수 있습니다.
+          </p>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-lg border border-sky-200/90 bg-sky-50/75 p-3">
-              <p className="mb-2 text-xs font-semibold text-slate-600">과제 일정</p>
-              {htmlTaskType === "daily" ? (
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-xs text-slate-600">시작 날짜</label>
-                    <input
-                      type="date"
-                      value={dailyStart}
-                      onChange={(e) => setDailyStart(e.target.value)}
-                      className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-slate-600">종료 날짜</label>
-                    <input
-                      type="date"
-                      value={dailyEnd}
-                      onChange={(e) => setDailyEnd(e.target.value)}
-                      className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <label className="mb-1 block text-xs text-slate-600">날짜</label>
-                  <input
-                    type="date"
-                    value={singleDate}
-                    onChange={(e) => setSingleDate(e.target.value)}
-                    className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-lg border border-sky-200/90 bg-sky-50/75 p-3">
-              <p className="mb-2 text-xs font-semibold text-slate-600">공개 일정</p>
-              <label className="mb-1 block text-xs text-slate-600">공개일</label>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">공개일시</label>
               <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+                type="datetime-local"
+                value={measurementPublicAt}
+                onChange={(e) => setMeasurementPublicAt(e.target.value)}
                 className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
               />
-              <p className="mt-2 text-[10px] text-slate-500">
-                비워두면 과제 일정 기준으로 자동 계산됩니다.
-              </p>
+            </div>
+            <div className="rounded-lg border border-sky-200/90 bg-sky-50/75 p-3">
+              <label className="mb-1 block text-xs font-semibold text-slate-600">마감일시</label>
+              <input
+                type="datetime-local"
+                value={measurementDeadlineAt}
+                onChange={(e) => setMeasurementDeadlineAt(e.target.value)}
+                className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
+              />
             </div>
           </div>
         </section>
@@ -3294,13 +3350,6 @@ export default function CoachTasksPage() {
 
         {/* 하단 버튼 */}
         <div className="flex flex-wrap justify-end gap-2 border-t border-sky-200/90 bg-sky-100/55 px-4 py-4 md:px-5">
-          <button
-            type="button"
-            onClick={() => setShowLoadFromTaskModal(true)}
-            className="rounded-lg border border-sky-300 px-4 py-2 text-xs text-slate-600 hover:bg-sky-100"
-          >
-            이전 과제에서 불러오기
-          </button>
           <button
             type="button"
             onClick={resetForm}
@@ -3408,7 +3457,7 @@ export default function CoachTasksPage() {
             </p>
 
             <div className="space-y-3 text-sm">
-              <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="space-y-3 text-xs">
                 <div>
                   <div className="text-slate-400">대상</div>
                   <div className="mt-1 text-slate-900">
@@ -3419,12 +3468,24 @@ export default function CoachTasksPage() {
                         : "—"}
                   </div>
                 </div>
-                <div>
-                  <div className="text-slate-400">마감일</div>
-                  <div className="mt-1 text-slate-900">
-                    {selectedTaskForModal.dueDate
-                      ? String(selectedTaskForModal.dueDate).slice(0, 10)
-                      : "—"}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-slate-400">공개일시</div>
+                    <div className="mt-1 text-slate-900">
+                      {(selectedTaskForModal.details as TaskDetails)?.publicAt
+                        ? new Date(
+                            (selectedTaskForModal.details as TaskDetails).publicAt as string,
+                          ).toLocaleString("ko-KR")
+                        : "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400">마감일시</div>
+                    <div className="mt-1 text-slate-900">
+                      {selectedTaskForModal.dueDate
+                        ? new Date(selectedTaskForModal.dueDate as string).toLocaleString("ko-KR")
+                        : "—"}
+                    </div>
                   </div>
                 </div>
               </div>

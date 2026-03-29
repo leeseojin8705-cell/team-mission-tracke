@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { TaskCoachBlueprintView } from "@/components/TaskCoachBlueprintView";
-import type { Task, Player, TeamStaff } from "@/lib/types";
+import type { Task, TaskDetails, Player, TeamStaff } from "@/lib/types";
 import {
   aggregatePhaseScores,
   getTaskScores,
@@ -83,6 +83,36 @@ export default function PlayerTaskDetailPage() {
         if (cancelled) return;
         setTask(parsedTask);
         setAffiliationName(null);
+
+        const det = parsedTask.details;
+        if (
+          det &&
+          typeof det === "object" &&
+          "playerLocked" in det &&
+          (det as TaskDetails).playerLocked
+        ) {
+          const tid = parsedTask.teamId;
+          if (tid) {
+            const metaRes = await fetch(`/api/teams/${encodeURIComponent(tid)}`);
+            if (metaRes.ok) {
+              const tm = (await metaRes.json()) as { name?: string };
+              if (!cancelled && tm?.name) setAffiliationName(tm.name);
+            }
+          } else {
+            const pr = await fetch(`/api/players/${encodeURIComponent(pid)}`);
+            if (pr.ok) {
+              const pl = (await pr.json()) as { teamId?: string | null };
+              if (pl?.teamId) {
+                const tr = await fetch(`/api/teams/${encodeURIComponent(pl.teamId)}`);
+                if (tr.ok) {
+                  const tm = (await tr.json()) as { name?: string };
+                  if (!cancelled && tm?.name) setAffiliationName(tm.name);
+                }
+              }
+            }
+          }
+          return;
+        }
 
         // 팀 기반 추가 정보 (평가 요약, 엔트리 선수, 평가자)
         const teamId = parsedTask.teamId ?? undefined;
@@ -230,6 +260,38 @@ export default function PlayerTaskDetailPage() {
           </p>
         ) : !task ? (
           <p className="text-sm text-slate-400">과제를 찾을 수 없습니다.</p>
+        ) : d?.playerLocked ? (
+          <>
+            <header className="space-y-1">
+              <h1 className="text-xl font-semibold text-slate-100">{task.title}</h1>
+              <p className="text-sm text-slate-400">
+                {task.teamId ? "팀 과제" : task.playerId ? "개인 과제" : "기타 과제"}
+              </p>
+              {affiliationName && (
+                <p className="text-sm font-medium text-emerald-200/90">
+                  소속: {affiliationName}
+                </p>
+              )}
+            </header>
+
+            <section className="space-y-3 rounded-2xl border border-amber-500/40 bg-amber-950/25 p-5 text-sm">
+              <p className="font-medium text-amber-100">아직 공개 전인 과제입니다</p>
+              <p className="text-xs text-amber-200/80">
+                코치가 설정한 공개 일시가 되면 전술·과제 줄·진행 체크 등 전체 내용을 볼 수 있습니다.
+              </p>
+              {d.publicAt && (
+                <p className="text-base font-semibold text-amber-50">
+                  공개 예정: {new Date(d.publicAt).toLocaleString("ko-KR")}
+                </p>
+              )}
+              {task.dueDate && (
+                <p className="text-xs text-slate-400">
+                  마감일시:{" "}
+                  {new Date(task.dueDate as string).toLocaleString("ko-KR")}
+                </p>
+              )}
+            </section>
+          </>
         ) : (
           <>
             {evalSummary && (
@@ -503,4 +565,5 @@ export default function PlayerTaskDetailPage() {
     </main>
   );
 }
+
 

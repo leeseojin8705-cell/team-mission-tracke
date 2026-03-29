@@ -3,6 +3,8 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { applyPlayerTaskVisibility } from "@/lib/playerTaskVisibility";
+import type { Task } from "@/lib/types";
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -78,6 +80,17 @@ export async function GET(req: Request) {
       where,
       orderBy: { title: "asc" },
     });
+
+    const isPlayerView =
+      (session?.role === "player" && session.playerId) ||
+      (!session && qpPlayerId);
+    if (isPlayerView) {
+      const now = new Date();
+      return NextResponse.json(
+        tasks.map((t) => applyPlayerTaskVisibility(t as unknown as Task, now)),
+      );
+    }
+
     return NextResponse.json(tasks);
   } catch (e) {
     console.error("[GET /api/tasks]", e);

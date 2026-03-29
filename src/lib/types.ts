@@ -104,6 +104,10 @@ export interface TaskDetails {
   weekdays?: string[]; // "0"~"6"
   timeStart?: string;
   timeEnd?: string;
+  /** 측정 일정: 선수에게 과제가 공개되는 일시(ISO) */
+  publicAt?: string;
+  /** 선수 API 응답 전용 — 공개일시 전에는 상세가 제거됨 */
+  playerLocked?: boolean;
   /** 사전 점검 시각 (코치 과제 등록) */
   preCheckTime?: string;
   /** 세부 초점: 이해·응용·활용 등 */

@@ -44,6 +44,7 @@ type EvalBadgeStatus = {
 
 function isNowWithinTaskWindow(task: Task): boolean {
   const d = task.details;
+  if (d?.playerLocked) return true;
   if (!d) return true;
 
   const now = new Date();
@@ -90,6 +91,7 @@ function isNowWithinTaskWindow(task: Task): boolean {
 
 function isTodayForTask(task: Task): boolean {
   const d = task.details;
+  if (d?.playerLocked) return false;
   const today = new Date();
   const y = today.getFullYear();
   const m = today.getMonth();
@@ -505,6 +507,7 @@ export default function PlayerTasksPage() {
             <div className="grid gap-3 md:grid-cols-2">
               {filteredBySummary.map((task) => {
                 const d = task.details;
+                const locked = !!d?.playerLocked;
                 const labelDate =
                   d?.htmlTaskType === "single"
                     ? d.singleDate
@@ -555,7 +558,15 @@ export default function PlayerTasksPage() {
                         <p className="text-base font-semibold text-slate-100">
                           {task.title}
                         </p>
-                        {d?.goalText && (
+                        {locked && (
+                          <p className="mt-1 text-[11px] text-amber-200/90">
+                            공개 예정:{" "}
+                            {d?.publicAt
+                              ? new Date(d.publicAt).toLocaleString("ko-KR")
+                              : "—"}
+                          </p>
+                        )}
+                        {!locked && d?.goalText && (
                           <p className="mt-1 text-[11px] text-slate-400">
                             목표: {d.goalText}
                           </p>
@@ -563,6 +574,11 @@ export default function PlayerTasksPage() {
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <div className="flex items-center gap-1">
+                          {locked && (
+                            <span className="rounded-full border border-amber-500/50 bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-200">
+                              공개 전
+                            </span>
+                          )}
                           <span
                             className={`rounded-full px-2 py-0.5 text-[11px] ${
                               completed
@@ -570,7 +586,7 @@ export default function PlayerTasksPage() {
                                 : "bg-slate-800 text-slate-300 border border-slate-700"
                             }`}
                           >
-                            {completed ? "완료" : "진행 중"}
+                            {locked ? "대기" : completed ? "완료" : "진행 중"}
                           </span>
                           {isToday && (
                             <span className="rounded-full border border-amber-500/40 bg-amber-500/20 px-2 py-0.5 text-[11px] text-amber-300">
@@ -610,8 +626,16 @@ export default function PlayerTasksPage() {
                       </div>
                     </div>
                     <div className="space-y-1 text-xs text-slate-400">
-                      {labelDate && <p>기간: {labelDate}</p>}
-                      {Array.isArray(d?.weekdays) && d!.weekdays!.length > 0 && (
+                      {locked && task.dueDate && (
+                        <p>
+                          마감일시:{" "}
+                          {new Date(task.dueDate as string).toLocaleString("ko-KR")}
+                        </p>
+                      )}
+                      {!locked && labelDate && <p>기간: {labelDate}</p>}
+                      {!locked &&
+                        Array.isArray(d?.weekdays) &&
+                        d!.weekdays!.length > 0 && (
                         <p>
                           요일:{" "}
                           {d!.weekdays!
@@ -619,31 +643,37 @@ export default function PlayerTasksPage() {
                             .join(", ")}
                         </p>
                       )}
-                      {labelTime && <p>시간: {labelTime}</p>}
-                      {d?.preCheckTime && (
+                      {!locked && labelTime && <p>시간: {labelTime}</p>}
+                      {!locked && d?.preCheckTime && (
                         <p className="text-slate-500">사전 점검: {d.preCheckTime}</p>
                       )}
                     </div>
-                    {d && (
+                    {d && !locked && (
                       <TaskCoachBlueprintView details={d} compact />
                     )}
-                    <div className="mt-1 space-y-1 text-[10px]">
-                      <p className="text-slate-500">진행률</p>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-                        <div
-                          className={`h-full rounded-full ${
-                            completed ? "bg-emerald-500" : "bg-slate-600"
-                          }`}
-                          style={{ width: completed ? "100%" : "0%" }}
-                        />
+                    {!locked && (
+                      <div className="mt-1 space-y-1 text-[10px]">
+                        <p className="text-slate-500">진행률</p>
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                          <div
+                            className={`h-full rounded-full ${
+                              completed ? "bg-emerald-500" : "bg-slate-600"
+                            }`}
+                            style={{ width: completed ? "100%" : "0%" }}
+                          />
+                        </div>
                       </div>
-                    </div>
+                    )}
                     <div className="mt-2 flex flex-wrap gap-2 text-xs">
                       <Link
                         href={`/player/tasks/${encodeURIComponent(task.id)}`}
-                        className="rounded-lg bg-emerald-600 px-3 py-1.5 font-medium text-white hover:bg-emerald-500"
+                        className={`rounded-lg px-3 py-1.5 font-medium text-white ${
+                          locked
+                            ? "border border-amber-500/50 bg-amber-950/40 text-amber-100 hover:bg-amber-950/60"
+                            : "bg-emerald-600 hover:bg-emerald-500"
+                        }`}
                       >
-                        자세히 보기
+                        {locked ? "상세(공개 안내)" : "자세히 보기"}
                       </Link>
                     </div>
                   </div>

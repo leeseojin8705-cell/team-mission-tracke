@@ -887,8 +887,10 @@ function PlayerHomeInner() {
                     <ul className="space-y-3 text-sm">
                       {filteredTasks.map((t) => {
                         const details = parseTaskDetails(t);
+                        const isLocked = !!details?.playerLocked;
                         const isExpanded = expandedTaskId === t.id;
                         const hasDetails =
+                          !isLocked &&
                           details &&
                           (details.detailText?.trim() ||
                             details.goalText?.trim() ||
@@ -907,8 +909,19 @@ function PlayerHomeInner() {
                                   카테고리: {t.category}
                                   {t.dueDate && ` · 마감일: ${String(t.dueDate).slice(0, 10)}`}
                                 </p>
+                                {isLocked && details?.publicAt && (
+                                  <p className="text-[11px] text-amber-700 mt-0.5">
+                                    공개 예정:{" "}
+                                    {new Date(details.publicAt).toLocaleString("ko-KR")}
+                                  </p>
+                                )}
                               </div>
                               <div className="flex items-center gap-2">
+                                {isLocked && (
+                                  <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">
+                                    공개 전
+                                  </span>
+                                )}
                                 {hasDetails && (
                                   <button
                                     type="button"
@@ -923,7 +936,8 @@ function PlayerHomeInner() {
                                 <label className="flex items-center gap-1 text-xs text-sky-700">
                                   <input
                                     type="checkbox"
-                                    className="h-4 w-4 rounded border-sky-300 bg-white"
+                                    className="h-4 w-4 rounded border-sky-300 bg-white disabled:opacity-50"
+                                    disabled={isLocked}
                                     checked={!!completedMap[t.id]}
                                     onChange={() => toggleCompleted(t.id)}
                                   />
