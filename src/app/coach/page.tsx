@@ -101,7 +101,6 @@ export default function CoachHome() {
   const [myOrgName, setMyOrgName] = useState<string | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("all");
   const [isAdminMode, setIsAdminMode] = useState(false);
-  const canUseTeamJump = isAdminMode || Boolean(myOrgName);
 
   /** URL ?teamId= 와 드롭다운 중 하나로만 범위를 정함 (둘 다 있으면 드롭다운 우선) */
   const scopeTeamId =
@@ -406,9 +405,43 @@ export default function CoachHome() {
             </div>
           </div>
 
-          {canUseTeamJump && (
+          {isAdminMode && (
+            <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-3">
+              <p className="text-[11px] font-semibold text-amber-900">관리자 팀 보기</p>
+              <p className="text-[10px] leading-snug text-amber-900/85">
+                다른 팀 정보는 이 화면에서 팀을 바꾸지 말고, 홈의「관리자 팀 선택」으로 돌아가서 다시 고르세요.
+              </p>
+              {scopeTeamId ? (
+                <p className="text-xs text-slate-800">
+                  현재 보는 팀:{" "}
+                  <span className="font-semibold">
+                    {teamsForStats.find((t) => t.id === scopeTeamId)?.name ?? scopeTeamId}
+                  </span>
+                </p>
+              ) : (
+                <p className="text-[10px] text-slate-600">
+                  주소에 팀이 지정되어 있지 않습니다. 홈에서 팀을 고른 뒤 입장해 주세요.
+                </p>
+              )}
+              <Link
+                href="/?openAdminPicker=1"
+                className="block rounded-md border border-amber-600 bg-white px-2 py-1.5 text-center text-[11px] font-medium text-amber-950 hover:bg-amber-50"
+              >
+                관리자 팀 선택으로 돌아가기
+              </Link>
+              {scopeTeamId ? (
+                <Link
+                  href={`/coach/players?teamId=${encodeURIComponent(scopeTeamId)}`}
+                  className="block rounded-md border border-sky-400 bg-sky-50 px-2 py-1.5 text-center text-[11px] text-sky-800 hover:bg-sky-100"
+                >
+                  선수 개인 항목으로 이동
+                </Link>
+              ) : null}
+            </div>
+          )}
+          {!isAdminMode && myOrgName && (
             <div className="space-y-2 rounded-xl border border-sky-100 bg-sky-50/80 px-3 py-3">
-              <p className="text-[11px] font-semibold text-slate-700">관리자 팀 선택 이동</p>
+              <p className="text-[11px] font-semibold text-slate-700">팀 이동</p>
               <select
                 value={selectedTeamId}
                 onChange={(e) => setSelectedTeamId(e.target.value)}

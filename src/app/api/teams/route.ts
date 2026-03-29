@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 function parseOrganization(raw: string | null): { front: string[]; coaching: string[]; player: string[] } | null {
   if (!raw) return null;
   try {
@@ -52,6 +53,8 @@ export async function GET(req: Request) {
     const myTeamsOnly = url.searchParams.get("myTeamsOnly") === "1";
     /** 조직 소속 전체 팀(다른 코치가 만든 팀 포함) — 기본은 내가 생성한 팀만 */
     const allAccessible = url.searchParams.get("allAccessible") === "1";
+    /** 홈 관리자 팀 선택: 유효한 관리자 PIN일 때만 DB 전체 팀 (선택 후에는 ?teamId 로 스코프) */
+    const listAll = url.searchParams.get("listAll") === "1";
 
     const singleTeamIdParam = url.searchParams.get("teamId");
 
@@ -72,6 +75,32 @@ export async function GET(req: Request) {
       });
       return NextResponse.json(
         teams.map((t) => {
+          const rawOrg = (t as { organization?: string | null }).organization;
+          const rawStat = (t as { statDefinition?: string | null }).statDefinition;
+          return {
+            id: t.id,
+            name: t.name,
+            season: t.season,
+            organizationId: t.organizationId ?? null,
+            organization: parseOrganization(rawOrg ?? null),
+            statDefinition: parseStatDefinition(rawStat ?? null),
+          };
+        }),
+      );
+    }
+
+    if (listAll) {
+      if (!isAdminApiRequest(req)) {
+        return NextResponse.json(
+          { error: "관리자 팀 목록을 보려면 유효한 관리자 PIN이 필요합니다." },
+          { status: 401 },
+        );
+      }
+      const allTeams = await prisma.team.findMany({
+        orderBy: { name: "asc" },
+      });
+      return NextResponse.json(
+        allTeams.map((t) => {
           const rawOrg = (t as { organization?: string | null }).organization;
           const rawStat = (t as { statDefinition?: string | null }).statDefinition;
           return {

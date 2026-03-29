@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FlowLogo } from "@/components/FlowLogo";
 import { ADMIN_MODE_PINS } from "@/lib/adminModePins";
 import {
@@ -95,14 +95,43 @@ export default function Home() {
     });
   }
 
-  async function openAdminCoachPicker() {
+  const openAdminCoachPicker = useCallback(async (forceReload = false) => {
     setShowAdminCoachPicker(true);
-    if (teams.length > 0 || loadingPicker) return;
+    if (!forceReload && (teams.length > 0 || loadingPicker)) return;
     try {
       setLoadingPicker(true);
       setPickerError(null);
+      let adminPin = "";
+      try {
+        adminPin = sessionStorage.getItem(ADMIN_PIN_STORAGE) ?? "";
+      } catch {
+        adminPin = "";
+      }
+      if (!adminPin) {
+        const input = window.prompt(
+          "등록된 전체 팀 목록을 불러오려면 관리자 PIN 4자리를 입력하세요.",
+        );
+        const pin = (input ?? "").trim();
+        if (!pin) {
+          setPickerError("관리자 PIN을 입력해야 팀 목록을 불러올 수 있습니다.");
+          setLoadingPicker(false);
+          return;
+        }
+        if (!ADMIN_MODE_PINS.has(pin)) {
+          setPickerError("PIN이 올바르지 않습니다.");
+          setLoadingPicker(false);
+          return;
+        }
+        adminPin = pin;
+        try {
+          sessionStorage.setItem(ADMIN_PIN_STORAGE, pin);
+        } catch {
+          // ignore
+        }
+      }
       syncAdminPinCookieFromSession();
-      const teamsRes = await fetch("/api/teams", {
+      const teamsRes = await fetch("/api/teams?listAll=1", {
+        headers: { "x-admin-pin": adminPin },
         cache: "no-store",
         credentials: "same-origin",
       });
@@ -127,9 +156,7 @@ export default function Home() {
       const teamsData = Array.isArray(body) ? (body as Team[]) : [];
       setTeams(teamsData);
       if (teamsData.length === 0) {
-        setPickerError(
-          "표시할 팀이 없습니다. 코치(또는 오너) 계정으로 로그인한 뒤, 본인이 만든 팀만 여기에 나타납니다. 먼저 코치 로그인을 한 다음 다시 시도해 주세요.",
-        );
+        setPickerError("DB에 등록된 팀이 없습니다.");
       } else if (teamsData[0]) {
         setSelectedTeamId(teamsData[0].id);
       }
@@ -138,7 +165,22 @@ export default function Home() {
     } finally {
       setLoadingPicker(false);
     }
-  }
+  }, [teams.length, loadingPicker]);
+
+  const openAdminCoachPickerRef = useRef(openAdminCoachPicker);
+  openAdminCoachPickerRef.current = openAdminCoachPicker;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("openAdminPicker") !== "1") return;
+    setShowWelcome(false);
+    setTeams([]);
+    setSelectedTeamId("all");
+    setPickerError(null);
+    window.history.replaceState({}, "", "/");
+    void openAdminCoachPickerRef.current(true);
+  }, []);
 
   async function handleDeleteTeam(team: Team) {
     const ok = window.confirm(
@@ -275,7 +317,7 @@ export default function Home() {
           {adminMode ? (
             <button
               type="button"
-              onClick={openAdminCoachPicker}
+              onClick={() => void openAdminCoachPicker(false)}
               className="group rounded-xl border-2 border-sky-200 bg-sky-50/80 px-6 py-5 flex flex-col gap-2 text-left transition hover:border-sky-400 hover:bg-sky-100/90"
             >
               <span className="text-xs font-semibold uppercase tracking-wider text-sky-600 group-hover:text-sky-800">
@@ -283,7 +325,7 @@ export default function Home() {
               </span>
               <span className="text-xl font-bold text-slate-900">코치</span>
               <span className="text-sm text-sky-900/70">
-                코치로 로그인한 경우에만 본인 팀이 표시됩니다. 팀·선수를 확인한 뒤 이동합니다.
+                관리자 PIN으로 등록된 전체 팀을 고른 뒤 입장합니다. 다른 팀을 보려면 다시 이 화면의 팀 선택으로 돌아오세요.
               </span>
             </button>
           ) : (
@@ -329,9 +371,9 @@ export default function Home() {
               </button>
             </div>
             <p className="mb-3 text-[11px] text-slate-400 leading-relaxed">
-              접근 가능한 팀{" "}
+              DB에 등록된 팀{" "}
               <span className="font-semibold text-slate-200">{teams.length}</span>개입니다. 팀을 고른 뒤 입장하면{" "}
-              <span className="text-amber-200/90">해당 팀(계정) 데이터만</span> 대시보드·선수 화면에 표시됩니다.
+              <span className="text-amber-200/90">해당 팀 데이터만</span> 대시보드·선수 화면에 표시됩니다.
               {selectedTeamId !== "all" && (
                 <>
                   {" "}
