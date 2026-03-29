@@ -23,6 +23,16 @@ export default function Home() {
   const [loadingPicker, setLoadingPicker] = useState(false);
   const [pickerError, setPickerError] = useState<string | null>(null);
   const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
+  const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
+
+  function getAdminPinHeaders(): HeadersInit {
+    try {
+      const pin = sessionStorage.getItem(ADMIN_PIN_STORAGE) ?? "";
+      return pin ? { "x-admin-pin": pin } : {};
+    } catch {
+      return {};
+    }
+  }
 
   useEffect(() => {
     try {
@@ -184,17 +194,26 @@ export default function Home() {
 
   async function handleDeleteTeam(team: Team) {
     const ok = window.confirm(
-      `정말 "${team.name}" 팀을 삭제하시겠습니까?\n팀에 연결된 선수/일정/과제 데이터도 영향받을 수 있습니다.`,
+      `「${team.name}」팀 데이터를 DB에서 삭제하시겠습니까?\n선수·일정·과제 등 팀에 묶인 정보에 영향을 줍니다.`,
     );
     if (!ok) return;
+
+    let deleteCoachAccount = false;
+    if (team.createdByUserId) {
+      deleteCoachAccount = window.confirm(
+        `이 팀을「팀 추가」로 만든 코치가 있으면, 코치 사이트 이메일 로그인 계정(User)도 함께 삭제할까요?\n\n· 예: 해당 코치가 만든 다른 팀이 없고, 조직 소유자가 아닌 coach 계정이면 삭제됩니다.\n· 아니오: 팀만 삭제하고 코치 계정은 유지합니다.`,
+      );
+    }
 
     try {
       setDeletingTeamId(team.id);
       setPickerError(null);
 
-      const res = await fetch(`/api/teams/${encodeURIComponent(team.id)}`, {
+      const qs = deleteCoachAccount ? "?deleteCoachAccount=1" : "";
+      const res = await fetch(`/api/teams/${encodeURIComponent(team.id)}${qs}`, {
         method: "DELETE",
         credentials: "same-origin",
+        headers: getAdminPinHeaders(),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -203,6 +222,15 @@ export default function Home() {
             ? data.error
             : "팀 삭제에 실패했습니다.",
         );
+      }
+      if (
+        deleteCoachAccount &&
+        data &&
+        typeof data === "object" &&
+        "coachAccountDeleted" in data &&
+        (data as { coachAccountDeleted?: boolean }).coachAccountDeleted
+      ) {
+        window.alert("팀과 함께 해당 코치 로그인 계정도 삭제되었습니다.");
       }
 
       setTeams((prev) => {
@@ -217,6 +245,36 @@ export default function Home() {
       setPickerError(e instanceof Error ? e.message : "팀 삭제에 실패했습니다.");
     } finally {
       setDeletingTeamId(null);
+    }
+  }
+
+  async function handleDeletePlayer(player: Player) {
+    const ok = window.confirm(
+      `「${player.name}」선수 계정을 삭제하시겠습니까?\n개인 번호·비밀번호로 로그인할 수 없게 되며, 과제 진행 기록 등 연결 데이터도 함께 정리됩니다.`,
+    );
+    if (!ok) return;
+
+    try {
+      setDeletingPlayerId(player.id);
+      setPickerError(null);
+
+      const res = await fetch(`/api/players/${encodeURIComponent(player.id)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: getAdminPinHeaders(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "선수 삭제에 실패했습니다.",
+        );
+      }
+
+      setPlayers((prev) => prev.filter((p) => p.id !== player.id));
+    } catch (e) {
+      setPickerError(e instanceof Error ? e.message : "선수 삭제에 실패했습니다.");
+    } finally {
+      setDeletingPlayerId(null);
     }
   }
 
@@ -382,6 +440,10 @@ export default function Home() {
                 </>
               )}
             </p>
+            <p className="mb-3 text-[10px] text-slate-500 leading-relaxed">
+              선수 행「계정 삭제」는 로그인(개인 번호·비밀번호)까지 제거합니다. 팀 행「팀 삭제」는 팀 DB를 지우며,
+              필요 시 두 번째 확인에서 코치 사이트 이메일 계정을 함께 지울 수 있습니다.
+            </p>
 
             {pickerError && (
               <p className="mb-3 rounded-md border border-rose-700/50 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">
@@ -391,7 +453,7 @@ export default function Home() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <section className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 min-h-[220px]">
-                <p className="mb-2 text-xs font-semibold text-slate-300">팀 목록</p>
+                <p className="mb-2 text-xs font-semibold text-slate-300">팀 목록 (팀 데이터 / 코치 계정)</p>
                 {loadingPicker ? (
                   <p className="text-xs text-slate-500">불러오는 중...</p>
                 ) : teams.length === 0 ? (
@@ -421,7 +483,7 @@ export default function Home() {
                             disabled={deletingTeamId === t.id}
                             className="rounded-md border border-rose-700/70 px-2 py-0.5 text-[11px] text-rose-300 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {deletingTeamId === t.id ? "삭제중..." : "삭제"}
+                            {deletingTeamId === t.id ? "삭제중..." : "팀 삭제"}
                           </button>
                         </div>
                       </div>
@@ -431,7 +493,7 @@ export default function Home() {
               </section>
 
               <section className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 min-h-[220px]">
-                <p className="mb-2 text-xs font-semibold text-slate-300">선수 목록</p>
+                <p className="mb-2 text-xs font-semibold text-slate-300">선수 목록 (계정 삭제)</p>
                 {loadingPicker ? (
                   <p className="text-xs text-slate-500">불러오는 중...</p>
                 ) : players.length === 0 ? (
@@ -443,13 +505,23 @@ export default function Home() {
                       return (
                         <div
                           key={p.id}
-                          className="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs"
+                          className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs"
                         >
-                          <span className="font-medium text-slate-200">{p.name}</span>
-                          <span className="text-slate-400">
-                            {teamName}
-                            {p.position ? ` · ${p.position}` : ""}
-                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium text-slate-200">{p.name}</p>
+                            <p className="truncate text-[10px] text-slate-400">
+                              {teamName}
+                              {p.position ? ` · ${p.position}` : ""}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePlayer(p)}
+                            disabled={deletingPlayerId === p.id}
+                            className="shrink-0 rounded-md border border-rose-700/70 px-2 py-0.5 text-[11px] text-rose-300 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {deletingPlayerId === p.id ? "삭제중..." : "계정 삭제"}
+                          </button>
                         </div>
                       );
                     })}

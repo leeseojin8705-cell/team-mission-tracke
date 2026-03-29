@@ -15,6 +15,8 @@ export interface Team {
   organizationId?: string | null;
   organization?: TeamOrganization | null;
   statDefinition?: StatDefinition | null;
+  /** 관리자 전체 팀 목록 등 — 팀을 만든 코치 User.id (없을 수 있음) */
+  createdByUserId?: string | null;
 }
 
 /** 팀 프론트/코칭 직책별 등록된 개인 정보 */

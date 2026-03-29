@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 import { Prisma } from "@/generated/prisma/client";
 
 function parseOrganization(raw: string | null): { front: string[]; coaching: string[]; player: string[] } | null {
@@ -111,6 +112,71 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+
+  if (isAdminApiRequest(req)) {
+    const url = new URL(req.url);
+    const deleteCoachAccount = url.searchParams.get("deleteCoachAccount") === "1";
+
+    const existing = await prisma.team.findUnique({
+      where: { id },
+      select: { id: true, createdByUserId: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "팀을 찾을 수 없습니다." }, { status: 404 });
+    }
+    const creatorId = existing.createdByUserId;
+
+    try {
+      await prisma.team.delete({
+        where: { id },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        if (e.code === "P2003") {
+          return NextResponse.json(
+            {
+              error:
+                "연결된 데이터(일정·과제 등)가 있어 삭제할 수 없습니다. 데이터 정리 후 다시 시도해 주세요.",
+            },
+            { status: 409 },
+          );
+        }
+        if (e.code === "P2025") {
+          return NextResponse.json({ error: "팀을 찾을 수 없습니다." }, { status: 404 });
+        }
+      }
+      console.error("[DELETE /api/teams/[id]] admin", e);
+      return NextResponse.json({ error: "팀 삭제 처리 중 오류가 발생했습니다." }, { status: 500 });
+    }
+
+    /** 팀 생성 코치 계정: 다른 팀을 더 만들지 않은 coach User 만 (조직 소유자 제외) */
+    let coachAccountDeleted = false;
+    if (deleteCoachAccount && creatorId) {
+      const remainingTeams = await prisma.team.count({
+        where: { createdByUserId: creatorId },
+      });
+      if (remainingTeams === 0) {
+        const u = await prisma.user.findUnique({
+          where: { id: creatorId },
+          select: {
+            role: true,
+            organizations: { select: { id: true }, take: 1 },
+          },
+        });
+        if (u?.role === "coach" && u.organizations.length === 0) {
+          try {
+            await prisma.user.delete({ where: { id: creatorId } });
+            coachAccountDeleted = true;
+          } catch (err) {
+            console.error("[DELETE /api/teams/[id]] admin user delete", err);
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({ ok: true, coachAccountDeleted });
+  }
+
   const session = await getSession();
   if (!session || (session.role !== "coach" && session.role !== "owner")) {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });

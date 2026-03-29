@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 import {
   canDeletePlayer,
   canPatchPlayer,
@@ -145,18 +146,43 @@ export async function DELETE(
   if (!id) {
     return NextResponse.json({ error: "잘못된 요청입니다. (id 없음)" }, { status: 400 });
   }
+
+  async function deletePlayerCascade(playerId: string) {
+    await prisma.taskProgress.deleteMany({ where: { playerId } });
+    await prisma.task.deleteMany({ where: { playerId } });
+    await prisma.player.delete({ where: { id: playerId } });
+  }
+
+  if (isAdminApiRequest(req)) {
+    const exists = await prisma.player.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) {
+      return NextResponse.json({ error: "찾을 수 없습니다." }, { status: 404 });
+    }
+    try {
+      await deletePlayerCascade(id);
+    } catch (e) {
+      console.error("[DELETE /api/players/[id]] admin", e);
+      return NextResponse.json(
+        { error: "선수 삭제 처리 중 오류가 발생했습니다." },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json({ ok: true });
+  }
+
   const session = await getSession();
   if (!(await canDeletePlayer(session, id))) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
-  // 선수와 해당 선수에게만 걸린 과제를 함께 삭제
-  await prisma.task.deleteMany({
-    where: { playerId: id },
-  });
-
-  await prisma.player.delete({
-    where: { id },
-  });
+  try {
+    await deletePlayerCascade(id);
+  } catch (e) {
+    console.error("[DELETE /api/players/[id]]", e);
+    return NextResponse.json(
+      { error: "선수 삭제 처리 중 오류가 발생했습니다." },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }

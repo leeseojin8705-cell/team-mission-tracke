@@ -110,6 +110,7 @@ export async function GET(req: Request) {
             organizationId: t.organizationId ?? null,
             organization: parseOrganization(rawOrg ?? null),
             statDefinition: parseStatDefinition(rawStat ?? null),
+            createdByUserId: t.createdByUserId ?? null,
           };
         }),
       );
