@@ -112,8 +112,8 @@ export interface TaskDetails {
   playerLocked?: boolean;
   /** 사전 점검 시각 (코치 과제 등록) */
   preCheckTime?: string;
-  /** 세부 초점: 이해·응용·활용 등 */
-  subFocus?: string;
+  /** 세부 초점: 이해·응용·활용 등 (구버전 단일 string, 신규 복수 string[]) */
+  subFocus?: string | string[];
   /** 오늘의 전술 메모 */
   todayStrategy?: string;
   /** 포메이션 프리셋 키 또는 "custom" */
@@ -206,5 +206,28 @@ export interface MatchAnalysis {
   updatedAt: string;
   schedule?: { id: string; title: string; date: string } | null;
   team?: { id: string; name: string } | null;
+}
+
+/** 저장된 subFocus를 폼/표시용으로 정규화 (구 string → [string]) */
+export function normalizeSubFocusFromStored(raw: unknown): string[] {
+  if (raw == null) return [];
+  if (Array.isArray(raw)) {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const x of raw) {
+      if (typeof x !== "string" || !x.length || seen.has(x)) continue;
+      seen.add(x);
+      out.push(x);
+    }
+    return out;
+  }
+  if (typeof raw === "string" && raw.length > 0) return [raw];
+  return [];
+}
+
+export function formatSubFocusForDisplay(
+  sub: TaskDetails["subFocus"] | undefined,
+): string {
+  return normalizeSubFocusFromStored(sub).join(" · ");
 }
 

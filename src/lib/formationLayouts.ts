@@ -1,4 +1,4 @@
-import type { TaskDetails } from "@/lib/types";
+import { normalizeSubFocusFromStored, type TaskDetails } from "@/lib/types";
 
 /** FIFA 규격 비율 viewBox 105×68 (m) */
 export const PITCH_VB = { w: 105, h: 68 };
@@ -148,7 +148,7 @@ export function hasCoachBlueprintContent(
   d: TaskDetails | null | undefined,
 ): boolean {
   if (!d) return false;
-  if (d.subFocus) return true;
+  if (normalizeSubFocusFromStored(d.subFocus).length > 0) return true;
   if (d.todayStrategy?.trim()) return true;
   if (d.formation?.trim()) return true;
   if (d.formationLabel?.trim()) return true;

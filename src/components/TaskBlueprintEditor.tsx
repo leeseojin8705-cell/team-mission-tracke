@@ -118,7 +118,7 @@ export function TaskBlueprintEditor({
     "평가",
   ];
 
-  const [subFocus, setSubFocus] = useState<SubFocusOpt | null>(null);
+  const [subFocus, setSubFocus] = useState<SubFocusOpt[]>([]);
   const [todayStrategy, setTodayStrategy] = useState("");
   const [formation, setFormation] = useState("");
   const [formationNote, setFormationNote] = useState("");
@@ -232,7 +232,7 @@ export function TaskBlueprintEditor({
       }));
 
     return {
-      subFocus: subFocus || undefined,
+      subFocus: subFocus.length ? subFocus : undefined,
       todayStrategy: todayStrategy.trim() || undefined,
       formation: formation.trim() || undefined,
       formationLabel: formationNote.trim() || undefined,
@@ -298,9 +298,15 @@ export function TaskBlueprintEditor({
             <button
               key={sf}
               type="button"
-              onClick={() => setSubFocus(subFocus === sf ? null : sf)}
+              onClick={() =>
+                setSubFocus((prev) => {
+                  const i = prev.indexOf(sf);
+                  if (i >= 0) return prev.filter((_, j) => j !== i);
+                  return [...prev, sf];
+                })
+              }
               className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-                subFocus === sf
+                subFocus.includes(sf)
                   ? "border-sky-500 bg-sky-500/15 text-sky-900"
                   : "border-sky-200 text-slate-700 hover:bg-white/80"
               }`}

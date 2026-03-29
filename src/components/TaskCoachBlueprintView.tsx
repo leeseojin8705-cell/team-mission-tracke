@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { TaskDetails } from "@/lib/types";
+import { formatSubFocusForDisplay, type TaskDetails } from "@/lib/types";
 import {
   PITCH_VB,
   getFormationSlotsFromTaskDetails,
@@ -191,11 +191,12 @@ export function TaskCoachBlueprintView({ details, compact = false }: Props) {
 
       <div className={`grid gap-3 p-3 ${compact ? "md:grid-cols-1" : "md:grid-cols-2"}`}>
         <div className="space-y-2 text-[11px] text-slate-700">
-          {d?.subFocus && (
+          {formatSubFocusForDisplay(d?.subFocus) ? (
             <p>
-              <span className="text-slate-500">세부 초점</span> · {d.subFocus}
+              <span className="text-slate-500">세부 초점</span> ·{" "}
+              {formatSubFocusForDisplay(d?.subFocus)}
             </p>
-          )}
+          ) : null}
           {d?.todayStrategy?.trim() && (
             <div>
               <p className="text-slate-500">오늘의 전술</p>

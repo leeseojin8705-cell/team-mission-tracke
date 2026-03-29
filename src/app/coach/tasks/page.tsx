@@ -11,14 +11,15 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import type {
-  Task,
-  TaskDetails,
-  Team,
-  Player,
-  TaskCategory,
-  TeamStaff,
-  TaskProgress,
+import {
+  normalizeSubFocusFromStored,
+  type Task,
+  type TaskDetails,
+  type Team,
+  type Player,
+  type TaskCategory,
+  type TeamStaff,
+  type TaskProgress,
 } from "@/lib/types";
 import { FORMATION_PRESET_OPTIONS } from "@/lib/formationLayouts";
 import {
@@ -323,7 +324,7 @@ export default function CoachTasksPage() {
     dfWeight: number;
     gkWeight: number;
   };
-  const [subFocus, setSubFocus] = useState<SubFocusOpt | null>(null);
+  const [subFocus, setSubFocus] = useState<SubFocusOpt[]>([]);
   const [todayStrategy, setTodayStrategy] = useState("");
   const [formation, setFormation] = useState("");
   /** 자유 배치 시 이름(예: 3-2-3-2 변형) — details.formationLabel */
@@ -919,7 +920,7 @@ export default function CoachTasksPage() {
       setRosterPickMode(true);
     }
     setSlotPlayerAssignments({});
-    setSubFocus(null);
+    setSubFocus([]);
     setTodayStrategy("");
     setFormation("");
     setFormationNote("");
@@ -1023,7 +1024,7 @@ export default function CoachTasksPage() {
       timeStart: timeStart || undefined,
       timeEnd: timeEnd || undefined,
       publicAt: measurementPublicIso || undefined,
-      subFocus: subFocus || undefined,
+      subFocus: subFocus.length ? subFocus : undefined,
       todayStrategy: todayStrategy.trim() || undefined,
       formation: formation.trim() || undefined,
       formationLabel: formationNote.trim() || undefined,
@@ -1233,7 +1234,11 @@ export default function CoachTasksPage() {
         }
       }
       setSubFocus(
-        (task.details as { subFocus?: SubFocusOpt }).subFocus ?? null,
+        normalizeSubFocusFromStored(
+          (task.details as TaskDetails | undefined)?.subFocus,
+        ).filter((x): x is SubFocusOpt =>
+          subFocusOptions.includes(x as SubFocusOpt),
+        ),
       );
       setTodayStrategy(
         (task.details as { todayStrategy?: string }).todayStrategy ?? "",
@@ -2098,7 +2103,7 @@ export default function CoachTasksPage() {
           )}
         </section>
 
-        {/* Row3 세부 초점: 단일 선택 · 같은 버튼 다시 누르면 해제 */}
+        {/* Row3 세부 초점: 복수 선택 · 같은 버튼 다시 누르면 해제 */}
         <section className="rounded-xl border border-sky-200 bg-sky-50/88 p-4">
           <div className="mb-2 text-[11px] font-semibold text-slate-400">세부 초점</div>
           <div className="flex flex-wrap gap-2">
@@ -2106,9 +2111,17 @@ export default function CoachTasksPage() {
               <button
                 key={sf}
                 type="button"
-                onClick={() => setSubFocus((prev) => (prev === sf ? null : sf))}
+                onClick={() =>
+                  setSubFocus((prev) => {
+                    const i = prev.indexOf(sf);
+                    if (i >= 0) {
+                      return prev.filter((_, j) => j !== i);
+                    }
+                    return [...prev, sf];
+                  })
+                }
                 className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-                  subFocus === sf
+                  subFocus.includes(sf)
                     ? "border-sky-400 bg-sky-500/20 text-sky-100"
                     : "border-sky-300 text-slate-700"
                 }`}
@@ -2118,7 +2131,7 @@ export default function CoachTasksPage() {
             ))}
           </div>
           <p className="mt-2 text-[10px] text-slate-500">
-            선택한 항목을 다시 누르면 선택이 해제됩니다. 한 번에 하나만 지정됩니다.
+            여러 개 선택할 수 있습니다. 선택한 항목을 다시 누르면 해제됩니다.
           </p>
         </section>
 

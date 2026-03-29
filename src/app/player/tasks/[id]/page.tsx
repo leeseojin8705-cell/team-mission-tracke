@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { TaskCoachBlueprintView } from "@/components/TaskCoachBlueprintView";
-import type { Task, TaskDetails, Player, TeamStaff } from "@/lib/types";
+import {
+  formatSubFocusForDisplay,
+  type Task,
+  type TaskDetails,
+  type Player,
+  type TeamStaff,
+} from "@/lib/types";
 import {
   aggregatePhaseScores,
   getTaskScores,
@@ -438,7 +444,9 @@ export default function PlayerTaskDetailPage() {
                   </p>
                 )}
                 {d?.preCheckTime && <p>사전 점검: {d.preCheckTime}</p>}
-                {d?.subFocus && <p>세부 초점: {d.subFocus}</p>}
+                {formatSubFocusForDisplay(d?.subFocus) ? (
+                  <p>세부 초점: {formatSubFocusForDisplay(d?.subFocus)}</p>
+                ) : null}
                 {Array.isArray(d?.positions) && d.positions.length > 0 && (
                   <p>
                     포지션 대상:{" "}
