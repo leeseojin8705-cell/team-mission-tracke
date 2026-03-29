@@ -140,10 +140,10 @@ export default function CoachHome() {
           ? `?teamId=${encodeURIComponent(scopeTeamId)}`
           : "";
         const [teamsRes, playersRes, schedulesRes, tasksRes, annRes, analysesRes] = await Promise.all([
-          fetch("/api/teams"),
-          fetch("/api/players"),
-          fetch("/api/schedules"),
-          fetch("/api/tasks"),
+          fetch(`/api/teams${teamQs}`),
+          fetch(`/api/players${teamQs}`),
+          fetch(`/api/schedules${teamQs}`),
+          fetch(`/api/tasks${teamQs}`),
           fetch(`/api/announcements${teamQs}`),
           fetch(`/api/analyses${teamQs}`),
         ]);
@@ -369,7 +369,9 @@ export default function CoachHome() {
         <aside className="w-full max-w-xs space-y-4 rounded-2xl border border-white/60 bg-white/95 p-4 shadow-md shadow-sky-900/10">
           <h1 className="text-xl font-semibold text-slate-900">코치 대시보드</h1>
           <p className="text-sm text-slate-600">
-            현재 DB 기준으로 팀, 선수, 일정, 과제 현황을 한눈에 볼 수 있습니다.
+            {scopeTeamId
+              ? "URL·아래에서 고른 팀만 반영된 팀·선수·일정·과제·공지·전술 현황입니다."
+              : "접근 가능한 팀 기준으로 팀, 선수, 일정, 과제 현황을 한눈에 볼 수 있습니다."}
           </p>
           {myOrgName && (
             <p className="text-xs text-slate-500">

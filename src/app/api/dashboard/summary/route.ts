@@ -3,8 +3,6 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
-import { isAdminApiRequest } from "@/lib/adminApiRequest";
-
 type TeamRow = Awaited<ReturnType<typeof prisma.team.findMany>>[number];
 type PlayerRow = Awaited<ReturnType<typeof prisma.player.findMany>>[number];
 type TaskRow = Awaited<ReturnType<typeof prisma.task.findMany>>[number];
@@ -114,24 +112,7 @@ export async function GET(req: Request) {
     return { teamTaskCounts, playerTaskCounts };
   };
 
-  const sessionEarly = await getSession();
-  const coachOrOwnerEarly =
-    sessionEarly?.role === "coach" || sessionEarly?.role === "owner";
-
-  /** PIN만 있는 비로그인 관리자만 DB 전체 집계 — 코치/오너 로그인 시 본인 스코프로 아래 처리 */
-  if (isAdminApiRequest(req) && !coachOrOwnerEarly) {
-    const [teams, players, tasks, progresses] = await Promise.all([
-      prisma.team.findMany(),
-      prisma.player.findMany(),
-      prisma.task.findMany(),
-      prisma.taskProgress.findMany(),
-    ]);
-    return NextResponse.json(
-      filterByTeam(buildDashboardSummary(teams, players, tasks, progresses)),
-    );
-  }
-
-  const session = sessionEarly;
+  const session = await getSession();
   let taskWhere: Prisma.TaskWhereInput | undefined;
   let teamWhere: Prisma.TeamWhereInput | undefined;
   let playerWhere: Prisma.PlayerWhereInput | undefined;

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
-import { isAdminApiRequest } from "@/lib/adminApiRequest";
 import { Prisma } from "@/generated/prisma/client";
 
 function parseOrganization(raw: string | null): { front: string[]; coaching: string[]; player: string[] } | null {
@@ -64,14 +63,12 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const session = await getSession();
-  if (!isAdminApiRequest(req)) {
-    if (!session || (session.role !== "coach" && session.role !== "owner")) {
-      return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
-    }
-    const ids = await getAccessibleTeamIds(session);
-    if (!ids.includes(id)) {
-      return NextResponse.json({ error: "접근 가능한 팀이 아닙니다." }, { status: 403 });
-    }
+  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
+  }
+  const ids = await getAccessibleTeamIds(session);
+  if (!ids.includes(id)) {
+    return NextResponse.json({ error: "접근 가능한 팀이 아닙니다." }, { status: 403 });
   }
   const body = await req.json();
 
@@ -115,27 +112,12 @@ export async function DELETE(
 ) {
   const { id } = await params;
   const session = await getSession();
-  const adminOk = isAdminApiRequest(req);
-
-  let allowed = false;
-  if (session && (session.role === "coach" || session.role === "owner")) {
-    const ids = await getAccessibleTeamIds(session);
-    allowed = ids.includes(id);
-  } else if (adminOk) {
-    // 관리자 모드(홈): 로그인 없이 PIN으로 팀 정리 허용 (헤더·쿠키·쿼리)
-    allowed = true;
+  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
   }
-
-  if (!allowed) {
-    return NextResponse.json(
-      {
-        error:
-          session == null && !adminOk
-            ? "로그인이 필요하거나 관리자 PIN이 필요합니다."
-            : "권한이 없습니다.",
-      },
-      { status: 401 },
-    );
+  const ids = await getAccessibleTeamIds(session);
+  if (!ids.includes(id)) {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
 
   try {

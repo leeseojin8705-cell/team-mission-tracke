@@ -3,8 +3,6 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { canPatchPlayer } from "@/lib/playerApiAccess";
-import { isAdminApiRequest } from "@/lib/adminApiRequest";
-
 const SALT_ROUNDS = 10;
 
 export async function PATCH(
@@ -16,7 +14,7 @@ export async function PATCH(
     return NextResponse.json({ error: "선수 ID가 필요합니다." }, { status: 400 });
   }
   const session = await getSession();
-  if (!isAdminApiRequest(req) && !(await canPatchPlayer(session, id))) {
+  if (!(await canPatchPlayer(session, id))) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
   try {

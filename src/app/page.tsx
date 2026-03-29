@@ -101,40 +101,8 @@ export default function Home() {
     try {
       setLoadingPicker(true);
       setPickerError(null);
-      let adminPin = "";
-      try {
-        adminPin = sessionStorage.getItem(ADMIN_PIN_STORAGE) ?? "";
-      } catch {
-        adminPin = "";
-      }
-      if (!adminPin) {
-        const input = window.prompt(
-          "관리자 팀 목록을 불러오려면 PIN 4자리를 입력하세요.",
-        );
-        const pin = (input ?? "").trim();
-        if (!pin) {
-          setPickerError("팀 목록을 보려면 관리자 PIN이 필요합니다.");
-          setLoadingPicker(false);
-          return;
-        }
-        if (!ADMIN_MODE_PINS.has(pin)) {
-          setPickerError("PIN이 올바르지 않습니다.");
-          setLoadingPicker(false);
-          return;
-        }
-        adminPin = pin;
-        try {
-          sessionStorage.setItem(ADMIN_PIN_STORAGE, pin);
-        } catch {
-          // ignore
-        }
-      }
       syncAdminPinCookieFromSession();
-      const teamListQs = new URLSearchParams();
-      if (adminPin) teamListQs.set("adminPin", adminPin);
-      teamListQs.set("listAll", "1");
-      const teamsRes = await fetch(`/api/teams?${teamListQs.toString()}`, {
-        headers: adminPin ? { "x-admin-pin": adminPin } : {},
+      const teamsRes = await fetch("/api/teams", {
         cache: "no-store",
         credentials: "same-origin",
       });
@@ -158,7 +126,11 @@ export default function Home() {
       }
       const teamsData = Array.isArray(body) ? (body as Team[]) : [];
       setTeams(teamsData);
-      if (teamsData[0]) {
+      if (teamsData.length === 0) {
+        setPickerError(
+          "표시할 팀이 없습니다. 코치(또는 오너) 계정으로 로그인한 뒤, 본인이 만든 팀만 여기에 나타납니다. 먼저 코치 로그인을 한 다음 다시 시도해 주세요.",
+        );
+      } else if (teamsData[0]) {
         setSelectedTeamId(teamsData[0].id);
       }
     } catch (e) {
@@ -178,35 +150,9 @@ export default function Home() {
       setDeletingTeamId(team.id);
       setPickerError(null);
 
-      const headers: Record<string, string> = {};
-      if (adminMode) {
-        let pin = "";
-        try {
-          pin = sessionStorage.getItem(ADMIN_PIN_STORAGE) ?? "";
-        } catch {
-          pin = "";
-        }
-        if (!pin) {
-          const input = window.prompt(
-            "팀 삭제를 위해 관리자 PIN 4자리를 입력하세요.",
-          );
-          pin = (input ?? "").trim();
-          if (!ADMIN_MODE_PINS.has(pin)) {
-            setPickerError("PIN이 올바르지 않습니다.");
-            return;
-          }
-          try {
-            sessionStorage.setItem(ADMIN_PIN_STORAGE, pin);
-          } catch {
-            // ignore
-          }
-        }
-        headers["x-admin-pin"] = pin;
-      }
-
       const res = await fetch(`/api/teams/${encodeURIComponent(team.id)}`, {
         method: "DELETE",
-        headers,
+        credentials: "same-origin",
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -337,7 +283,7 @@ export default function Home() {
               </span>
               <span className="text-xl font-bold text-slate-900">코치</span>
               <span className="text-sm text-sky-900/70">
-                관리자 모드: 팀을 선택하고 선수 목록을 확인한 뒤 이동합니다.
+                코치로 로그인한 경우에만 본인 팀이 표시됩니다. 팀·선수를 확인한 뒤 이동합니다.
               </span>
             </button>
           ) : (
@@ -382,9 +328,17 @@ export default function Home() {
                 닫기
               </button>
             </div>
-            <p className="mb-3 text-[11px] text-slate-400">
-              총 등록 팀 <span className="font-semibold text-slate-200">{teams.length}</span> · 총 등록 선수{" "}
-              <span className="font-semibold text-slate-200">{players.length}</span>
+            <p className="mb-3 text-[11px] text-slate-400 leading-relaxed">
+              접근 가능한 팀{" "}
+              <span className="font-semibold text-slate-200">{teams.length}</span>개입니다. 팀을 고른 뒤 입장하면{" "}
+              <span className="text-amber-200/90">해당 팀(계정) 데이터만</span> 대시보드·선수 화면에 표시됩니다.
+              {selectedTeamId !== "all" && (
+                <>
+                  {" "}
+                  선택 팀 선수{" "}
+                  <span className="font-semibold text-slate-200">{players.length}</span>명
+                </>
+              )}
             </p>
 
             {pickerError && (

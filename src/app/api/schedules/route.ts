@@ -3,8 +3,6 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
-import { isAdminApiRequest } from "@/lib/adminApiRequest";
-
 export async function GET(req: Request) {
   const session = await getSession();
   const { searchParams } = new URL(req.url);
@@ -38,10 +36,6 @@ export async function GET(req: Request) {
       return NextResponse.json([]);
     }
     where = { teamId: player.teamId };
-  } else if (isAdminApiRequest(req)) {
-    if (teamIdParam) {
-      where = { teamId: teamIdParam };
-    }
   } else if (!session && teamIdParam) {
     where = { teamId: teamIdParam };
   } else {
@@ -57,11 +51,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const session = await getSession();
-  const admin = isAdminApiRequest(req);
-  if (
-    !admin &&
-    (!session || (session.role !== "coach" && session.role !== "owner"))
-  ) {
+  if (!session || (session.role !== "coach" && session.role !== "owner")) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
   }
 
@@ -74,11 +64,7 @@ export async function POST(req: Request) {
     );
   }
 
-  /** 관리자 PIN만 있고 코치 세션이 없을 때만 전체 팀 id 허용 */
-  const ids =
-    admin && (!session || (session.role !== "coach" && session.role !== "owner"))
-      ? (await prisma.team.findMany({ select: { id: true } })).map((t) => t.id)
-      : await getAccessibleTeamIds(session!);
+  const ids = await getAccessibleTeamIds(session);
   if (!ids.includes(body.teamId)) {
     return NextResponse.json(
       { error: "해당 팀에 일정을 등록할 수 없습니다." },

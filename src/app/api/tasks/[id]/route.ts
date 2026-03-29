@@ -2,12 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
-import { isAdminApiRequest } from "@/lib/adminApiRequest";
-
-async function canAccessTask(taskId: string, req?: Request): Promise<boolean> {
-  if (req && isAdminApiRequest(req)) {
-    return true;
-  }
+async function canAccessTask(taskId: string): Promise<boolean> {
   const session = await getSession();
   if (!session || (session.role !== "coach" && session.role !== "owner")) {
     return false;
@@ -51,7 +46,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  if (!(await canAccessTask(id, req))) {
+  if (!(await canAccessTask(id))) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
   const body = await req.json();
@@ -76,7 +71,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  if (!(await canAccessTask(id, req))) {
+  if (!(await canAccessTask(id))) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
   await prisma.task.delete({

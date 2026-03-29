@@ -3,8 +3,6 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
-import { isAdminApiRequest } from "@/lib/adminApiRequest";
-
 function parseOrganization(raw: string | null): { front: string[]; coaching: string[]; player: string[] } | null {
   if (!raw) return null;
   try {
@@ -51,40 +49,9 @@ export async function GET(req: Request) {
       );
     }
 
-    const listAll = url.searchParams.get("listAll") === "1";
     const myTeamsOnly = url.searchParams.get("myTeamsOnly") === "1";
     /** 조직 소속 전체 팀(다른 코치가 만든 팀 포함) — 기본은 내가 생성한 팀만 */
     const allAccessible = url.searchParams.get("allAccessible") === "1";
-    const coachOrOwner = session?.role === "coach" || session?.role === "owner";
-
-    /**
-     * 관리자 PIN + 전체 목록: 비로그인(코치/오너 아님)일 때만 DB 전체 팀.
-     * 코치/오너로 로그인 중이면 관리자 모드여도 아래에서 본인 스코프(생성 팀 등)만 적용.
-     */
-    if (
-      isAdminApiRequest(req) &&
-      session?.role !== "player" &&
-      !coachOrOwner &&
-      listAll
-    ) {
-      const teams = await prisma.team.findMany({
-        orderBy: { name: "asc" },
-      });
-      return NextResponse.json(
-        teams.map((t) => {
-          const rawOrg = (t as { organization?: string | null }).organization;
-          const rawStat = (t as { statDefinition?: string | null }).statDefinition;
-          return {
-            id: t.id,
-            name: t.name,
-            season: t.season,
-            organizationId: t.organizationId ?? null,
-            organization: parseOrganization(rawOrg ?? null),
-            statDefinition: parseStatDefinition(rawStat ?? null),
-          };
-        }),
-      );
-    }
 
     const singleTeamIdParam = url.searchParams.get("teamId");
 
@@ -182,8 +149,12 @@ export async function GET(req: Request) {
           where: mineWhere,
           orderBy: { name: "asc" },
         });
+        const mineFiltered =
+          singleTeamIdParam != null && singleTeamIdParam.length > 0
+            ? mine.filter((t) => t.id === singleTeamIdParam)
+            : mine;
         return NextResponse.json(
-          mine.map((t) => {
+          mineFiltered.map((t) => {
             const rawOrg = (t as { organization?: string | null }).organization;
             const rawStat = (t as { statDefinition?: string | null }).statDefinition;
             return {
@@ -231,10 +202,14 @@ export async function GET(req: Request) {
       }
     }
 
-    const intersectIds: string[] =
+    let intersectIds: string[] =
       contextTeamId && scopeIds
         ? scopeIds.filter((id) => accessibleIds.includes(id))
         : accessibleIds;
+
+    if (singleTeamIdParam != null && singleTeamIdParam.length > 0) {
+      intersectIds = intersectIds.filter((id) => id === singleTeamIdParam);
+    }
 
     if (intersectIds.length === 0) {
       return NextResponse.json([]);
@@ -268,10 +243,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const session = await getSession();
-    if (
-      !isAdminApiRequest(req) &&
-      (!session || (session.role !== "coach" && session.role !== "owner"))
-    ) {
+    if (!session || (session.role !== "coach" && session.role !== "owner")) {
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
     }
 

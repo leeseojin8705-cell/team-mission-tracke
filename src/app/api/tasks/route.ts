@@ -3,17 +3,16 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
-import { isAdminApiRequest } from "@/lib/adminApiRequest";
-
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const qpPlayerId = searchParams.get("playerId");
+    const qpTeamId = searchParams.get("teamId");
 
     const session = await getSession();
     let where: Prisma.TaskWhereInput | undefined;
 
-    /** 선수 과제만 — 관리자 PIN이 있어도 전체 과제 목록으로 덮어쓰지 않음 */
+    /** 선수 본인·소속 팀 과제 */
     if (session?.role === "player" && session.playerId) {
       const player = await prisma.player.findUnique({
         where: { id: session.playerId },
@@ -29,18 +28,24 @@ export async function GET(req: Request) {
           ],
         };
       }
-    } else if (
-      isAdminApiRequest(req) &&
-      session?.role !== "coach" &&
-      session?.role !== "owner"
-    ) {
-      const tasks = await prisma.task.findMany({
-        orderBy: { title: "asc" },
-      });
-      return NextResponse.json(tasks);
     } else if (session && (session.role === "coach" || session.role === "owner")) {
       const ids = await getAccessibleTeamIds(session);
-      if (ids.length === 0) {
+      if (qpTeamId) {
+        if (!ids.includes(qpTeamId)) {
+          return NextResponse.json([]);
+        }
+        const teamPlayers = await prisma.player.findMany({
+          where: { teamId: qpTeamId },
+          select: { id: true },
+        });
+        const playerIds = teamPlayers.map((p) => p.id);
+        where =
+          playerIds.length > 0
+            ? {
+                OR: [{ teamId: qpTeamId }, { playerId: { in: playerIds } }],
+              }
+            : { teamId: qpTeamId };
+      } else if (ids.length === 0) {
         where = { teamId: null };
       } else {
         where = {
@@ -93,16 +98,14 @@ export async function POST(req: Request) {
     }
 
     const session = await getSession();
-    const admin = isAdminApiRequest(req);
-
-    if (!admin && !session) {
+    if (!session) {
       return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
     }
 
     const detailsStr = body.details ? JSON.stringify(body.details) : null;
 
     // 선수 본인 과제 등록 (단일)
-    if (!admin && session?.role === "player") {
+    if (session.role === "player") {
       if (
         body.targetType !== "player" ||
         typeof body.targetId !== "string" ||
@@ -127,18 +130,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ created: [created] }, { status: 201 });
     }
 
-    if (
-      !admin &&
-      session &&
-      session.role !== "coach" &&
-      session.role !== "owner"
-    ) {
+    if (session.role !== "coach" && session.role !== "owner") {
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     }
 
-    const accessibleIds = admin
-      ? (await prisma.team.findMany({ select: { id: true } })).map((t) => t.id)
-      : await getAccessibleTeamIds(session!);
+    const accessibleIds = await getAccessibleTeamIds(session);
 
     if (body.targetType === "team") {
       if (typeof body.targetId !== "string" || !body.targetId) {
