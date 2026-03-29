@@ -18,6 +18,12 @@ export async function getAccessibleTeamIds(session: SessionPayload): Promise<str
   });
   const staffTeamIds = staffTeams.map((s) => s.teamId);
 
-  return Array.from(new Set([...ownerTeamIds, ...staffTeamIds]));
+  const createdTeams = await prisma.team.findMany({
+    where: { createdByUserId: session.userId },
+    select: { id: true },
+  });
+  const createdTeamIds = createdTeams.map((t) => t.id);
+
+  return Array.from(new Set([...ownerTeamIds, ...staffTeamIds, ...createdTeamIds]));
 }
 

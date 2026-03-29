@@ -52,6 +52,7 @@ export async function GET(req: Request) {
     }
 
     const listAll = url.searchParams.get("listAll") === "1";
+    const myTeamsOnly = url.searchParams.get("myTeamsOnly") === "1";
     const coachOrOwner = session?.role === "coach" || session?.role === "owner";
 
     /** 관리자 PIN 전체 목록 (선수 세션은 제외 — PIN이 있어도 본인 팀만) */
@@ -138,6 +139,50 @@ export async function GET(req: Request) {
 
     let accessibleIds: string[] = [];
     if (session && (session.role === "coach" || session.role === "owner")) {
+      /** 팀 관리: 본인이 「팀 추가」로 만든 팀만 (조직 소속 타 코치 팀 제외) */
+      if (myTeamsOnly) {
+        const mineWhere: { createdByUserId: string; id?: { in: string[] } } = {
+          createdByUserId: session.userId,
+        };
+        if (contextTeamId) {
+          const ctx = await prisma.team.findUnique({
+            where: { id: contextTeamId },
+            select: { organizationId: true, id: true },
+          });
+          if (!ctx) {
+            return NextResponse.json([]);
+          }
+          const inScope =
+            ctx.organizationId != null
+              ? (
+                  await prisma.team.findMany({
+                    where: { organizationId: ctx.organizationId },
+                    select: { id: true },
+                  })
+                ).map((t) => t.id)
+              : [ctx.id];
+          mineWhere.id = { in: inScope };
+        }
+        const mine = await prisma.team.findMany({
+          where: mineWhere,
+          orderBy: { name: "asc" },
+        });
+        return NextResponse.json(
+          mine.map((t) => {
+            const rawOrg = (t as { organization?: string | null }).organization;
+            const rawStat = (t as { statDefinition?: string | null }).statDefinition;
+            return {
+              id: t.id,
+              name: t.name,
+              season: t.season,
+              organizationId: t.organizationId ?? null,
+              organization: parseOrganization(rawOrg ?? null),
+              statDefinition: parseStatDefinition(rawStat ?? null),
+            };
+          }),
+        );
+      }
+
       try {
         accessibleIds = await getAccessibleTeamIds(session);
       } catch (accessError) {
@@ -219,12 +264,16 @@ export async function POST(req: Request) {
     const organizationJson = body.organization != null ? JSON.stringify(body.organization) : null;
     const statDefinitionJson = body.statDefinition != null ? JSON.stringify(body.statDefinition) : null;
 
+    const createdByUserId =
+      session?.role === "coach" || session?.role === "owner" ? session.userId : null;
+
     const team = await prisma.team.create({
       data: {
         name: body.name,
         season: body.season ?? "",
         organization: organizationJson,
         statDefinition: statDefinitionJson,
+        ...(createdByUserId ? { createdByUserId } : {}),
       },
     });
 

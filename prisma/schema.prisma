@@ -19,6 +19,7 @@ model User {
   role         String   // "owner" | "coach"
   createdAt    DateTime @default(now())
   organizations Organization[] @relation("OwnerOrganizations")
+  createdTeams  Team[]   @relation("TeamCreator")
 }
 
 model Organization {
@@ -38,6 +39,9 @@ model Team {
   statDefinition String? // JSON: 스탯 평가 카테고리/항목 정의
   organizationRef Organization? @relation(fields: [organizationId], references: [id])
   organizationId String?
+  /// 코치/오너 계정이 「팀 추가」로 생성한 경우 User.id (팀 관리 목록은 본인 생성분만)
+  createdByUserId String? @map("created_by_user_id")
+  creator         User?   @relation("TeamCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   players        Player[]
   schedules      Schedule[]
   tasks          Task[]

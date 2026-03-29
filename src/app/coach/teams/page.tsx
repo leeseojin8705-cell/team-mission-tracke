@@ -85,9 +85,12 @@ export default function CoachTeamsPage() {
     async function loadTeams() {
       try {
         setLoading(true);
-        const url = contextTeamId
-          ? `/api/teams?contextTeamId=${encodeURIComponent(contextTeamId)}`
-          : "/api/teams";
+        const qs = new URLSearchParams();
+        qs.set("myTeamsOnly", "1");
+        if (contextTeamId) {
+          qs.set("contextTeamId", contextTeamId);
+        }
+        const url = `/api/teams?${qs.toString()}`;
         const res = await fetch(url);
         if (!res.ok) {
           throw new Error("팀 목록을 불러오지 못했습니다.");
