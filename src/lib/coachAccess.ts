@@ -1,29 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import type { SessionPayload } from "@/lib/session";
 
+/**
+ * 코치/오너가 앱에서 다룰 수 있는 팀 id.
+ * 본인이 생성한 팀만 포함한다. (조직 소속·스태프 배정만으로는 다른 계정이 만든 팀이 섞이지 않게)
+ */
 export async function getAccessibleTeamIds(session: SessionPayload): Promise<string[]> {
   if (session.role !== "coach" && session.role !== "owner") return [];
+  if (typeof session.userId !== "string" || session.userId.length === 0) return [];
 
-  // 오너가 가진 조직의 팀들
-  const orgs = await prisma.organization.findMany({
-    where: { ownerId: session.userId },
-    include: { teams: { select: { id: true } } },
-  });
-  const ownerTeamIds = orgs.flatMap((o) => o.teams.map((t) => t.id));
-
-  // TeamStaff 로 연결된 팀들
-  const staffTeams = await prisma.teamStaff.findMany({
-    where: { userId: session.userId },
-    select: { teamId: true },
-  });
-  const staffTeamIds = staffTeams.map((s) => s.teamId);
-
-  const createdTeams = await prisma.team.findMany({
+  const rows = await prisma.team.findMany({
     where: { createdByUserId: session.userId },
     select: { id: true },
   });
-  const createdTeamIds = createdTeams.map((t) => t.id);
-
-  return Array.from(new Set([...ownerTeamIds, ...staffTeamIds, ...createdTeamIds]));
+  return rows.map((t) => t.id);
 }
 
