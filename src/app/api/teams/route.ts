@@ -53,6 +53,8 @@ export async function GET(req: Request) {
 
     const listAll = url.searchParams.get("listAll") === "1";
     const myTeamsOnly = url.searchParams.get("myTeamsOnly") === "1";
+    /** 조직 소속 전체 팀(다른 코치가 만든 팀 포함) — 기본은 내가 생성한 팀만 */
+    const allAccessible = url.searchParams.get("allAccessible") === "1";
     const coachOrOwner = session?.role === "coach" || session?.role === "owner";
 
     /** 관리자 PIN 전체 목록 (선수 세션은 제외 — PIN이 있어도 본인 팀만) */
@@ -139,8 +141,9 @@ export async function GET(req: Request) {
 
     let accessibleIds: string[] = [];
     if (session && (session.role === "coach" || session.role === "owner")) {
-      /** 팀 관리: 본인이 「팀 추가」로 만든 팀만 (조직 소속 타 코치 팀 제외) */
-      if (myTeamsOnly) {
+      /** 기본: 본인이 생성한 팀만. 조직·스태프로 접근 가능한 전체 팀은 ?allAccessible=1 */
+      const useCreatedOnly = !allAccessible || myTeamsOnly;
+      if (useCreatedOnly) {
         const mineWhere: { createdByUserId: string; id?: { in: string[] } } = {
           createdByUserId: session.userId,
         };
