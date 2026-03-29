@@ -57,11 +57,15 @@ export async function GET(req: Request) {
     const allAccessible = url.searchParams.get("allAccessible") === "1";
     const coachOrOwner = session?.role === "coach" || session?.role === "owner";
 
-    /** 관리자 PIN 전체 목록 (선수 세션은 제외 — PIN이 있어도 본인 팀만) */
+    /**
+     * 관리자 PIN + 전체 목록: 비로그인(코치/오너 아님)일 때만 DB 전체 팀.
+     * 코치/오너로 로그인 중이면 관리자 모드여도 아래에서 본인 스코프(생성 팀 등)만 적용.
+     */
     if (
       isAdminApiRequest(req) &&
       session?.role !== "player" &&
-      (!coachOrOwner || listAll)
+      !coachOrOwner &&
+      listAll
     ) {
       const teams = await prisma.team.findMany({
         orderBy: { name: "asc" },

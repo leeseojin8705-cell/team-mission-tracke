@@ -17,8 +17,13 @@ export async function GET(req: Request) {
       session = null;
     }
 
-    /** 선수 세션은 본인 팀만 — 관리자 PIN으로 전체 선수 목록 노출 방지 */
-    if (isAdminApiRequest(req) && session?.role !== "player") {
+    const coachOrOwner = session?.role === "coach" || session?.role === "owner";
+
+    /**
+     * 관리자 PIN: 비로그인(코치/오너 아님)일 때만 teamId 없으면 전체 선수(관리용).
+     * 코치/오너 로그인 중이면 아래에서 접근 가능 팀만.
+     */
+    if (isAdminApiRequest(req) && session?.role !== "player" && !coachOrOwner) {
       const players = await prisma.player.findMany({
         where: teamId ? { teamId } : {},
         orderBy: { name: "asc" },
