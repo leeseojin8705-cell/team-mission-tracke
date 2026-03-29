@@ -144,8 +144,16 @@ export async function GET(req: Request) {
       /** 기본: 본인이 생성한 팀만. 조직·스태프로 접근 가능한 전체 팀은 ?allAccessible=1 */
       const useCreatedOnly = !allAccessible || myTeamsOnly;
       if (useCreatedOnly) {
+        // Prisma는 where에 undefined가 있으면 해당 조건을 빼버림 → userId 없을 때 전체 팀이 노출되는 버그 방지
+        const creatorId =
+          typeof session.userId === "string" && session.userId.length > 0
+            ? session.userId
+            : null;
+        if (!creatorId) {
+          return NextResponse.json([]);
+        }
         const mineWhere: { createdByUserId: string; id?: { in: string[] } } = {
-          createdByUserId: session.userId,
+          createdByUserId: creatorId,
         };
         if (contextTeamId) {
           const ctx = await prisma.team.findUnique({
