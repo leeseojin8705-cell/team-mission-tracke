@@ -32,8 +32,13 @@ export async function GET(
   /** 코치는 팀 전체, 선수·링크(forPlayerId)는 본인 행만 */
   let subjectPlayerScope: string | null = null;
 
-  /** 선수 세션은 아래 분기에서 본인 평가만 — PIN으로 팀 전체 평가 노출 방지 */
-  if (isAdminApiRequest(req) && session?.role !== "player") {
+  /** 비로그인 관리자 PIN만 팀 평가 전체 조회 — 코치/오너는 아래 접근 검사 */
+  if (
+    isAdminApiRequest(req) &&
+    session?.role !== "player" &&
+    session?.role !== "coach" &&
+    session?.role !== "owner"
+  ) {
     const list = await prisma.playerEvaluation.findMany({
       where: {
         teamId,

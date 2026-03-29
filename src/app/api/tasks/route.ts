@@ -29,7 +29,11 @@ export async function GET(req: Request) {
           ],
         };
       }
-    } else if (isAdminApiRequest(req)) {
+    } else if (
+      isAdminApiRequest(req) &&
+      session?.role !== "coach" &&
+      session?.role !== "owner"
+    ) {
       const tasks = await prisma.task.findMany({
         orderBy: { title: "asc" },
       });

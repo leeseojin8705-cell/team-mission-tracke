@@ -15,8 +15,13 @@ export async function GET(req: Request) {
   const teamIdParam = searchParams.get("teamId");
   const scheduleIdParam = searchParams.get("scheduleId");
 
-  /** 선수 로그인 시에는 본인 팀 분석만 (관리자 PIN 우선 분기 제외) */
-  if (isAdminApiRequest(req) && session?.role !== "player") {
+  /** 비로그인 관리자 PIN만 전체 팀 분석 — 코치/오너는 아래 스코프 */
+  if (
+    isAdminApiRequest(req) &&
+    session?.role !== "player" &&
+    session?.role !== "coach" &&
+    session?.role !== "owner"
+  ) {
     const allTeams = await prisma.team.findMany({ select: { id: true } });
     const teamIdsForQuery = teamIdParam
       ? allTeams.some((t) => t.id === teamIdParam)

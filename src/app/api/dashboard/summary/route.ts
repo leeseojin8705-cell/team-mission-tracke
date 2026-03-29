@@ -114,7 +114,12 @@ export async function GET(req: Request) {
     return { teamTaskCounts, playerTaskCounts };
   };
 
-  if (isAdminApiRequest(req)) {
+  const sessionEarly = await getSession();
+  const coachOrOwnerEarly =
+    sessionEarly?.role === "coach" || sessionEarly?.role === "owner";
+
+  /** PIN만 있는 비로그인 관리자만 DB 전체 집계 — 코치/오너 로그인 시 본인 스코프로 아래 처리 */
+  if (isAdminApiRequest(req) && !coachOrOwnerEarly) {
     const [teams, players, tasks, progresses] = await Promise.all([
       prisma.team.findMany(),
       prisma.player.findMany(),
@@ -126,7 +131,7 @@ export async function GET(req: Request) {
     );
   }
 
-  const session = await getSession();
+  const session = sessionEarly;
   let taskWhere: Prisma.TaskWhereInput | undefined;
   let teamWhere: Prisma.TeamWhereInput | undefined;
   let playerWhere: Prisma.PlayerWhereInput | undefined;
