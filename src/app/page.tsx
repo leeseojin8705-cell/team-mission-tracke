@@ -130,14 +130,14 @@ export default function Home() {
         }
       }
       syncAdminPinCookieFromSession();
-      const teamsRes = await fetch(
-        `/api/teams${adminPin ? `?adminPin=${encodeURIComponent(adminPin)}` : ""}`,
-        {
-          headers: adminPin ? { "x-admin-pin": adminPin } : {},
-          cache: "no-store",
-          credentials: "same-origin",
-        },
-      );
+      const teamListQs = new URLSearchParams();
+      if (adminPin) teamListQs.set("adminPin", adminPin);
+      teamListQs.set("listAll", "1");
+      const teamsRes = await fetch(`/api/teams?${teamListQs.toString()}`, {
+        headers: adminPin ? { "x-admin-pin": adminPin } : {},
+        cache: "no-store",
+        credentials: "same-origin",
+      });
       const body = await teamsRes.json().catch(() => null);
       if (!teamsRes.ok) {
         const detail =

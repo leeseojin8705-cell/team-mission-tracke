@@ -44,7 +44,9 @@ export async function GET(
   if (!id) {
     return NextResponse.json({ error: "잘못된 요청입니다. (id 없음)" }, { status: 400 });
   }
-  if (isAdminApiRequest(req)) {
+  const session = await getSession();
+  /** 선수 로그인 시에는 getPlayerReadAccess만 — PIN으로 임의 선수 전체 필드 조회 방지 */
+  if (isAdminApiRequest(req) && session?.role !== "player") {
     const player = await prisma.player.findUnique({
       where: { id },
       select: SELECT_FULL,
@@ -52,7 +54,6 @@ export async function GET(
     if (!player) return NextResponse.json(null, { status: 404 });
     return NextResponse.json(player);
   }
-  const session = await getSession();
   const access = await getPlayerReadAccess(id, session);
   if (access === "missing") return NextResponse.json(null, { status: 404 });
   if (access === "deny") return NextResponse.json({ error: "찾을 수 없습니다." }, { status: 404 });

@@ -79,18 +79,20 @@ function PlayerAnalysisInner() {
           throw new Error("선수 로그인 정보가 없습니다. 다시 로그인해 주세요.");
         }
 
-        const [playerRes, analysesRes] = await Promise.all([
-          fetch(`/api/players/${sessionPlayerId}`),
-          fetch("/api/analyses"),
-        ]);
-        if (!playerRes.ok || !analysesRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
-        const [playerData, analysesData]: [Player, AnalysisWithMeta[]] = await Promise.all([
-          playerRes.json(),
-          analysesRes.json(),
-        ]);
+        const playerRes = await fetch(`/api/players/${sessionPlayerId}`);
+        if (!playerRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
+        const playerData = (await playerRes.json()) as Player;
+        if (!playerData.teamId) {
+          throw new Error("팀에 소속된 선수만 전술 데이터를 이용할 수 있습니다.");
+        }
+        const analysesRes = await fetch(
+          `/api/analyses?teamId=${encodeURIComponent(playerData.teamId)}`,
+        );
+        if (!analysesRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
+        const analysesData = (await analysesRes.json()) as AnalysisWithMeta[];
         if (cancelled) return;
         setPlayer(playerData);
-        setAnalyses(analysesData);
+        setAnalyses(Array.isArray(analysesData) ? analysesData : []);
         setCurrentPlayerId(playerData.id);
         setAffiliationName(null);
         if (playerData.teamId) {
@@ -112,17 +114,15 @@ function PlayerAnalysisInner() {
     return () => { cancelled = true; };
   }, []);
 
+  /** API가 본인 팀만 주더라도, 다른 팀 행이 섞이면 표시하지 않음 (폴백으로 전체 목록 사용 금지) */
   const myAnalyses = useMemo(() => {
-    if (analyses.length === 0) return [];
-
-    const teamFiltered =
-      myTeamId != null
-        ? analyses.filter((a) => a.teamId === myTeamId)
-        : [];
-
-    const base = teamFiltered.length > 0 ? teamFiltered : analyses;
-
-    return [...base].sort((a, b) => getSortDate(b) - getSortDate(a));
+    if (analyses.length === 0 || myTeamId == null) return [];
+    const scoped = analyses.filter(
+      (a) =>
+        a.teamId === myTeamId ||
+        (a.team?.id != null && a.team.id === myTeamId),
+    );
+    return [...scoped].sort((a, b) => getSortDate(b) - getSortDate(a));
   }, [analyses, myTeamId]);
 
   // 과제 상세에서 taskId 로 진입했을 때, 과제 날짜와 같은 경기 자동 선택

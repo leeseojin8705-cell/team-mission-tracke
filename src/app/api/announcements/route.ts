@@ -29,7 +29,21 @@ export async function GET(req: Request) {
 
     let where: Prisma.AnnouncementWhereInput = {};
 
-    if (isAdminApiRequest(req)) {
+    /** 코치/오너는 관리자 PIN이 있어도 접근 가능한 팀만 (전체 DB 공지 노출 방지) */
+    if (session?.role === "coach" || session?.role === "owner") {
+      const ids = await getAccessibleTeamIds(session);
+      if (ids.length === 0) {
+        return NextResponse.json([]);
+      }
+      if (teamIdParam) {
+        if (!ids.includes(teamIdParam)) {
+          return NextResponse.json([]);
+        }
+        where.teamId = teamIdParam;
+      } else {
+        where.teamId = { in: ids };
+      }
+    } else if (isAdminApiRequest(req)) {
       if (teamIdParam) {
         where.teamId = teamIdParam;
       }
@@ -45,19 +59,6 @@ export async function GET(req: Request) {
         return NextResponse.json([]);
       }
       where.teamId = player.teamId;
-    } else if (session?.role === "coach" || session?.role === "owner") {
-      const ids = await getAccessibleTeamIds(session);
-      if (ids.length === 0) {
-        return NextResponse.json([]);
-      }
-      if (teamIdParam) {
-        if (!ids.includes(teamIdParam)) {
-          return NextResponse.json([]);
-        }
-        where.teamId = teamIdParam;
-      } else {
-        where.teamId = { in: ids };
-      }
     } else if (teamIdParam) {
       // 비로그인: 해당 팀 공지만 (URL로 팀 한정)
       where.teamId = teamIdParam;
@@ -116,9 +117,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const ids = admin
-      ? (await prisma.team.findMany({ select: { id: true } })).map((t) => t.id)
-      : await getAccessibleTeamIds(session!);
+    /** 관리자 PIN만 있고 코치 세션이 없을 때만 전체 팀 id 허용; 코치+관리자 모드는 소속 팀만 */
+    const ids =
+      admin && (!session || (session.role !== "coach" && session.role !== "owner"))
+        ? (await prisma.team.findMany({ select: { id: true } })).map((t) => t.id)
+        : await getAccessibleTeamIds(session!);
     if (!ids.includes(body.teamId)) {
       return NextResponse.json({ error: "해당 팀에 공지를 등록할 수 없습니다." }, { status: 403 });
     }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Team } from "@/lib/types";
 
@@ -46,6 +47,9 @@ function formatDatetime(iso: string) {
 }
 
 export default function CoachAnnouncementsPage() {
+  const searchParams = useSearchParams();
+  const paramTeamId = (searchParams.get("teamId") ?? "").trim();
+
   const [teams, setTeams] = useState<Team[]>([]);
   const [list, setList] = useState<AnnouncementRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,9 +79,15 @@ export default function CoachAnnouncementsPage() {
       try {
         setLoading(true);
         setError(null);
+        const teamQs = paramTeamId
+          ? `?contextTeamId=${encodeURIComponent(paramTeamId)}`
+          : "";
+        const annQs = paramTeamId
+          ? `?teamId=${encodeURIComponent(paramTeamId)}`
+          : "";
         const [teamsRes, annRes] = await Promise.all([
-          fetch("/api/teams"),
-          fetch("/api/announcements"),
+          fetch(`/api/teams${teamQs}`),
+          fetch(`/api/announcements${annQs}`),
         ]);
 
         const teamsData = await teamsRes.json();
@@ -93,9 +103,18 @@ export default function CoachAnnouncementsPage() {
         }
 
         if (!cancelled) {
-          setTeams(teamsData);
+          const raw = Array.isArray(teamsData) ? (teamsData as Team[]) : [];
+          const scoped = paramTeamId
+            ? raw.filter((t) => t.id === paramTeamId)
+            : raw;
+          setTeams(scoped);
           setList(Array.isArray(annData) ? annData : []);
-          if (!teamId && teamsData[0]) setTeamId(teamsData[0].id);
+          setTeamId(() => {
+            if (paramTeamId && scoped.some((t) => t.id === paramTeamId)) {
+              return paramTeamId;
+            }
+            return scoped[0]?.id ?? "";
+          });
         }
       } catch (e) {
         if (!cancelled)
@@ -105,8 +124,10 @@ export default function CoachAnnouncementsPage() {
       }
     }
     load();
-    return () => { cancelled = true; };
-  }, [teamId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [paramTeamId]);
 
   const visibleList = useMemo(() => {
     if (filterTeamId === "all") return list;

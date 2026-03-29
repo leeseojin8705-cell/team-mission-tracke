@@ -103,20 +103,24 @@ export default function CoachHome() {
   const [isAdminMode, setIsAdminMode] = useState(false);
   const canUseTeamJump = isAdminMode || Boolean(myOrgName);
 
+  /** URL ?teamId= 와 드롭다운 중 하나로만 범위를 정함 (둘 다 있으면 드롭다운 우선) */
+  const scopeTeamId =
+    selectedTeamId !== "all" ? selectedTeamId : contextTeamId ?? null;
+
   const filteredTeamSummary = useMemo(() => {
-    if (selectedTeamId === "all") return teamSummary;
-    return teamSummary.filter((t) => t.id === selectedTeamId);
-  }, [teamSummary, selectedTeamId]);
+    if (!scopeTeamId) return teamSummary;
+    return teamSummary.filter((t) => t.id === scopeTeamId);
+  }, [teamSummary, scopeTeamId]);
 
   const filteredPlayerSummary = useMemo(() => {
-    if (selectedTeamId === "all") return playerSummary;
-    return playerSummary.filter((p) => p.teamId === selectedTeamId);
-  }, [playerSummary, selectedTeamId]);
+    if (!scopeTeamId) return playerSummary;
+    return playerSummary.filter((p) => p.teamId === scopeTeamId);
+  }, [playerSummary, scopeTeamId]);
 
   const filteredUpcomingSchedules = useMemo(() => {
-    if (selectedTeamId === "all") return upcomingSchedules;
-    return upcomingSchedules.filter((s) => s.teamId === selectedTeamId);
-  }, [upcomingSchedules, selectedTeamId]);
+    if (!scopeTeamId) return upcomingSchedules;
+    return upcomingSchedules.filter((s) => s.teamId === scopeTeamId);
+  }, [upcomingSchedules, scopeTeamId]);
 
   useEffect(() => {
     if (contextTeamId && selectedTeamId === "all") {
@@ -132,9 +136,8 @@ export default function CoachHome() {
         setLoading(true);
         setError(null);
 
-        const activeTeamId = selectedTeamId !== "all" ? selectedTeamId : contextTeamId;
-        const teamQs = activeTeamId
-          ? `?teamId=${encodeURIComponent(activeTeamId)}`
+        const teamQs = scopeTeamId
+          ? `?teamId=${encodeURIComponent(scopeTeamId)}`
           : "";
         const [teamsRes, playersRes, schedulesRes, tasksRes, annRes, analysesRes] = await Promise.all([
           fetch("/api/teams"),
@@ -156,19 +159,23 @@ export default function CoachHome() {
         if (!cancelled) {
           const teamList: Team[] = Array.isArray(teams) ? teams : [];
           const playerList: Player[] = Array.isArray(playersData) ? playersData : [];
-          const scopedTeams = activeTeamId
-            ? teamList.filter((t) => t.id === activeTeamId)
+          const scopedTeams = scopeTeamId
+            ? teamList.filter((t) => t.id === scopeTeamId)
             : teamList;
-          const scopedPlayers = activeTeamId
-            ? playerList.filter((p) => p.teamId === activeTeamId)
+          const scopedPlayers = scopeTeamId
+            ? playerList.filter((p) => p.teamId === scopeTeamId)
             : playerList;
           const schedulesList = Array.isArray(schedules) ? schedules : [];
-          const scopedSchedules = activeTeamId
-            ? schedulesList.filter((s: { teamId?: string }) => s.teamId === activeTeamId)
+          const scopedSchedules = scopeTeamId
+            ? schedulesList.filter((s: { teamId?: string }) => s.teamId === scopeTeamId)
             : schedulesList;
           const tasksList = Array.isArray(tasks) ? tasks : [];
-          const scopedTasks = activeTeamId
-            ? tasksList.filter((t: { teamId?: string | null }) => t.teamId === activeTeamId)
+          const scopedTasks = scopeTeamId
+            ? tasksList.filter((t: { teamId?: string | null }) => {
+                if (t.teamId) return t.teamId === scopeTeamId;
+                const pl = playerList.find((p) => p.id === (t as { playerId?: string }).playerId);
+                return pl?.teamId === scopeTeamId;
+              })
             : tasksList;
           setTeamCount(scopedTeams.length);
           setPlayerCount(scopedPlayers.length);
@@ -243,7 +250,7 @@ export default function CoachHome() {
     return () => {
       cancelled = true;
     };
-  }, [contextTeamId, selectedTeamId]);
+  }, [scopeTeamId]);
 
   useEffect(() => {
     function readAdminMode() {
@@ -279,13 +286,16 @@ export default function CoachHome() {
     };
   }, []);
 
-  // 팀 스탯 레이더: 가장 최근 시즌 팀 + 최근 30일 평가 기준
+  // 팀 스탯 레이더: URL/드롭다운으로 고른 팀 우선, 없으면 목록의 마지막 팀
   useEffect(() => {
     let cancelled = false;
     async function loadTeamRadar() {
       if (!teamsForStats.length) return;
-      // 시즌/생성일 기준으로 마지막 팀 하나 선택 (단순히 마지막 요소)
-      const team = teamsForStats[teamsForStats.length - 1];
+      const team =
+        scopeTeamId != null
+          ? teamsForStats.find((t) => t.id === scopeTeamId) ??
+            teamsForStats[teamsForStats.length - 1]
+          : teamsForStats[teamsForStats.length - 1];
       if (!team?.id) return;
       setLatestTeamId(team.id);
       try {
@@ -351,7 +361,7 @@ export default function CoachHome() {
     return () => {
       cancelled = true;
     };
-  }, [teamsForStats]);
+  }, [teamsForStats, scopeTeamId]);
 
   return (
     <main className="px-2 py-2 text-slate-900 md:px-0">
@@ -490,7 +500,7 @@ export default function CoachHome() {
           <div className="rounded-2xl border border-sky-100 bg-white/90 p-5 space-y-4">
             <div className="mb-1 flex flex-wrap items-end justify-between gap-2">
               <h2 className="text-lg font-semibold">팀 / 선수 과제 요약</h2>
-              {selectedTeamId !== "all" && (
+              {scopeTeamId && (
                 <p className="text-[11px] text-sky-700">
                   선택 팀만 표시 중
                 </p>

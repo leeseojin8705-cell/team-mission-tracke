@@ -51,7 +51,15 @@ export async function GET(req: Request) {
       );
     }
 
-    if (isAdminApiRequest(req)) {
+    const listAll = url.searchParams.get("listAll") === "1";
+    const coachOrOwner = session?.role === "coach" || session?.role === "owner";
+
+    /** 관리자 PIN 전체 목록 (선수 세션은 제외 — PIN이 있어도 본인 팀만) */
+    if (
+      isAdminApiRequest(req) &&
+      session?.role !== "player" &&
+      (!coachOrOwner || listAll)
+    ) {
       const teams = await prisma.team.findMany({
         orderBy: { name: "asc" },
       });
@@ -128,17 +136,19 @@ export async function GET(req: Request) {
       return NextResponse.json([]);
     }
 
-    let accessibleIds: string[] | null = null;
+    let accessibleIds: string[] = [];
     if (session && (session.role === "coach" || session.role === "owner")) {
       try {
         accessibleIds = await getAccessibleTeamIds(session);
-        if (accessibleIds.length === 0) {
-          return NextResponse.json([]);
-        }
       } catch (accessError) {
-        console.warn("[GET /api/teams] access scope resolution failed, fallback to public scope", accessError);
-        accessibleIds = null;
+        console.warn("[GET /api/teams] access scope resolution failed", accessError);
+        return NextResponse.json([]);
       }
+      if (accessibleIds.length === 0) {
+        return NextResponse.json([]);
+      }
+    } else if (session) {
+      return NextResponse.json([]);
     }
 
     let scopeIds: string[] | null = null;
@@ -161,26 +171,17 @@ export async function GET(req: Request) {
       }
     }
 
-    let intersectIds: string[] | undefined;
-    if (contextTeamId && scopeIds) {
-      intersectIds = accessibleIds
-        ? scopeIds.filter((id) => accessibleIds!.includes(id))
-        : scopeIds;
-    } else if (accessibleIds) {
-      intersectIds = accessibleIds;
-    } else {
-      intersectIds = undefined;
-    }
+    const intersectIds: string[] =
+      contextTeamId && scopeIds
+        ? scopeIds.filter((id) => accessibleIds.includes(id))
+        : accessibleIds;
 
-    if (intersectIds !== undefined && intersectIds.length === 0) {
+    if (intersectIds.length === 0) {
       return NextResponse.json([]);
     }
 
-    const where =
-      intersectIds !== undefined ? { id: { in: intersectIds } } : undefined;
-
     const teams = await prisma.team.findMany({
-      where,
+      where: { id: { in: intersectIds } },
       orderBy: { name: "asc" },
     });
     return NextResponse.json(

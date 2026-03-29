@@ -8,7 +8,17 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const teamId = searchParams.get("teamId");
-    if (isAdminApiRequest(req)) {
+
+    let session: Awaited<ReturnType<typeof getSession>> = null;
+    try {
+      session = await getSession();
+    } catch (sessionError) {
+      console.warn("[GET /api/players] session read failed, fallback to public scope", sessionError);
+      session = null;
+    }
+
+    /** 선수 세션은 본인 팀만 — 관리자 PIN으로 전체 선수 목록 노출 방지 */
+    if (isAdminApiRequest(req) && session?.role !== "player") {
       const players = await prisma.player.findMany({
         where: teamId ? { teamId } : {},
         orderBy: { name: "asc" },
@@ -30,14 +40,6 @@ export async function GET(req: Request) {
         },
       });
       return NextResponse.json(players);
-    }
-    let session: Awaited<ReturnType<typeof getSession>> = null;
-    try {
-      session = await getSession();
-    } catch (sessionError) {
-      // Allow list retrieval even when session cookie cannot be parsed.
-      console.warn("[GET /api/players] session read failed, fallback to public scope", sessionError);
-      session = null;
     }
 
     const where: { teamId?: string | { in: string[] }; id?: string } = {};

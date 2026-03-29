@@ -15,7 +15,8 @@ export async function GET(req: Request) {
   const teamIdParam = searchParams.get("teamId");
   const scheduleIdParam = searchParams.get("scheduleId");
 
-  if (isAdminApiRequest(req)) {
+  /** 선수 로그인 시에는 본인 팀 분석만 (관리자 PIN 우선 분기 제외) */
+  if (isAdminApiRequest(req) && session?.role !== "player") {
     const allTeams = await prisma.team.findMany({ select: { id: true } });
     const teamIdsForQuery = teamIdParam
       ? allTeams.some((t) => t.id === teamIdParam)

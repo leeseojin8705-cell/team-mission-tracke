@@ -1,9 +1,13 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Schedule, Team } from "@/lib/types";
 
 export default function CoachSchedulePage() {
+  const searchParams = useSearchParams();
+  const paramTeamId = (searchParams.get("teamId") ?? "").trim();
+
   const [teams, setTeams] = useState<Team[]>([]);
   const [items, setItems] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,10 +50,20 @@ export default function CoachSchedulePage() {
         setLoading(true);
         setError(null);
 
+        const teamQs = paramTeamId
+          ? `?contextTeamId=${encodeURIComponent(paramTeamId)}`
+          : "";
+        const scheduleQs = paramTeamId
+          ? `?teamId=${encodeURIComponent(paramTeamId)}`
+          : "";
+        const annQs = paramTeamId
+          ? `?teamId=${encodeURIComponent(paramTeamId)}`
+          : "";
+
         const [teamsRes, schedulesRes, annRes] = await Promise.all([
-          fetch("/api/teams"),
-          fetch("/api/schedules"),
-          fetch("/api/announcements"),
+          fetch(`/api/teams${teamQs}`),
+          fetch(`/api/schedules${scheduleQs}`),
+          fetch(`/api/announcements${annQs}`),
         ]);
 
         if (!teamsRes.ok || !schedulesRes.ok) {
@@ -64,7 +78,11 @@ export default function CoachSchedulePage() {
           ]);
 
         if (!cancelled) {
-          setTeams(teamsData);
+          const raw = Array.isArray(teamsData) ? teamsData : [];
+          const scoped = paramTeamId
+            ? raw.filter((t) => t.id === paramTeamId)
+            : raw;
+          setTeams(scoped);
           setAnnouncements(Array.isArray(annData) ? annData : []);
           setItems(
             schedulesData.map((s) => ({
@@ -76,9 +94,12 @@ export default function CoachSchedulePage() {
                   : new Date(s.date as unknown as string).toISOString(),
             })),
           );
-          if (!teamId && teamsData[0]) {
-            setTeamId(teamsData[0].id);
-          }
+          setTeamId(() => {
+            if (paramTeamId && scoped.some((t) => t.id === paramTeamId)) {
+              return paramTeamId;
+            }
+            return scoped[0]?.id ?? "";
+          });
         }
       } catch (e) {
         if (!cancelled) {
@@ -98,7 +119,7 @@ export default function CoachSchedulePage() {
     return () => {
       cancelled = true;
     };
-  }, [teamId]);
+  }, [paramTeamId]);
 
   function resetForm() {
     setEditingId(null);

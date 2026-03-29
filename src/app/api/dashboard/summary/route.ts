@@ -165,6 +165,17 @@ export async function GET(req: Request) {
       taskWhere = { teamId: null };
       teamWhere = { id: { in: [] } };
       playerWhere = { teamId: { in: [] } };
+    } else if (teamIdParam) {
+      const teamPlayers = await prisma.player.findMany({
+        where: { teamId: teamIdParam },
+        select: { id: true },
+      });
+      const playerIds = teamPlayers.map((p) => p.id);
+      taskWhere = {
+        OR: [{ teamId: teamIdParam }, { playerId: { in: playerIds } }],
+      };
+      teamWhere = { id: teamIdParam };
+      playerWhere = { teamId: teamIdParam };
     } else {
       taskWhere = {
         OR: [{ teamId: { in: ids } }, { teamId: null }],

@@ -18,17 +18,24 @@ export default function CoachAnalysisDataPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/teams")
+    const qs = paramTeamId
+      ? `?contextTeamId=${encodeURIComponent(paramTeamId)}`
+      : "";
+    fetch(`/api/teams${qs}`)
       .then((r) => (r.ok ? r.json() : []))
       .then((list: Team[]) => {
         if (cancelled || !Array.isArray(list)) return;
-        setTeams(list);
+        // 사이드바 ?teamId= 컨텍스트면 해당 팀만 (다른 소속 팀 노출 방지)
+        const scoped = paramTeamId
+          ? list.filter((t) => t.id === paramTeamId)
+          : list;
+        setTeams(scoped);
         setSelectedTeamId((prev) => {
-          if (prev) return prev;
-          if (paramTeamId && list.some((t) => t.id === paramTeamId)) {
+          if (prev && scoped.some((t) => t.id === prev)) return prev;
+          if (paramTeamId && scoped.some((t) => t.id === paramTeamId)) {
             return paramTeamId;
           }
-          return list[0]?.id ?? "";
+          return scoped[0]?.id ?? "";
         });
       })
       .catch(() => {

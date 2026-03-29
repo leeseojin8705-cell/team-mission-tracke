@@ -10,16 +10,10 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const qpPlayerId = searchParams.get("playerId");
 
-    if (isAdminApiRequest(req)) {
-      const tasks = await prisma.task.findMany({
-        orderBy: { title: "asc" },
-      });
-      return NextResponse.json(tasks);
-    }
-
     const session = await getSession();
     let where: Prisma.TaskWhereInput | undefined;
 
+    /** 선수 과제만 — 관리자 PIN이 있어도 전체 과제 목록으로 덮어쓰지 않음 */
     if (session?.role === "player" && session.playerId) {
       const player = await prisma.player.findUnique({
         where: { id: session.playerId },
@@ -35,6 +29,11 @@ export async function GET(req: Request) {
           ],
         };
       }
+    } else if (isAdminApiRequest(req)) {
+      const tasks = await prisma.task.findMany({
+        orderBy: { title: "asc" },
+      });
+      return NextResponse.json(tasks);
     } else if (session && (session.role === "coach" || session.role === "owner")) {
       const ids = await getAccessibleTeamIds(session);
       if (ids.length === 0) {
