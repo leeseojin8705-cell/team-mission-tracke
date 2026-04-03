@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { TaskCoachBlueprintView } from "@/components/TaskCoachBlueprintView";
 import type { Task, TaskDetails } from "@/lib/types";
 
 type PlayerSession = {
   session?: {
-    role: "player" | "coach";
+    role: "player" | "coach" | "owner";
     playerId?: string;
   };
 };
@@ -126,7 +127,9 @@ function isTodayForTask(task: Task): boolean {
   return true;
 }
 
-export default function PlayerTasksPage() {
+function PlayerTasksInner() {
+  const searchParams = useSearchParams();
+  const playerIdFromUrl = searchParams.get("playerId");
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [tasks, setTasks] = useState<TaskWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,27 +155,77 @@ export default function PlayerTasksPage() {
         setLoading(true);
         setError(null);
 
-        // 세션에서 선수 id 확인
-        const sessionRes = await fetch("/api/auth/session");
+        const sessionRes = await fetch("/api/auth/session", {
+          credentials: "same-origin",
+        });
         const sessionData = (await sessionRes.json().catch(() => ({}))) as PlayerSession;
-        const pid =
-          sessionData.session?.role === "player" ? sessionData.session.playerId ?? null : null;
+        const sessionRole = sessionData.session?.role;
+        if (sessionRole === "coach" || sessionRole === "owner") {
+          throw new Error(
+            "코치·구단 계정으로는 선수용 「내 과제」를 열 수 없습니다. 선수 로그인을 하거나, 코치가 준 선수 전용 링크(?playerId=)로만 접속해 주세요.",
+          );
+        }
+        const sessionPlayerId =
+          sessionData.session?.role === "player"
+            ? sessionData.session.playerId ?? null
+            : null;
+
+        let pid = sessionPlayerId;
         if (!pid) {
-          throw new Error("선수 로그인 정보가 없습니다. 다시 로그인해 주세요.");
+          const fromUrl = playerIdFromUrl?.trim();
+          if (fromUrl) pid = fromUrl;
+        }
+        if (!pid) {
+          try {
+            const stored = window.localStorage.getItem("tmt:lastPlayerId");
+            if (stored) pid = stored;
+          } catch {
+            /* ignore */
+          }
+        }
+
+        if (!pid) {
+          throw new Error(
+            "선수 정보를 찾을 수 없습니다. 로그인하거나, 홈에서 코치가 준 링크(?playerId=)로 접속해 주세요.",
+          );
         }
         if (cancelled) return;
         setPlayerId(pid);
         setAffiliationName(null);
 
-        const [tasksRes] = await Promise.all([fetch("/api/tasks")]);
-        if (!tasksRes.ok) throw new Error("과제 목록을 불러오지 못했습니다.");
+        const playerRes = await fetch(
+          `/api/players/${encodeURIComponent(pid)}`,
+          { credentials: "same-origin" },
+        );
+        if (!playerRes.ok) {
+          if (playerRes.status === 404) {
+            throw new Error(
+              "선수를 찾을 수 없습니다. 링크·코드가 맞는지 확인해 주세요.",
+            );
+          }
+          throw new Error("선수 정보를 확인하지 못했습니다.");
+        }
+        const playerJson = (await playerRes.json()) as { teamId?: string | null };
+        const teamId = playerJson?.teamId;
+
+        const tasksUrl =
+          sessionPlayerId && sessionPlayerId === pid
+            ? "/api/tasks"
+            : `/api/tasks?playerId=${encodeURIComponent(pid)}`;
+        const tasksRes = await fetch(tasksUrl, { credentials: "same-origin" });
+        if (!tasksRes.ok) {
+          const errBody = (await tasksRes.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(errBody.error ?? "과제 목록을 불러오지 못했습니다.");
+        }
         const tasksData = (await tasksRes.json()) as Task[];
         if (cancelled) return;
         setTasks(tasksData.map(normalizeTask));
 
-        // 과제 진행도 정보
         const progressRes = await fetch(
           `/api/task-progress?playerId=${encodeURIComponent(pid)}`,
+          { credentials: "same-origin" },
         );
         if (progressRes.ok) {
           const progressData = (await progressRes.json()) as {
@@ -186,51 +239,45 @@ export default function PlayerTasksPage() {
           setCompletedMap(map);
         }
 
-        // 평가 배지용 상태 로딩 (사전/사후/코치 평가 여부)
         try {
-          const playerRes = await fetch(
-            `/api/players/${encodeURIComponent(pid)}`,
-          );
-          if (playerRes.ok) {
-            const player: { teamId?: string | null } = await playerRes.json();
-            const teamId = player?.teamId;
-            if (teamId) {
-              const teamMetaRes = await fetch(
-                `/api/teams/${encodeURIComponent(teamId)}`,
-              );
-              if (teamMetaRes.ok) {
-                const tm = (await teamMetaRes.json()) as { name?: string };
-                if (!cancelled && tm?.name) setAffiliationName(tm.name);
-              }
-              const evalRes = await fetch(
-                `/api/teams/${encodeURIComponent(
-                  teamId,
-                )}/player-evaluations`,
-              );
-              if (evalRes.ok) {
-                const evalList = (await evalRes.json()) as {
-                  subjectPlayerId?: string;
-                  phase?: string | null;
-                  taskId?: string | null;
-                }[];
-                const evalMap: Record<string, EvalBadgeStatus> = {};
-                for (const ev of evalList) {
-                  if (!ev.taskId) continue;
-                  if (ev.subjectPlayerId !== pid) continue;
-                  const key = ev.taskId;
-                  const current: EvalBadgeStatus =
-                    evalMap[key] ?? { pre: false, post: false, coach: false };
-                  if (ev.phase === "PLAYER_PRE") current.pre = true;
-                  else if (ev.phase === "PLAYER_POST") current.post = true;
-                  else if (ev.phase === "COACH_POST") current.coach = true;
-                  evalMap[key] = current;
-                }
-                setEvalStatusMap(evalMap);
-              }
+          if (teamId) {
+            const teamMetaRes = await fetch(
+              `/api/teams/${encodeURIComponent(teamId)}`,
+              { credentials: "same-origin" },
+            );
+            if (teamMetaRes.ok) {
+              const tm = (await teamMetaRes.json()) as { name?: string };
+              if (!cancelled && tm?.name) setAffiliationName(tm.name);
             }
+            const evalRes = await fetch(
+              `/api/teams/${encodeURIComponent(teamId)}/player-evaluations?forPlayerId=${encodeURIComponent(pid)}`,
+              { credentials: "same-origin" },
+            );
+            if (evalRes.ok) {
+              const evalList = (await evalRes.json()) as {
+                subjectPlayerId?: string;
+                phase?: string | null;
+                taskId?: string | null;
+              }[];
+              const evalMap: Record<string, EvalBadgeStatus> = {};
+              for (const ev of evalList) {
+                if (!ev.taskId) continue;
+                if (ev.subjectPlayerId !== pid) continue;
+                const key = ev.taskId;
+                const current: EvalBadgeStatus =
+                  evalMap[key] ?? { pre: false, post: false, coach: false };
+                if (ev.phase === "PLAYER_PRE") current.pre = true;
+                else if (ev.phase === "PLAYER_POST") current.post = true;
+                else if (ev.phase === "COACH_POST") current.coach = true;
+                evalMap[key] = current;
+              }
+              setEvalStatusMap(evalMap);
+            }
+          } else {
+            setEvalStatusMap({});
           }
         } catch {
-          // 평가 정보는 선택 기능이므로 실패해도 치명적이지 않음
+          // 평가 배지는 선택 기능
         }
       } catch (e) {
         if (!cancelled) {
@@ -244,7 +291,7 @@ export default function PlayerTasksPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [playerIdFromUrl]);
 
   const visibleTasks = useMemo(() => {
     if (!playerId) return [];
@@ -666,7 +713,11 @@ export default function PlayerTasksPage() {
                     )}
                     <div className="mt-2 flex flex-wrap gap-2 text-xs">
                       <Link
-                        href={`/player/tasks/${encodeURIComponent(task.id)}`}
+                        href={`/player/tasks/${encodeURIComponent(task.id)}${
+                          playerId
+                            ? `?playerId=${encodeURIComponent(playerId)}`
+                            : ""
+                        }`}
                         className={`rounded-lg px-3 py-1.5 font-medium text-white ${
                           locked
                             ? "border border-amber-500/50 bg-amber-950/40 text-amber-100 hover:bg-amber-950/60"
@@ -687,3 +738,16 @@ export default function PlayerTasksPage() {
   );
 }
 
+export default function PlayerTasksPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen px-4 py-8 text-slate-900">
+          <p className="text-sm text-slate-500">불러오는 중…</p>
+        </main>
+      }
+    >
+      <PlayerTasksInner />
+    </Suspense>
+  );
+}

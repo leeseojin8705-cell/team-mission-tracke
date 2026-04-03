@@ -51,8 +51,6 @@ export async function GET(req: Request) {
     }
 
     const myTeamsOnly = url.searchParams.get("myTeamsOnly") === "1";
-    /** 조직 소속 전체 팀(다른 코치가 만든 팀 포함) — 기본은 내가 생성한 팀만 */
-    const allAccessible = url.searchParams.get("allAccessible") === "1";
     /** 홈 관리자 팀 선택: 유효한 관리자 PIN일 때만 DB 전체 팀 (선택 후에는 ?teamId 로 스코프) */
     const listAll = url.searchParams.get("listAll") === "1";
 
@@ -142,8 +140,8 @@ export async function GET(req: Request) {
 
     let accessibleIds: string[] = [];
     if (session && (session.role === "coach" || session.role === "owner")) {
-      /** 기본: 본인이 생성한 팀만. 조직·스태프로 접근 가능한 전체 팀은 ?allAccessible=1 */
-      const useCreatedOnly = !allAccessible || myTeamsOnly;
+      /** 본인이 생성한 팀만 보려면 ?myTeamsOnly=1. 기본은 생성·스태프·소유 조직 팀 전체 */
+      const useCreatedOnly = myTeamsOnly;
       if (useCreatedOnly) {
         // Prisma는 where에 undefined가 있으면 해당 조건을 빼버림 → userId 없을 때 전체 팀이 노출되는 버그 방지
         const creatorId =

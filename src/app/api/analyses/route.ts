@@ -30,7 +30,16 @@ export async function GET(req: Request) {
       teamIdsForQuery = scopedIds;
     }
   } else {
-    if (!teamIdParam) {
+    /** 비로그인: teamId 단독 조회는 차단. 선수 본인 확인용 playerId가 있을 때만 허용 */
+    const playerIdParam = searchParams.get("playerId");
+    if (!teamIdParam || !playerIdParam) {
+      return NextResponse.json([]);
+    }
+    const player = await prisma.player.findUnique({
+      where: { id: playerIdParam },
+      select: { teamId: true },
+    });
+    if (!player?.teamId || player.teamId !== teamIdParam) {
       return NextResponse.json([]);
     }
     teamIdsForQuery = [teamIdParam];

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { EvalPhase } from "@/lib/prismaEnums";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 function parseScores(raw: string): Record<string, number[]> {
   try {
     const o = JSON.parse(raw) as Record<string, unknown>;
@@ -43,6 +44,14 @@ export async function GET(
     const ids = await getAccessibleTeamIds(session);
     if (!ids.includes(teamId)) {
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+    }
+  } else if (isAdminApiRequest(req)) {
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
+      select: { id: true },
+    });
+    if (!team) {
+      return NextResponse.json({ error: "팀을 찾을 수 없습니다." }, { status: 404 });
     }
   } else if (!session && forPlayerId) {
     const pl = await prisma.player.findUnique({

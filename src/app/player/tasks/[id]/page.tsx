@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { TaskCoachBlueprintView } from "@/components/TaskCoachBlueprintView";
 import {
   formatSubFocusForDisplay,
@@ -20,7 +20,7 @@ import {
 
 type PlayerSession = {
   session?: {
-    role: "player" | "coach";
+    role: "player" | "coach" | "owner";
     playerId?: string;
   };
 };
@@ -34,8 +34,10 @@ type EvaluationSummary = {
   improvement: number | null;
 };
 
-export default function PlayerTaskDetailPage() {
+function PlayerTaskDetailInner() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const playerIdFromUrl = searchParams.get("playerId");
   const id = typeof params.id === "string" ? params.id : null;
 
   const [playerId, setPlayerId] = useState<string | null>(null);
@@ -60,16 +62,69 @@ export default function PlayerTaskDetailPage() {
         setLoading(true);
         setError(null);
 
-        const sessionRes = await fetch("/api/auth/session");
+        const sessionRes = await fetch("/api/auth/session", {
+          credentials: "same-origin",
+        });
         const sessionData = (await sessionRes.json().catch(() => ({}))) as PlayerSession;
-        const pid =
-          sessionData.session?.role === "player" ? sessionData.session.playerId ?? null : null;
-        if (!pid) throw new Error("선수 로그인 정보가 없습니다. 다시 로그인해 주세요.");
+        const sessionRole = sessionData.session?.role;
+        if (sessionRole === "coach" || sessionRole === "owner") {
+          throw new Error(
+            "코치·구단 계정으로는 선수용 「내 과제」를 열 수 없습니다. 선수 로그인을 하거나, 코치가 준 선수 전용 링크(?playerId=)로만 접속해 주세요.",
+          );
+        }
+        const sessionPlayerId =
+          sessionData.session?.role === "player"
+            ? sessionData.session.playerId ?? null
+            : null;
+
+        let pid = sessionPlayerId;
+        if (!pid) {
+          const fromUrl = playerIdFromUrl?.trim();
+          if (fromUrl) pid = fromUrl;
+        }
+        if (!pid) {
+          try {
+            const stored = window.localStorage.getItem("tmt:lastPlayerId");
+            if (stored) pid = stored;
+          } catch {
+            /* ignore */
+          }
+        }
+        if (!pid) {
+          throw new Error(
+            "선수 정보를 찾을 수 없습니다. 로그인하거나 링크(?playerId=)로 접속해 주세요.",
+          );
+        }
+        if (cancelled) return;
+
+        const playerRes = await fetch(
+          `/api/players/${encodeURIComponent(pid)}`,
+          { credentials: "same-origin" },
+        );
+        if (!playerRes.ok) {
+          if (playerRes.status === 404) {
+            throw new Error(
+              "선수를 찾을 수 없습니다. 링크·코드가 맞는지 확인해 주세요.",
+            );
+          }
+          throw new Error("선수 정보를 확인하지 못했습니다.");
+        }
+        const playerJson = (await playerRes.json()) as { teamId?: string | null };
+
         if (cancelled) return;
         setPlayerId(pid);
 
-        const taskRes = await fetch(`/api/tasks/${encodeURIComponent(id)}`);
-        if (!taskRes.ok) throw new Error("과제를 불러오지 못했습니다.");
+        const taskUrl =
+          sessionPlayerId && sessionPlayerId === pid
+            ? `/api/tasks/${encodeURIComponent(id)}`
+            : `/api/tasks/${encodeURIComponent(id)}?playerId=${encodeURIComponent(pid)}`;
+        const taskRes = await fetch(taskUrl, { credentials: "same-origin" });
+        if (!taskRes.ok) {
+          const errBody = (await taskRes.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(errBody.error ?? "과제를 불러오지 못했습니다.");
+        }
         const rawTask = (await taskRes.json()) as TaskWithDetails & {
           details?: TaskWithDetails["details"] | string | null;
         };
@@ -99,22 +154,21 @@ export default function PlayerTaskDetailPage() {
         ) {
           const tid = parsedTask.teamId;
           if (tid) {
-            const metaRes = await fetch(`/api/teams/${encodeURIComponent(tid)}`);
+            const metaRes = await fetch(`/api/teams/${encodeURIComponent(tid)}`, {
+              credentials: "same-origin",
+            });
             if (metaRes.ok) {
               const tm = (await metaRes.json()) as { name?: string };
               if (!cancelled && tm?.name) setAffiliationName(tm.name);
             }
-          } else {
-            const pr = await fetch(`/api/players/${encodeURIComponent(pid)}`);
-            if (pr.ok) {
-              const pl = (await pr.json()) as { teamId?: string | null };
-              if (pl?.teamId) {
-                const tr = await fetch(`/api/teams/${encodeURIComponent(pl.teamId)}`);
-                if (tr.ok) {
-                  const tm = (await tr.json()) as { name?: string };
-                  if (!cancelled && tm?.name) setAffiliationName(tm.name);
-                }
-              }
+          } else if (playerJson?.teamId) {
+            const tr = await fetch(
+              `/api/teams/${encodeURIComponent(playerJson.teamId)}`,
+              { credentials: "same-origin" },
+            );
+            if (tr.ok) {
+              const tm = (await tr.json()) as { name?: string };
+              if (!cancelled && tm?.name) setAffiliationName(tm.name);
             }
           }
           return;
@@ -127,10 +181,15 @@ export default function PlayerTaskDetailPage() {
             fetch(
               `/api/teams/${encodeURIComponent(teamId)}/player-evaluations?taskId=${encodeURIComponent(
                 id,
-              )}`,
+              )}&forPlayerId=${encodeURIComponent(pid)}`,
+              { credentials: "same-origin" },
             ),
-            fetch(`/api/players?teamId=${encodeURIComponent(teamId)}`),
-            fetch(`/api/teams/${encodeURIComponent(teamId)}/staff`),
+            fetch(`/api/players?teamId=${encodeURIComponent(teamId)}`, {
+              credentials: "same-origin",
+            }),
+            fetch(`/api/teams/${encodeURIComponent(teamId)}/staff`, {
+              credentials: "same-origin",
+            }),
           ]);
 
           if (evalRes.ok) {
@@ -171,27 +230,27 @@ export default function PlayerTaskDetailPage() {
             );
           }
 
-          const metaRes = await fetch(`/api/teams/${encodeURIComponent(teamId)}`);
+          const metaRes = await fetch(`/api/teams/${encodeURIComponent(teamId)}`, {
+            credentials: "same-origin",
+          });
           if (metaRes.ok) {
             const tm = (await metaRes.json()) as { name?: string };
             if (!cancelled && tm?.name) setAffiliationName(tm.name);
           }
-        } else {
-          const pr = await fetch(`/api/players/${encodeURIComponent(pid)}`);
-          if (pr.ok) {
-            const pl = (await pr.json()) as { teamId?: string | null };
-            if (pl?.teamId) {
-              const tr = await fetch(`/api/teams/${encodeURIComponent(pl.teamId)}`);
-              if (tr.ok) {
-                const tm = (await tr.json()) as { name?: string };
-                if (!cancelled && tm?.name) setAffiliationName(tm.name);
-              }
-            }
+        } else if (playerJson?.teamId) {
+          const tr = await fetch(
+            `/api/teams/${encodeURIComponent(playerJson.teamId)}`,
+            { credentials: "same-origin" },
+          );
+          if (tr.ok) {
+            const tm = (await tr.json()) as { name?: string };
+            if (!cancelled && tm?.name) setAffiliationName(tm.name);
           }
         }
 
         const progressRes = await fetch(
-          `/api/task-progress?taskId=${encodeURIComponent(id)}&playerId=${encodeURIComponent(pid)}`,
+          `/api/task-progress?playerId=${encodeURIComponent(pid)}`,
+          { credentials: "same-origin" },
         );
         if (progressRes.ok) {
           const list = (await progressRes.json()) as {
@@ -200,7 +259,7 @@ export default function PlayerTaskDetailPage() {
             completed: boolean;
             note?: string | null;
           }[];
-          const mine = list.find((p) => p.playerId === pid);
+          const mine = list.find((p) => p.taskId === id && p.playerId === pid);
           if (mine) {
             setCompleted(mine.completed);
             setNote(mine.note ?? "");
@@ -218,7 +277,7 @@ export default function PlayerTaskDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, playerIdFromUrl]);
 
   const d = useMemo(() => task?.details ?? null, [task]);
 
@@ -230,6 +289,7 @@ export default function PlayerTaskDetailPage() {
       const res = await fetch("/api/task-progress", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           taskId: id,
           playerId,
@@ -237,7 +297,15 @@ export default function PlayerTaskDetailPage() {
           note,
         }),
       });
-      if (!res.ok) throw new Error("저장에 실패했습니다.");
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (res.status === 401) {
+          throw new Error(
+            data.error ?? "로그인한 뒤에만 진행 상황을 저장할 수 있습니다.",
+          );
+        }
+        throw new Error(data.error ?? "저장에 실패했습니다.");
+      }
       setSaveMessage("저장되었습니다.");
     } catch (e) {
       setSaveMessage(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다.");
@@ -251,7 +319,11 @@ export default function PlayerTaskDetailPage() {
       <div className="mx-auto max-w-4xl space-y-4">
         <div className="flex items-center gap-4">
           <Link
-            href="/player/tasks"
+            href={
+              playerId
+                ? `/player/tasks?playerId=${encodeURIComponent(playerId)}`
+                : "/player/tasks"
+            }
             className="text-sm text-slate-400 hover:text-slate-200"
           >
             ← 내 과제
@@ -553,7 +625,11 @@ export default function PlayerTaskDetailPage() {
                     자기평가 하러 가기
                   </Link>
                   <Link
-                    href={`/player/analysis?taskId=${encodeURIComponent(id)}`}
+                    href={
+                      playerId
+                        ? `/player/analysis?taskId=${encodeURIComponent(id)}&playerId=${encodeURIComponent(playerId)}`
+                        : `/player/analysis?taskId=${encodeURIComponent(id)}`
+                    }
                     className="rounded-lg border border-slate-600 px-3 py-1.5 font-medium text-slate-100 hover:bg-slate-800"
                   >
                     개인 전술 데이터 보기
@@ -574,4 +650,17 @@ export default function PlayerTaskDetailPage() {
   );
 }
 
+export default function PlayerTaskDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-50">
+          <p className="text-sm text-slate-400">불러오는 중…</p>
+        </main>
+      }
+    >
+      <PlayerTaskDetailInner />
+    </Suspense>
+  );
+}
 

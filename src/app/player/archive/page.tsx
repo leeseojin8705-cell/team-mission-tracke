@@ -91,12 +91,16 @@ function PlayerArchiveInner() {
   }, [myTeamId]);
 
   useEffect(() => {
-    if (!myTeamId) {
+    if (!myTeamId || !currentPlayerId) {
       setAnalyses([]);
       return;
     }
     let cancelled = false;
-    fetch(`/api/analyses?teamId=${encodeURIComponent(myTeamId)}`)
+    const q = new URLSearchParams({
+      teamId: myTeamId,
+      playerId: currentPlayerId,
+    });
+    fetch(`/api/analyses?${q.toString()}`, { credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : []))
       .then((data: AnalysisWithMeta[]) => {
         if (!cancelled && Array.isArray(data)) setAnalyses(data);
@@ -107,7 +111,7 @@ function PlayerArchiveInner() {
     return () => {
       cancelled = true;
     };
-  }, [myTeamId]);
+  }, [myTeamId, currentPlayerId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -182,13 +186,16 @@ function PlayerArchiveInner() {
 
   // 과제 상세에서 taskId 로 진입했을 때, 과제 날짜와 같은 개인 기록 자동 선택
   useEffect(() => {
-    if (!taskId || records.length === 0) return;
+    if (!taskId || !currentPlayerId || records.length === 0) return;
     if (selectedRecordId) return;
     let cancelled = false;
 
     async function selectRecordByTask() {
       try {
-        const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`);
+        const res = await fetch(
+          `/api/tasks/${encodeURIComponent(taskId)}?playerId=${encodeURIComponent(currentPlayerId)}`,
+          { credentials: "same-origin" },
+        );
         if (!res.ok) return;
         const task = (await res.json()) as {
           details?: {
@@ -233,7 +240,7 @@ function PlayerArchiveInner() {
     return () => {
       cancelled = true;
     };
-  }, [taskId, records, selectedRecordId]);
+  }, [taskId, records, selectedRecordId, currentPlayerId]);
 
   const myAnalyses = useMemo(() => {
     if (!myTeamId) return [];
@@ -511,7 +518,11 @@ function PlayerArchiveInner() {
                     <div className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-900/30 px-6 py-12 text-center">
                       <p className="text-sm text-slate-400">이 경기에 제출한 데이터가 없습니다.</p>
                       <Link
-                        href="/player/analysis"
+                        href={
+                          currentPlayerId
+                            ? `/player/analysis?playerId=${encodeURIComponent(currentPlayerId)}`
+                            : "/player/analysis"
+                        }
                         className="mt-3 text-sm text-emerald-400 hover:underline"
                       >
                         개인 전술 데이터에서 제출하기 →

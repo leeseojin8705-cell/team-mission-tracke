@@ -4,12 +4,29 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
 import { applyPlayerTaskVisibility } from "@/lib/playerTaskVisibility";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 import type { Task } from "@/lib/types";
+
+async function teamExists(teamId: string): Promise<boolean> {
+  const t = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { id: true },
+  });
+  return !!t;
+}
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const qpPlayerId = searchParams.get("playerId");
     const qpTeamId = searchParams.get("teamId");
+    const listAll = searchParams.get("listAll") === "1";
+
+    if (listAll && isAdminApiRequest(req)) {
+      const tasks = await prisma.task.findMany({
+        orderBy: { title: "asc" },
+      });
+      return NextResponse.json(tasks);
+    }
 
     const session = await getSession();
     let where: Prisma.TaskWhereInput | undefined;
@@ -111,14 +128,16 @@ export async function POST(req: Request) {
     }
 
     const session = await getSession();
-    if (!session) {
+    const adminOk = isAdminApiRequest(req);
+
+    if (!session && !adminOk) {
       return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
     }
 
     const detailsStr = body.details ? JSON.stringify(body.details) : null;
 
     // 선수 본인 과제 등록 (단일)
-    if (session.role === "player") {
+    if (session?.role === "player") {
       if (
         body.targetType !== "player" ||
         typeof body.targetId !== "string" ||
@@ -143,11 +162,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ created: [created] }, { status: 201 });
     }
 
-    if (session.role !== "coach" && session.role !== "owner") {
+    if (
+      session &&
+      session.role !== "coach" &&
+      session.role !== "owner"
+    ) {
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     }
 
-    const accessibleIds = await getAccessibleTeamIds(session);
+    const accessibleIds =
+      session && (session.role === "coach" || session.role === "owner")
+        ? await getAccessibleTeamIds(session)
+        : [];
 
     if (body.targetType === "team") {
       if (typeof body.targetId !== "string" || !body.targetId) {
@@ -156,10 +182,17 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
-      if (!accessibleIds.includes(body.targetId)) {
+      const allowed = adminOk
+        ? await teamExists(body.targetId)
+        : accessibleIds.includes(body.targetId);
+      if (!allowed) {
         return NextResponse.json(
-          { error: "해당 팀에 과제를 등록할 수 없습니다." },
-          { status: 403 },
+          {
+            error: adminOk
+              ? "팀을 찾을 수 없습니다."
+              : "해당 팀에 과제를 등록할 수 없습니다.",
+          },
+          { status: adminOk ? 400 : 403 },
         );
       }
       const created = await prisma.task.create({
@@ -219,10 +252,17 @@ export async function POST(req: Request) {
     }
 
     const teamId = [...teamIds][0]!;
-    if (!accessibleIds.includes(teamId)) {
+    const playerTeamAllowed = adminOk
+      ? await teamExists(teamId)
+      : accessibleIds.includes(teamId);
+    if (!playerTeamAllowed) {
       return NextResponse.json(
-        { error: "해당 팀 선수에게 과제를 등록할 수 없습니다." },
-        { status: 403 },
+        {
+          error: adminOk
+            ? "팀을 찾을 수 없습니다."
+            : "해당 팀 선수에게 과제를 등록할 수 없습니다.",
+        },
+        { status: adminOk ? 400 : 403 },
       );
     }
 

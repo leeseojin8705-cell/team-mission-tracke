@@ -524,11 +524,12 @@ export default function CoachTasksPage() {
     return null;
   }, [players, targetPlayerIds, targetId, targetType]);
 
-  // 엔트리/선수 지정 후보: 현재 팀 소속 선수들만
+  // 엔트리/선수 지정 후보: 과제 대상 팀 소속만 (대상 미선택 시 전체 선수를 섞어 보이지 않음)
   const entryCandidatePlayers = useMemo(() => {
-    if (!currentTeamIdForTask) return players;
-    return players.filter((p) => p.teamId === currentTeamIdForTask);
-  }, [currentTeamIdForTask, players]);
+    const scopeTeamId = currentTeamIdForTask ?? (lockedTeamId || null);
+    if (!scopeTeamId) return [];
+    return players.filter((p) => p.teamId === scopeTeamId);
+  }, [currentTeamIdForTask, lockedTeamId, players]);
   const entryPlayerMap = useMemo(
     () => Object.fromEntries(entryCandidatePlayers.map((p) => [p.id, p])),
     [entryCandidatePlayers],
@@ -699,13 +700,30 @@ export default function CoachTasksPage() {
         setLoading(true);
         setError(null);
 
+        const adminOn =
+          typeof window !== "undefined" &&
+          window.localStorage.getItem("tmt:adminMode") === "on";
+        const teamsUrl = adminOn ? "/api/teams?listAll=1" : "/api/teams";
+        const playersUrl = adminOn ? "/api/players?listAll=1" : "/api/players";
+        const tasksUrl = adminOn ? "/api/tasks?listAll=1" : "/api/tasks";
+
         const [teamsRes, playersRes, tasksRes] = await Promise.all([
-          fetch("/api/teams"),
-          fetch("/api/players"),
-          fetch("/api/tasks"),
+          fetch(teamsUrl, { credentials: "same-origin" }),
+          fetch(playersUrl, { credentials: "same-origin" }),
+          fetch(tasksUrl, { credentials: "same-origin" }),
         ]);
 
         if (!teamsRes.ok || !playersRes.ok || !tasksRes.ok) {
+          if (
+            adminOn &&
+            (teamsRes.status === 401 ||
+              playersRes.status === 401 ||
+              tasksRes.status === 401)
+          ) {
+            throw new Error(
+              "ADMIN_PIN:관리자 모드에서는 홈에서 관리자 PIN을 입력한 뒤 이 페이지를 새로고침해 주세요.",
+            );
+          }
           throw new Error("데이터를 불러오지 못했습니다.");
         }
 
@@ -756,9 +774,12 @@ export default function CoachTasksPage() {
         }
       } catch (e) {
         if (!cancelled) {
-          setError(
-            e instanceof Error ? e.message : "알 수 없는 오류가 발생했습니다.",
-          );
+          const msg = e instanceof Error ? e.message : "알 수 없는 오류가 발생했습니다.";
+          if (msg.startsWith("ADMIN_PIN:")) {
+            setError(msg.slice("ADMIN_PIN:".length));
+          } else {
+            setError(msg);
+          }
         }
       } finally {
         if (!cancelled) {
@@ -772,7 +793,7 @@ export default function CoachTasksPage() {
     return () => {
       cancelled = true;
     };
-  }, [targetId, targetType, lockedTeamId]);
+  }, [lockedTeamId]);
 
   useEffect(() => {
     if (!lockedTeamId) return;
@@ -1868,129 +1889,6 @@ export default function CoachTasksPage() {
           </div>
         </div>
 
-        {/* 과제 대상·제목: 먼저 고르면 아래 포메이션·선수 목록이 맞춰집니다 */}
-        <section className="space-y-3 rounded-xl border border-lime-500/35 bg-white/93 p-4">
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-lime-800/95">
-            <span className="h-2 w-2 rounded-full bg-lime-400" />
-            과제 대상 및 제목
-          </div>
-          <p className="text-[10px] text-slate-500">
-            팀 또는 선수를 먼저 지정한 뒤 전술판에 선수를 배치할 수 있습니다. 선수 이름은 여기서 직접 입력하지 않고,{" "}
-            <Link
-              href="/coach/players"
-              className="text-sky-600 underline underline-offset-2 hover:text-sky-800"
-            >
-              선수 관리
-            </Link>
-            에서 등록한 명단을 불러옵니다.
-          </p>
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),minmax(0,1fr),minmax(0,1.2fr)]">
-            <div>
-              <label className="mb-1 block text-xs text-slate-600">대상 종류</label>
-              <select
-                value={targetType}
-                onChange={(e) => {
-                  const value = e.target.value as TargetType;
-                  setTargetType(value);
-                  if (value === "team") {
-                    setTargetId(teamOptions[0]?.id ?? "");
-                    setTargetPlayerIds([]);
-                  } else {
-                    setTargetId("");
-                    const first = playerOptions[0]?.id;
-                    setTargetPlayerIds(first ? [first] : []);
-                  }
-                }}
-                className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
-              >
-                <option value="team">팀</option>
-                <option value="player">선수</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-600">
-                {targetType === "team" ? "대상 선택" : "대상 선택 (복수)"}
-              </label>
-              {targetType === "team" ? (
-                <select
-                  value={targetId}
-                  onChange={(e) => setTargetId(e.target.value)}
-                  className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
-                  disabled={teamOptions.length === 0}
-                >
-                  {teamOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="flex max-h-36 flex-col gap-1 overflow-y-auto rounded-md border border-sky-200 bg-white px-2 py-2 text-sm text-slate-900">
-                  {playerOptions.length === 0 ? (
-                    <span className="text-xs text-slate-500">선수 없음</span>
-                  ) : (
-                    <>
-                      {playerOptions.map((opt) => (
-                        <label
-                          key={opt.id}
-                          className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-sky-50/92"
-                        >
-                          <input
-                            type="checkbox"
-                            className="accent-rose-500"
-                            checked={targetPlayerIds.includes(opt.id)}
-                            onChange={(e) => {
-                              setTargetPlayerIds((prev) => {
-                                if (e.target.checked) {
-                                  if (prev.includes(opt.id)) return prev;
-                                  return [...prev, opt.id];
-                                }
-                                return prev.filter((id) => id !== opt.id);
-                              });
-                            }}
-                          />
-                          <span className="text-xs">{opt.name}</span>
-                        </label>
-                      ))}
-                      <div className="mt-1 flex flex-wrap gap-1 border-t border-sky-200/90 pt-1">
-                        <button
-                          type="button"
-                          className="rounded border border-sky-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-sky-100"
-                          onClick={() =>
-                            setTargetPlayerIds(playerOptions.map((p) => p.id))
-                          }
-                        >
-                          전체 선택
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded border border-sky-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-sky-100"
-                          onClick={() => setTargetPlayerIds([])}
-                        >
-                          전체 해제
-                        </button>
-                      </div>
-                      <p className="text-[10px] text-slate-500">
-                        선택한 선수 수만큼 동일 과제가 생성됩니다. 각 선수
-                        화면에 개별로 표시됩니다.
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-600">과제 제목</label>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
-                placeholder="목록에 표시될 제목 (비우면 첫 과제 줄 사용)"
-              />
-            </div>
-          </div>
-        </section>
-
         {/* ① 반복 / 단일 */}
         <section className="rounded-xl border border-sky-200 bg-sky-50/88 p-4">
           <div className="mb-2 text-[11px] font-semibold text-slate-400">과제 형태</div>
@@ -2256,8 +2154,124 @@ export default function CoachTasksPage() {
 
         {/* 전술 · 포메이션 · 미니 필드 · 과제 줄 (목업) */}
         <section className="rounded-xl border border-sky-200 bg-sky-50/88 p-4">
-          <div className="mb-3 text-[11px] font-semibold text-slate-400">
+          <div className="mb-3 text-[11px] font-semibold text-slate-600">
             전술 · 포메이션 · 대상 선수
+          </div>
+          <p className="mb-3 text-[10px] text-slate-500">
+            팀 또는 선수를 지정한 뒤 아래 명단·전술판을 사용합니다. 선수 명단은{" "}
+            <Link
+              href="/coach/players"
+              className="text-sky-600 underline underline-offset-2 hover:text-sky-800"
+            >
+              선수 관리
+            </Link>
+            에서 등록합니다.
+          </p>
+          <div className="mb-4 space-y-3 rounded-lg border border-sky-300/80 bg-white/90 p-3">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),minmax(0,1fr),minmax(0,1.2fr)]">
+              <div>
+                <label className="mb-1 block text-xs text-slate-600">대상 종류</label>
+                <select
+                  value={targetType}
+                  onChange={(e) => {
+                    const value = e.target.value as TargetType;
+                    setTargetType(value);
+                    if (value === "team") {
+                      setTargetId(teamOptions[0]?.id ?? "");
+                      setTargetPlayerIds([]);
+                    } else {
+                      setTargetId("");
+                      const first = playerOptions[0]?.id;
+                      setTargetPlayerIds(first ? [first] : []);
+                    }
+                  }}
+                  className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
+                >
+                  <option value="team">팀</option>
+                  <option value="player">선수</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-600">
+                  {targetType === "team" ? "대상 선택" : "대상 선택 (복수)"}
+                </label>
+                {targetType === "team" ? (
+                  <select
+                    value={targetId}
+                    onChange={(e) => setTargetId(e.target.value)}
+                    className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
+                    disabled={teamOptions.length === 0}
+                  >
+                    {teamOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="flex max-h-36 flex-col gap-1 overflow-y-auto rounded-md border border-sky-200 bg-white px-2 py-2 text-sm text-slate-900">
+                    {playerOptions.length === 0 ? (
+                      <span className="text-xs text-slate-500">선수 없음</span>
+                    ) : (
+                      <>
+                        {playerOptions.map((opt) => (
+                          <label
+                            key={opt.id}
+                            className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-sky-50/92"
+                          >
+                            <input
+                              type="checkbox"
+                              className="accent-rose-500"
+                              checked={targetPlayerIds.includes(opt.id)}
+                              onChange={(e) => {
+                                setTargetPlayerIds((prev) => {
+                                  if (e.target.checked) {
+                                    if (prev.includes(opt.id)) return prev;
+                                    return [...prev, opt.id];
+                                  }
+                                  return prev.filter((id) => id !== opt.id);
+                                });
+                              }}
+                            />
+                            <span className="text-xs">{opt.name}</span>
+                          </label>
+                        ))}
+                        <div className="mt-1 flex flex-wrap gap-1 border-t border-sky-200/90 pt-1">
+                          <button
+                            type="button"
+                            className="rounded border border-sky-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-sky-100"
+                            onClick={() =>
+                              setTargetPlayerIds(playerOptions.map((p) => p.id))
+                            }
+                          >
+                            전체 선택
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-sky-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-sky-100"
+                            onClick={() => setTargetPlayerIds([])}
+                          >
+                            전체 해제
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          선택한 선수 수만큼 동일 과제가 생성됩니다.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-600">과제 제목</label>
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
+                  placeholder="목록에 표시될 제목 (비우면 첫 과제 줄 사용)"
+                />
+              </div>
+            </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-3">
@@ -2924,7 +2938,7 @@ export default function CoachTasksPage() {
                   {entryCandidatePlayers.length === 0 ? (
                     <div className="space-y-1 text-[10px] text-slate-500">
                       <p>
-                        {currentTeamIdForTask
+                        {currentTeamIdForTask || lockedTeamId
                           ? "이 팀에 등록된 선수가 없습니다."
                           : "위에서 과제 대상(팀·선수)을 먼저 선택하면 해당 팀 선수가 표시됩니다."}
                       </p>

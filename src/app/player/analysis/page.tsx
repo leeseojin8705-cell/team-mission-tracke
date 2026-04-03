@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client";
 
 import FootballTacticsAnalyzer, {
@@ -8,6 +7,13 @@ import type { MatchAnalysis, Player } from "@/lib/types";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+
+type PlayerSession = {
+  session?: {
+    role: "player" | "coach" | "owner";
+    playerId?: string;
+  };
+};
 
 type AnalysisWithMeta = MatchAnalysis & {
   schedule?: { id: string; title: string; date: string } | null;
@@ -36,9 +42,11 @@ function formatDate(dateStr: string): string {
 function PlayerAnalysisInner() {
   const searchParams = useSearchParams();
   const taskId = searchParams.get("taskId");
+  const playerIdFromUrl = searchParams.get("playerId");
 
   const [analyses, setAnalyses] = useState<AnalysisWithMeta[]>([]);
   const [player, setPlayer] = useState<Player | null>(null);
+  const [sessionPlayerId, setSessionPlayerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPlayerId, setCurrentPlayerId] = useState("");
@@ -71,38 +79,81 @@ function PlayerAnalysisInner() {
       try {
         setLoading(true);
         setError(null);
-        const sessionRes = await fetch("/api/auth/session");
-        const sessionData = await sessionRes.json().catch(() => ({}));
-        const sessionPlayerId: string | null =
-          sessionData?.session?.role === "player" ? sessionData.session.playerId : null;
-        if (!sessionPlayerId) {
-          throw new Error("선수 로그인 정보가 없습니다. 다시 로그인해 주세요.");
+        const fetchOpts = { credentials: "same-origin" as const };
+        const sessionRes = await fetch("/api/auth/session", fetchOpts);
+        const sessionData = (await sessionRes.json().catch(() => ({}))) as PlayerSession;
+        const sessionRole = sessionData.session?.role;
+        if (sessionRole === "coach" || sessionRole === "owner") {
+          throw new Error(
+            "코치·구단 계정으로는 선수용 「개인 전술 데이터」를 열 수 없습니다. 선수 로그인 또는 선수 전용 링크(?playerId=)를 이용해 주세요.",
+          );
+        }
+        const sid: string | null =
+          sessionData.session?.role === "player"
+            ? (sessionData.session.playerId ?? null)
+            : null;
+        setSessionPlayerId(sid);
+
+        let pid = sid;
+        if (!pid) {
+          const fromUrl = playerIdFromUrl?.trim();
+          if (fromUrl) pid = fromUrl;
+        }
+        if (!pid) {
+          try {
+            const stored = window.localStorage.getItem("tmt:lastPlayerId");
+            if (stored) pid = stored;
+          } catch {
+            /* ignore */
+          }
+        }
+        if (!pid) {
+          throw new Error(
+            "선수 정보를 찾을 수 없습니다. 로그인하거나 링크(?playerId=)로 접속해 주세요.",
+          );
         }
 
-        const playerRes = await fetch(`/api/players/${sessionPlayerId}`);
-        if (!playerRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
+        const playerRes = await fetch(
+          `/api/players/${encodeURIComponent(pid)}`,
+          fetchOpts,
+        );
+        if (!playerRes.ok) {
+          if (playerRes.status === 404) {
+            throw new Error(
+              "선수를 찾을 수 없습니다. 링크·코드가 맞는지 확인해 주세요.",
+            );
+          }
+          throw new Error("선수 정보를 불러오지 못했습니다.");
+        }
         const playerData = (await playerRes.json()) as Player;
         if (!playerData.teamId) {
           throw new Error("팀에 소속된 선수만 전술 데이터를 이용할 수 있습니다.");
         }
-        const analysesRes = await fetch(
-          `/api/analyses?teamId=${encodeURIComponent(playerData.teamId)}`,
-        );
-        if (!analysesRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
+        try {
+          window.localStorage.setItem("tmt:lastPlayerId", playerData.id);
+        } catch {
+          /* ignore */
+        }
+
+        const q = new URLSearchParams({
+          teamId: playerData.teamId,
+          playerId: playerData.id,
+        });
+        const analysesRes = await fetch(`/api/analyses?${q.toString()}`, fetchOpts);
+        if (!analysesRes.ok) throw new Error("경기 분석 목록을 불러오지 못했습니다.");
         const analysesData = (await analysesRes.json()) as AnalysisWithMeta[];
         if (cancelled) return;
         setPlayer(playerData);
         setAnalyses(Array.isArray(analysesData) ? analysesData : []);
         setCurrentPlayerId(playerData.id);
         setAffiliationName(null);
-        if (playerData.teamId) {
-          const tr = await fetch(
-            `/api/teams/${encodeURIComponent(playerData.teamId)}`,
-          );
-          if (tr.ok) {
-            const tm = (await tr.json()) as { name?: string };
-            if (!cancelled && tm?.name) setAffiliationName(tm.name);
-          }
+        const tr = await fetch(
+          `/api/teams/${encodeURIComponent(playerData.teamId)}`,
+          fetchOpts,
+        );
+        if (tr.ok) {
+          const tm = (await tr.json()) as { name?: string };
+          if (!cancelled && tm?.name) setAffiliationName(tm.name);
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "오류가 발생했습니다.");
@@ -111,8 +162,10 @@ function PlayerAnalysisInner() {
       }
     }
     load();
-    return () => { cancelled = true; };
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [playerIdFromUrl]);
 
   /** API가 본인 팀만 주더라도, 다른 팀 행이 섞이면 표시하지 않음 (폴백으로 전체 목록 사용 금지) */
   const myAnalyses = useMemo(() => {
@@ -133,7 +186,15 @@ function PlayerAnalysisInner() {
 
     async function selectByTask() {
       try {
-        const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`);
+        const tid = taskId;
+        const p = player;
+        if (!tid || !p) return;
+        const pid = p.id;
+        const taskUrl =
+          sessionPlayerId && sessionPlayerId === pid
+            ? `/api/tasks/${encodeURIComponent(tid)}`
+            : `/api/tasks/${encodeURIComponent(tid)}?playerId=${encodeURIComponent(pid)}`;
+        const res = await fetch(taskUrl, { credentials: "same-origin" });
         if (!res.ok) return;
         const task = (await res.json()) as {
           details?: {
@@ -181,7 +242,7 @@ function PlayerAnalysisInner() {
     return () => {
       cancelled = true;
     };
-  }, [taskId, player, myTeamId, myAnalyses, selectedAnalysisId]);
+  }, [taskId, player, myTeamId, myAnalyses, selectedAnalysisId, sessionPlayerId]);
 
   const selectedAnalysis = useMemo(
     () => myAnalyses.find((a) => a.id === selectedAnalysisId),
@@ -210,14 +271,6 @@ function PlayerAnalysisInner() {
     setSendMessage(null);
   }, []);
 
-  const handlePlayerChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const id = e.target.value;
-    setCurrentPlayerId(id);
-    try {
-      window.localStorage.setItem("tmt:lastPlayerId", id);
-    } catch {}
-  }, []);
-
   const handleSendToCoach = useCallback(async () => {
     if (!selectedAnalysisId || !currentPlayerId) return;
     setSending(true);
@@ -226,6 +279,7 @@ function PlayerAnalysisInner() {
       const res = await fetch(`/api/analyses/${selectedAnalysisId}/player-events`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ playerId: currentPlayerId, events: playerEvents }),
       });
       const data = await res.json().catch(() => ({}));
@@ -268,6 +322,7 @@ function PlayerAnalysisInner() {
       const res = await fetch("/api/player-match-records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           matchAnalysisId: selectedAnalysisId ?? null,
           playerId: currentPlayerId,
@@ -279,7 +334,10 @@ function PlayerAnalysisInner() {
           events: playerEvents,
         }),
       });
-      const data = await res.json().catch(() => ({} as any));
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        detail?: string;
+      };
       if (!res.ok) {
         const detail = data.detail ? ` (${String(data.detail)})` : "";
         setRecordMessage({
@@ -422,7 +480,12 @@ function PlayerAnalysisInner() {
                         <button
                           type="button"
                           onClick={handleSendToCoach}
-                          disabled={sending}
+                          disabled={sending || !sessionPlayerId}
+                          title={
+                            !sessionPlayerId
+                              ? "선수 로그인 후에만 코치 쪽으로 전송할 수 있습니다."
+                              : undefined
+                          }
                           className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
                         >
                           {sending ? "전송 중…" : "코치에게 보내기"}
@@ -437,6 +500,11 @@ function PlayerAnalysisInner() {
                         </button>
                       </div>
                     </div>
+                    {!sessionPlayerId && (
+                      <p className="rounded-lg bg-amber-950/40 px-3 py-2 text-xs text-amber-100/90">
+                        링크만으로 연 경우 「코치에게 보내기」는 선수 로그인 후에 사용할 수 있습니다. 개인 기록 저장은 그대로 가능합니다.
+                      </p>
+                    )}
 
                     <div className="mb-1 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-800/50 px-3 py-2 text-xs sm:text-sm">
                       <div className="flex flex-wrap items-center gap-3">

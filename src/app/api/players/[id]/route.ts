@@ -66,8 +66,18 @@ export async function PATCH(
     return NextResponse.json({ error: "잘못된 요청입니다. (id 없음)" }, { status: 400 });
   }
   const session = await getSession();
-  if (!(await canPatchPlayer(session, id))) {
+  const adminOk = isAdminApiRequest(req);
+  if (!adminOk && !(await canPatchPlayer(session, id))) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  }
+  if (adminOk) {
+    const exists = await prisma.player.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!exists) {
+      return NextResponse.json({ error: "찾을 수 없습니다." }, { status: 404 });
+    }
   }
   try {
     const body = await req.json();

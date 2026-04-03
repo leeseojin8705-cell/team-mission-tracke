@@ -2,11 +2,38 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
+
+const playerListSelect = {
+  id: true,
+  name: true,
+  teamId: true,
+  position: true,
+  height: true,
+  weight: true,
+  dateOfBirth: true,
+  gender: true,
+  photo: true,
+  phone: true,
+  parentPhone: true,
+  address: true,
+  school: true,
+  loginId: true,
+} as const;
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const teamId = searchParams.get("teamId");
+    const listAll = searchParams.get("listAll") === "1";
+
+    if (listAll && isAdminApiRequest(req)) {
+      const players = await prisma.player.findMany({
+        orderBy: { name: "asc" },
+        select: playerListSelect,
+      });
+      return NextResponse.json(players);
+    }
 
     let session: Awaited<ReturnType<typeof getSession>> = null;
     try {
@@ -63,22 +90,7 @@ export async function GET(req: Request) {
     const players = await prisma.player.findMany({
     where,
     orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      teamId: true,
-      position: true,
-      height: true,
-      weight: true,
-      dateOfBirth: true,
-      gender: true,
-      photo: true,
-      phone: true,
-      parentPhone: true,
-      address: true,
-      school: true,
-      loginId: true,
-    },
+    select: playerListSelect,
   });
     return NextResponse.json(players);
   } catch (e) {
@@ -90,7 +102,12 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const session = await getSession();
-  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+  const adminOk = isAdminApiRequest(req);
+
+  if (
+    (!session || (session.role !== "coach" && session.role !== "owner")) &&
+    !adminOk
+  ) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
   }
 
@@ -103,9 +120,19 @@ export async function POST(req: Request) {
     );
   }
 
-  const ids = await getAccessibleTeamIds(session);
-  if (!ids.includes(body.teamId)) {
-    return NextResponse.json({ error: "접근 가능한 팀이 아닙니다." }, { status: 403 });
+  if (session && (session.role === "coach" || session.role === "owner")) {
+    const ids = await getAccessibleTeamIds(session);
+    if (!ids.includes(body.teamId)) {
+      return NextResponse.json({ error: "접근 가능한 팀이 아닙니다." }, { status: 403 });
+    }
+  } else if (adminOk) {
+    const teamExists = await prisma.team.findUnique({
+      where: { id: body.teamId },
+      select: { id: true },
+    });
+    if (!teamExists) {
+      return NextResponse.json({ error: "팀을 찾을 수 없습니다." }, { status: 400 });
+    }
   }
 
   const player = await prisma.player.create({

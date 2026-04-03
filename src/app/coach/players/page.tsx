@@ -110,7 +110,24 @@ export default function CoachPlayersPage() {
   const [credentialPassword, setCredentialPassword] = useState("");
   const [credentialsSaving, setCredentialsSaving] = useState(false);
   const [credentialsError, setCredentialsError] = useState<string | null>(null);
-  const [lastCreatedCredential, setLastCreatedCredential] = useState<{ playerName: string; loginId: string; password: string } | null>(null);
+  const [lastCreatedCredential, setLastCreatedCredential] = useState<{
+    playerId: string;
+    playerName: string;
+    loginId: string;
+    password: string;
+  } | null>(null);
+  /** 개인 번호 중복 확인 (개인 정보 모달) */
+  const [credentialLoginIdDup, setCredentialLoginIdDup] = useState<
+    null | { ok: boolean; message: string }
+  >(null);
+  const [credentialLoginIdDupChecking, setCredentialLoginIdDupChecking] =
+    useState(false);
+  /** 자동 부여 직후 배너에서 중복 확인 */
+  const [lastCreatedLoginIdDup, setLastCreatedLoginIdDup] = useState<
+    null | { ok: boolean; message: string }
+  >(null);
+  const [lastCreatedLoginIdDupChecking, setLastCreatedLoginIdDupChecking] =
+    useState(false);
 
   const teamOptions = useMemo(
     () => teams.map((t) => ({ id: t.id, name: t.name })),
@@ -216,9 +233,15 @@ export default function CoachPlayersPage() {
         setLoading(true);
         setError(null);
 
+        const adminOn =
+          typeof window !== "undefined" &&
+          window.localStorage.getItem("tmt:adminMode") === "on";
+        const teamsUrl = adminOn ? "/api/teams?listAll=1" : "/api/teams";
+        const playersUrl = adminOn ? "/api/players?listAll=1" : "/api/players";
+
         const [teamsRes, playersRes] = await Promise.all([
-          fetch("/api/teams"),
-          fetch("/api/players"),
+          fetch(teamsUrl, { credentials: "same-origin" }),
+          fetch(playersUrl, { credentials: "same-origin" }),
         ]);
 
         const teamsData: Team[] = teamsRes.ok ? await teamsRes.json() : [];
@@ -231,7 +254,13 @@ export default function CoachPlayersPage() {
             setTeamId(teamsData[0].id);
           }
           if (!teamsRes.ok || !playersRes.ok) {
-            setError("일부 데이터를 불러오지 못했습니다. 팀과 선수를 다시 확인해 주세요.");
+            if (adminOn && (teamsRes.status === 401 || playersRes.status === 401)) {
+              setError(
+                "관리자 모드에서는 홈 화면에서 관리자 PIN을 입력한 뒤, 이 페이지를 새로고침해 주세요.",
+              );
+            } else {
+              setError("일부 데이터를 불러오지 못했습니다. 팀과 선수를 다시 확인해 주세요.");
+            }
           }
         }
       } catch (e) {
@@ -252,7 +281,7 @@ export default function CoachPlayersPage() {
     return () => {
       cancelled = true;
     };
-  }, [teamId]);
+  }, []);
 
   function resetForm() {
     setEditingId(null);
@@ -283,7 +312,8 @@ export default function CoachPlayersPage() {
         });
 
         if (!res.ok) {
-          throw new Error("선수를 수정하지 못했습니다.");
+          const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(errBody.error ?? "선수를 수정하지 못했습니다.");
         }
 
         const updated: Player = await res.json();
@@ -304,7 +334,8 @@ export default function CoachPlayersPage() {
         });
 
         if (!res.ok) {
-          throw new Error("선수를 저장하지 못했습니다.");
+          const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(errBody.error ?? "선수를 저장하지 못했습니다.");
         }
 
         const created: Player = await res.json();
@@ -320,10 +351,12 @@ export default function CoachPlayersPage() {
           });
           if (credRes.ok) {
             setLastCreatedCredential({
+              playerId: created.id,
               playerName: created.name ?? name,
               loginId,
               password: tempPassword,
             });
+            setLastCreatedLoginIdDup(null);
             setPlayers((prev) => [...prev, { ...created, loginId }]);
           } else {
             setPlayers((prev) => [...prev, created]);
@@ -359,7 +392,8 @@ export default function CoachPlayersPage() {
       });
 
       if (!res.ok) {
-        throw new Error("선수를 삭제하지 못했습니다.");
+        const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(errBody.error ?? "선수를 삭제하지 못했습니다.");
       }
 
       setPlayers((prev) => prev.filter((p) => p.id !== id));
@@ -586,7 +620,61 @@ export default function CoachPlayersPage() {
     setCredentialLoginId(profilePlayer.loginId ?? "");
     setCredentialPassword("");
     setCredentialsError(null);
+    setCredentialLoginIdDup(null);
   }, [profilePlayer]);
+
+  async function checkLoginIdAvailability(
+    loginId: string,
+    excludePlayerId: string | undefined,
+    which: "profile" | "lastCreated",
+  ) {
+    const setChecking =
+      which === "profile"
+        ? setCredentialLoginIdDupChecking
+        : setLastCreatedLoginIdDupChecking;
+    const setDup =
+      which === "profile" ? setCredentialLoginIdDup : setLastCreatedLoginIdDup;
+    const trimmed = loginId.trim();
+    if (!trimmed) {
+      setDup({ ok: false, message: "개인 번호를 입력한 뒤 확인하세요." });
+      return;
+    }
+    setChecking(true);
+    setDup(null);
+    try {
+      const qs = new URLSearchParams({ loginId: trimmed });
+      if (excludePlayerId) qs.set("excludePlayerId", excludePlayerId);
+      const res = await fetch(
+        `/api/players/check-login-id?${qs.toString()}`,
+        { credentials: "same-origin" },
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        available?: boolean;
+        conflict?: { message?: string };
+        error?: string;
+      };
+      if (!res.ok) {
+        setDup({
+          ok: false,
+          message: data.error ?? "확인에 실패했습니다.",
+        });
+        return;
+      }
+      if (data.available) {
+        setDup({ ok: true, message: "사용 가능한 개인 번호입니다." });
+      } else {
+        setDup({
+          ok: false,
+          message:
+            data.conflict?.message ?? "이미 다른 선수가 사용 중인 번호입니다.",
+        });
+      }
+    } catch {
+      setDup({ ok: false, message: "네트워크 오류로 확인하지 못했습니다." });
+    } finally {
+      setChecking(false);
+    }
+  }
 
   async function handleSaveProfile(e: FormEvent) {
     e.preventDefault();
@@ -701,7 +789,7 @@ export default function CoachPlayersPage() {
               <select
                 value={filterTeamId}
                 onChange={(e) => setFilterTeamId(e.target.value)}
-                className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+                className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
               >
                 <option value="all">전체 팀</option>
                 {teamOptions.map((t) => (
@@ -717,12 +805,12 @@ export default function CoachPlayersPage() {
             value={playerSearchQuery}
             onChange={(e) => setPlayerSearchQuery(e.target.value)}
             placeholder="이름·포지션 검색"
-            className="w-32 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400 placeholder:text-slate-500"
+            className="w-32 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400 placeholder:text-slate-500"
           />
           <select
             value={playerSortOrder}
             onChange={(e) => setPlayerSortOrder(e.target.value as "name" | "team")}
-            className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-emerald-400"
+            className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-400"
           >
             <option value="name">이름 순</option>
             {!scopedTeamId && <option value="team">팀 순</option>}
@@ -766,7 +854,7 @@ export default function CoachPlayersPage() {
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-emerald-400"
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
             placeholder="예: 홍길동"
           />
         </div>
@@ -774,7 +862,14 @@ export default function CoachPlayersPage() {
           <label className="text-xs text-slate-300">소속 팀</label>
           {teamOptionsForForm.length === 0 ? (
             <div className="text-xs text-slate-400">
-              먼저 팀 관리 화면에서 팀을 한 개 이상 등록해 주세요.
+              먼저{" "}
+              <Link
+                href="/coach/teams"
+                className="text-sky-400 underline underline-offset-2 hover:text-sky-300"
+              >
+                팀 관리
+              </Link>
+              에서 팀을 한 개 이상 등록해 주세요.
             </div>
           ) : scopedTeamId ? (
             <div className="rounded-lg border border-slate-600 bg-slate-950/80 px-3 py-2 text-sm text-slate-200">
@@ -784,7 +879,7 @@ export default function CoachPlayersPage() {
             <select
               value={teamId}
               onChange={(e) => setTeamId(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-emerald-400"
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
             >
               {teamOptionsForForm.map((team) => (
                 <option key={team.id} value={team.id}>
@@ -799,7 +894,7 @@ export default function CoachPlayersPage() {
           <input
             value={position}
             onChange={(e) => setPosition(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-emerald-400"
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400"
             placeholder="예: FW / MF / DF / GK"
           />
         </div>
@@ -830,7 +925,7 @@ export default function CoachPlayersPage() {
           <p className="font-semibold">
             새 선수 로그인 정보 — {lastCreatedCredential.playerName}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <p>
               개인 번호(ID):{" "}
               <span className="font-mono font-semibold">
@@ -850,7 +945,30 @@ export default function CoachPlayersPage() {
             >
               복사
             </button>
+            <button
+              type="button"
+              disabled={lastCreatedLoginIdDupChecking}
+              onClick={() =>
+                checkLoginIdAvailability(
+                  lastCreatedCredential.loginId,
+                  lastCreatedCredential.playerId,
+                  "lastCreated",
+                )
+              }
+              className="rounded border border-emerald-500/80 px-2 py-0.5 text-[11px] text-emerald-100 hover:bg-emerald-800/50 disabled:opacity-50"
+            >
+              {lastCreatedLoginIdDupChecking ? "확인 중…" : "중복 확인"}
+            </button>
           </div>
+          {lastCreatedLoginIdDup && (
+            <p
+              className={`text-[11px] ${
+                lastCreatedLoginIdDup.ok ? "text-emerald-300" : "text-amber-200"
+              }`}
+            >
+              {lastCreatedLoginIdDup.message}
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <p>
               임시 비밀번호:{" "}
@@ -885,8 +1003,8 @@ export default function CoachPlayersPage() {
       )}
 
       <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-900">
+        <table className="min-w-full text-sm text-slate-100">
+          <thead className="bg-slate-900 text-slate-200">
             <tr>
               <th className="px-4 py-2 text-left">이름</th>
               <th className="px-4 py-2 text-left">소속</th>
@@ -921,7 +1039,7 @@ export default function CoachPlayersPage() {
                   team?.name ?? scopedTeamDisplayName ?? "—";
                 return (
                   <tr key={player.id} className="border-t border-slate-800">
-                    <td className="px-4 py-2">{player.name}</td>
+                    <td className="px-4 py-2 text-slate-100">{player.name}</td>
                     <td
                       className={`px-4 py-2 ${
                         scopedTeamId
@@ -1203,13 +1321,46 @@ export default function CoachPlayersPage() {
                   {credentialsError && <p className="text-sm text-rose-400">{credentialsError}</p>}
                   <div className="space-y-1">
                     <label className="text-xs text-slate-400">개인 번호 (로그인 ID)</label>
-                    <input
-                      type="text"
-                      value={credentialLoginId}
-                      onChange={(e) => setCredentialLoginId(e.target.value)}
-                      placeholder="예: 7번, P001"
-                      className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
-                    />
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                      <input
+                        type="text"
+                        value={credentialLoginId}
+                        onChange={(e) => {
+                          setCredentialLoginId(e.target.value);
+                          setCredentialLoginIdDup(null);
+                        }}
+                        placeholder="예: 7번, P001"
+                        className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={
+                          credentialLoginIdDupChecking ||
+                          !credentialLoginId.trim()
+                        }
+                        onClick={() =>
+                          checkLoginIdAvailability(
+                            credentialLoginId,
+                            profilePlayer?.id,
+                            "profile",
+                          )
+                        }
+                        className="shrink-0 rounded-lg border border-slate-500 bg-slate-700 px-3 py-2 text-xs font-medium text-slate-100 hover:bg-slate-600 disabled:opacity-50"
+                      >
+                        {credentialLoginIdDupChecking ? "확인 중…" : "중복 확인"}
+                      </button>
+                    </div>
+                    {credentialLoginIdDup && (
+                      <p
+                        className={`text-xs ${
+                          credentialLoginIdDup.ok
+                            ? "text-emerald-400"
+                            : "text-amber-300"
+                        }`}
+                      >
+                        {credentialLoginIdDup.message}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-slate-400">비밀번호 (변경 시에만 입력)</label>

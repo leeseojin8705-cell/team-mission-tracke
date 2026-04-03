@@ -85,13 +85,17 @@ export default function CoachTeamsPage() {
     async function loadTeams() {
       try {
         setLoading(true);
+        const adminOn =
+          typeof window !== "undefined" &&
+          window.localStorage.getItem("tmt:adminMode") === "on";
         const qs = new URLSearchParams();
-        qs.set("myTeamsOnly", "1");
-        if (contextTeamId) {
+        if (adminOn) {
+          qs.set("listAll", "1");
+        } else if (contextTeamId) {
           qs.set("contextTeamId", contextTeamId);
         }
-        const url = `/api/teams?${qs.toString()}`;
-        const res = await fetch(url);
+        const url = qs.toString() ? `/api/teams?${qs.toString()}` : "/api/teams";
+        const res = await fetch(url, { credentials: "same-origin" });
         if (!res.ok) {
           throw new Error("팀 목록을 불러오지 못했습니다.");
         }

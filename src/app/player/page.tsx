@@ -179,9 +179,14 @@ function PlayerHomeInner() {
 
         const meRes = await fetch(
           `/api/players/${encodeURIComponent(currentPlayerId)}`,
+          { credentials: "same-origin" },
         );
         if (!meRes.ok) {
-          throw new Error("선수 정보를 불러오지 못했습니다.");
+          throw new Error(
+            meRes.status === 404
+              ? "선수를 찾을 수 없습니다. 링크·코드를 확인해 주세요."
+              : "선수 정보를 불러오지 못했습니다.",
+          );
         }
         const me = (await meRes.json()) as Player | null;
         if (!me?.teamId) {
@@ -189,12 +194,13 @@ function PlayerHomeInner() {
         }
         const tid = me.teamId;
 
+        const fetchOpts = { credentials: "same-origin" as const };
         const [teamsRes, playersRes, schedulesRes, tasksRes] = await Promise.all(
           [
-            fetch(`/api/teams?teamId=${encodeURIComponent(tid)}`),
-            fetch(`/api/players?teamId=${encodeURIComponent(tid)}`),
-            fetch(`/api/schedules?teamId=${encodeURIComponent(tid)}`),
-            fetch(`/api/tasks?playerId=${encodeURIComponent(currentPlayerId)}`),
+            fetch(`/api/teams?teamId=${encodeURIComponent(tid)}`, fetchOpts),
+            fetch(`/api/players?teamId=${encodeURIComponent(tid)}`, fetchOpts),
+            fetch(`/api/schedules?teamId=${encodeURIComponent(tid)}`, fetchOpts),
+            fetch(`/api/tasks?playerId=${encodeURIComponent(currentPlayerId)}`, fetchOpts),
           ],
         );
 
@@ -679,13 +685,21 @@ function PlayerHomeInner() {
               자기평가
             </Link>
             <Link
-              href="/player/tasks"
+              href={
+                currentPlayerId
+                  ? `/player/tasks?playerId=${encodeURIComponent(currentPlayerId)}`
+                  : "/player/tasks"
+              }
               className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-sky-50"
             >
               내 과제
             </Link>
             <Link
-              href="/player/analysis"
+              href={
+                currentPlayerId
+                  ? `/player/analysis?playerId=${encodeURIComponent(currentPlayerId)}`
+                  : "/player/analysis"
+              }
               className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-sky-50"
             >
               개인 전술 데이터
