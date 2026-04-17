@@ -41,15 +41,17 @@ export function LogoutButton({ variant = "coach", className }: Props) {
     window.location.href = "/";
   }
 
-  const base =
-    "rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800 hover:bg-rose-100 disabled:opacity-50";
+  const defaultClass =
+    variant === "player"
+      ? "rounded-lg border border-slate-400 bg-white/90 px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+      : "rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800 hover:bg-rose-100 disabled:opacity-50";
 
   return (
     <button
       type="button"
       disabled={loading}
       onClick={handleClick}
-      className={className ?? base}
+      className={className ?? defaultClass}
     >
       {loading ? "로그아웃 중…" : "로그아웃"}
     </button>

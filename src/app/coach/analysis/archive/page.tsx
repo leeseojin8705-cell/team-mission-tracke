@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client";
 
 import { aggregateResults } from "@/lib/analysisResult";
@@ -84,7 +83,10 @@ export default function CoachAnalysisArchivePage() {
   }, [sortedByDate, selectedIdsForStats]);
 
   const stats = useMemo(
-    () => aggregateResults(selectedForStats),
+    () =>
+      aggregateResults(
+        selectedForStats.map((a) => ({ result: a.result ?? null })),
+      ),
     [selectedForStats],
   );
 
@@ -195,7 +197,7 @@ export default function CoachAnalysisArchivePage() {
                       ? formatDate(
                           typeof a.schedule.date === "string"
                             ? a.schedule.date
-                            : new Date(a.schedule.date as unknown as string).toISOString(),
+                            : new Date(String(a.schedule.date)).toISOString(),
                         )
                       : "—";
                   const name = a.matchName ?? a.opponent ?? "—";

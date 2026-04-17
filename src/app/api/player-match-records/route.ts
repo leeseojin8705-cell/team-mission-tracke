@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { getSession } from "@/lib/session";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
@@ -7,6 +9,30 @@ export async function GET(req: NextRequest) {
     const playerId = search.get("playerId");
     if (!playerId) {
       return NextResponse.json({ error: "playerId가 필요합니다." }, { status: 400 });
+    }
+
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+    }
+    const target = await prisma.player.findUnique({
+      where: { id: playerId },
+      select: { teamId: true },
+    });
+    if (!target?.teamId) {
+      return NextResponse.json([]);
+    }
+    if (session.role === "player") {
+      if (session.playerId !== playerId) {
+        return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+      }
+    } else if (session.role === "coach" || session.role === "owner") {
+      const ids = await getAccessibleTeamIds(session);
+      if (!ids.includes(target.teamId)) {
+        return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+      }
+    } else {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     }
 
     const records = await prisma.playerMatchRecord.findMany({
@@ -79,6 +105,30 @@ export async function POST(req: Request) {
 
     if (!playerId || typeof playerId !== "string") {
       return NextResponse.json({ error: "playerId가 필요합니다." }, { status: 400 });
+    }
+
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+    }
+    const target = await prisma.player.findUnique({
+      where: { id: playerId },
+      select: { teamId: true },
+    });
+    if (!target?.teamId) {
+      return NextResponse.json({ error: "선수를 찾을 수 없습니다." }, { status: 404 });
+    }
+    if (session.role === "player") {
+      if (session.playerId !== playerId) {
+        return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+      }
+    } else if (session.role === "coach" || session.role === "owner") {
+      const ids = await getAccessibleTeamIds(session);
+      if (!ids.includes(target.teamId)) {
+        return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+      }
+    } else {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     }
 
     const parsedGoals = Number.isFinite(Number(goals)) ? Number(goals) : 0;

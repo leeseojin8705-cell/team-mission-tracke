@@ -47,6 +47,13 @@ export interface StatDefinition {
   categoryWeights?: Record<string, number>; // categoryId -> 0~100, 합 100 권장 (가중 평균용)
   categoryEvaluationType?: Record<string, CategoryEvaluationType>; // 기입(1~5) | 측정
   categoryUnit?: Record<string, string>; // 측정 시 단위 (예: 초, m, kg)
+  /**
+   * 선수 자기평가 화면에만 노출할 카테고리 id.
+   * 빈 배열이면 자기평가 문항 없음.
+   * 필드가 없으면(구 데이터) 선수 화면은 레거시 호환으로 활성 카테고리 전부를 자기평가에 쓸 수 있음.
+   * 코치 팀 저장 시에는 항상 배열로 명시하는 것을 권장.
+   */
+  selfEvalCategoryIds?: string[];
 }
 
 /** 스태프 평가 저장 (항목별 1~5 점수) */
@@ -95,8 +102,15 @@ export interface TaskDetails {
   taskType?: "자기관리" | "연습 및 훈련" | "연습 경기" | "정식 경기";
   /** 코치 과제에서 유형 복수 선택 시 전체 목록 (첫 항목이 taskType과 동일하게 취급) */
   taskTypes?: ("자기관리" | "연습 및 훈련" | "연습 경기" | "정식 경기")[];
-  /** 과제 내용 축: 기술 / 신체 / 전술 / 심리 / 인지 / 태도 */
-  contentCategory?: "기술" | "신체" | "전술" | "심리" | "인지" | "태도";
+  /** 과제 내용 축: 기술 / 신체 / 전술 / 심리 / 인지 / 태도 / 멘탈(자기관리 등) */
+  contentCategory?:
+    | "기술"
+    | "신체"
+    | "전술"
+    | "심리"
+    | "인지"
+    | "태도"
+    | "멘탈";
   contents?: string[]; // 선택된 태그 value 목록
   detailText?: string; // 세부 과제
   goalText?: string; // 과제 목표
@@ -134,7 +148,10 @@ export interface TaskDetails {
   }[];
   positions?: string[]; // ["GK","DF","MF","FW"] 또는 ["ALL"]
   positionWeights?: Record<string, number>; // 포지션별 중요도 %
-  players?: string[]; // 과제에 포함된 선수 id 목록 (대표 대상은 별도 targetId로 저장)
+  /** 코치 화면 명단/포메이션 등 — 접근 제어에는 쓰지 않음 */
+  players?: string[];
+  /** 팀 과제(teamId + playerId null)에서 과제·선수 API 노출 대상만 제한; 없으면 해당 팀 전체 */
+  assigneePlayerIds?: string[];
   evaluators?: string[]; // 평가자(코칭 스텝) id 목록
 }
 

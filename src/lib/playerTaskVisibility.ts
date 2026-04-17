@@ -1,6 +1,6 @@
 import type { Task, TaskDetails } from "@/lib/types";
 
-export function parseTaskDetailsLoose(raw: Task["details"]): TaskDetails | null {
+export function parseTaskDetailsLoose(raw: unknown): TaskDetails | null {
   if (raw == null) return null;
   if (typeof raw === "object" && raw !== null) return raw as TaskDetails;
   if (typeof raw === "string") {

@@ -155,20 +155,21 @@ type Props = {
 export function TaskCoachBlueprintView({ details, compact = false }: Props) {
   const slots = useMemo(() => getFormationSlotsFromTaskDetails(details ?? undefined), [details]);
 
-  if (!hasCoachBlueprintContent(details ?? undefined)) {
-    return null;
-  }
-
-  const d = details;
   const subMarkers = useMemo(() => {
-    const raw = d?.formationSubPoints;
+    const raw = details?.formationSubPoints;
     if (!Array.isArray(raw)) return [];
     return raw.map((p, i) => ({
       x: p.x,
       y: p.y,
       label: `S${i + 1}`,
     }));
-  }, [d?.formationSubPoints]);
+  }, [details?.formationSubPoints]);
+
+  if (!hasCoachBlueprintContent(details ?? undefined)) {
+    return null;
+  }
+
+  const d = details;
   const formationLabel =
     d?.formation === "custom"
       ? d?.formationLabel?.trim() || "직접 배치"

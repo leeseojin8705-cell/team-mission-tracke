@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import type { Player, Team, TeamStaff } from "@/lib/types";
 import type { StatCategory } from "@/lib/types";
 import { DEFAULT_STAT_DEFINITION, getWeightedOverall, isMeasurementCategory } from "@/lib/statDefinition";
+import { ProfilePhotoPreview } from "@/components/ProfilePhotoPreview";
 
 const RADAR_SIZE = 280;
 const RADAR_CX = RADAR_SIZE / 2;
@@ -250,9 +251,7 @@ export default function CoachPlayersPage() {
         if (!cancelled) {
           setTeams(teamsData);
           setPlayers(playersData);
-          if (!teamId && teamsData[0]) {
-            setTeamId(teamsData[0].id);
-          }
+          setTeamId((prev) => (prev ? prev : teamsData[0]?.id ?? prev));
           if (!teamsRes.ok || !playersRes.ok) {
             if (adminOn && (teamsRes.status === 401 || playersRes.status === 401)) {
               setError(
@@ -1303,16 +1302,7 @@ export default function CoachPlayersPage() {
                     className="w-full text-xs text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-100 hover:file:bg-slate-600"
                   />
                 </div>
-                {profileForm.photo && (
-                  <div className="mt-2 flex justify-center">
-                    <img
-                      src={profileForm.photo}
-                      alt=""
-                      className="max-h-32 rounded-lg border border-slate-600 object-cover"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                    />
-                  </div>
-                )}
+                <ProfilePhotoPreview key={profileForm.photo} src={profileForm.photo} />
               </div>
               <div className="border-t border-slate-700 pt-4 mt-4">
                 <h4 className="text-sm font-medium text-slate-200 mb-2">로그인 설정 (개인 번호·비밀번호)</h4>

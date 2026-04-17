@@ -57,17 +57,6 @@ export async function GET(req: Request) {
     }
   }
 
-  if (!session && playerId) {
-    const list = await prisma.scheduleAbsence.findMany({
-      where: { playerId },
-      include: {
-        schedule: { select: { id: true, title: true, date: true, teamId: true } },
-        player: { select: { id: true, name: true, position: true } },
-      },
-    });
-    return NextResponse.json(mapAbsences(list));
-  }
-
   if (!session) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
   }

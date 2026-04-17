@@ -13,6 +13,8 @@ import type {
   StatCategory,
   StatDefinition,
 } from "@/lib/types";
+import { readApiErrorMessage } from "@/lib/apiError";
+import { playerCanAccessTeamScopedTask } from "@/lib/taskAssignees";
 import { DEFAULT_STAT_DEFINITION, isMeasurementCategory } from "@/lib/statDefinition";
 
 function getPlayerIdFromInput(input: string): string | null {
@@ -195,39 +197,46 @@ function PlayerHomeInner() {
         const tid = me.teamId;
 
         const fetchOpts = { credentials: "same-origin" as const };
-        const [teamsRes, playersRes, schedulesRes, tasksRes] = await Promise.all(
-          [
-            fetch(`/api/teams?teamId=${encodeURIComponent(tid)}`, fetchOpts),
-            fetch(`/api/players?teamId=${encodeURIComponent(tid)}`, fetchOpts),
-            fetch(`/api/schedules?teamId=${encodeURIComponent(tid)}`, fetchOpts),
-            fetch(`/api/tasks?playerId=${encodeURIComponent(currentPlayerId)}`, fetchOpts),
-          ],
-        );
+        const [teamsRes, playersRes, schedulesRes] = await Promise.all([
+          fetch(`/api/teams?teamId=${encodeURIComponent(tid)}`, fetchOpts),
+          fetch(`/api/players?teamId=${encodeURIComponent(tid)}`, fetchOpts),
+          fetch(`/api/schedules?teamId=${encodeURIComponent(tid)}`, fetchOpts),
+        ]);
 
-        if (
-          !teamsRes.ok ||
-          !playersRes.ok ||
-          !schedulesRes.ok ||
-          !tasksRes.ok
-        ) {
-          throw new Error("데이터를 불러오지 못했습니다.");
+        if (!teamsRes.ok || !playersRes.ok || !schedulesRes.ok) {
+          const failed = [teamsRes, playersRes, schedulesRes].find((r) => !r.ok);
+          const detail = failed ? await readApiErrorMessage(failed) : null;
+          throw new Error(
+            detail ?? "데이터를 불러오지 못했습니다. (서버·네트워크를 확인해 주세요)",
+          );
         }
 
-        const [teamsData, playersData, schedulesData, tasksData]: [
+        const [teamsData, playersData, schedulesData]: [
           Team[],
           Player[],
           Schedule[],
-          Task[],
         ] = await Promise.all([
           teamsRes.json(),
           playersRes.json(),
           schedulesRes.json(),
-          tasksRes.json(),
         ]);
+
+        // 세션은 쿠키로 전달됨. isLoggedIn 상태와 레이스 나지 않게 항상 요청(비로그인이면 API가 []).
+        let tasksData: Task[] = [];
+        const tasksRes = await fetch(`/api/tasks`, fetchOpts);
+        if (!tasksRes.ok) {
+          const detail = await readApiErrorMessage(tasksRes);
+          throw new Error(detail ?? "과제 목록을 불러오지 못했습니다.");
+        }
+        tasksData = (await tasksRes.json()) as Task[];
 
         if (!cancelled) {
           setTeams(teamsData);
-          setPlayers(playersData);
+          const roster =
+            playersData.some((p) => p.id === me.id)
+              ? playersData
+              : [...playersData, me];
+          setPlayers(roster);
           setSchedules(
             schedulesData.map((s) => ({
               ...s,
@@ -265,7 +274,7 @@ function PlayerHomeInner() {
     return () => {
       cancelled = true;
     };
-  }, [currentPlayerId]);
+  }, [currentPlayerId, isLoggedIn]);
 
   useEffect(() => {
     let cancelled = false;
@@ -276,8 +285,10 @@ function PlayerHomeInner() {
       try {
         const res = await fetch(
           `/api/task-progress?playerId=${encodeURIComponent(currentPlayerId)}`,
+          { credentials: "same-origin" },
         );
         if (!res.ok) {
+          if (res.status === 401 || res.status === 403) return;
           throw new Error("과제 진행 상황을 불러오지 못했습니다.");
         }
         const data: TaskProgress[] = await res.json();
@@ -303,7 +314,7 @@ function PlayerHomeInner() {
     return () => {
       cancelled = true;
     };
-  }, [currentPlayerId]);
+  }, [currentPlayerId, isLoggedIn]);
 
   useEffect(() => {
     if (!currentPlayerId) return;
@@ -325,9 +336,11 @@ function PlayerHomeInner() {
   }, [currentPlayerId, players]);
 
   useEffect(() => {
-    if (!currentPlayerId) return;
+    if (!currentPlayerId || !isLoggedIn) return;
     let cancelled = false;
-    fetch(`/api/schedule-absence?playerId=${encodeURIComponent(currentPlayerId)}`)
+    fetch(`/api/schedule-absence?playerId=${encodeURIComponent(currentPlayerId)}`, {
+      credentials: "same-origin",
+    })
       .then((r) => (r.ok ? r.json() : []))
       .then((arr: { scheduleId?: string }[]) => {
         if (!cancelled && Array.isArray(arr))
@@ -335,13 +348,14 @@ function PlayerHomeInner() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [currentPlayerId]);
+  }, [currentPlayerId, isLoggedIn]);
 
   useEffect(() => {
-    if (!absenceModalSchedule || !currentPlayerId) return;
+    if (!absenceModalSchedule || !currentPlayerId || !isLoggedIn) return;
     let cancelled = false;
     fetch(
       `/api/schedule-absence?scheduleId=${encodeURIComponent(absenceModalSchedule.id)}&playerId=${encodeURIComponent(currentPlayerId)}`,
+      { credentials: "same-origin" },
     )
       .then((r) => (r.ok ? r.json() : []))
       .then((arr: { reasons?: string[]; reasonText?: string | null }[]) => {
@@ -360,7 +374,7 @@ function PlayerHomeInner() {
         }
       });
     return () => { cancelled = true; };
-  }, [absenceModalSchedule?.id, currentPlayerId]);
+  }, [absenceModalSchedule, currentPlayerId, isLoggedIn]);
 
   const me = players.find((p) => p.id === currentPlayerId);
   const myTeam = me ? teams.find((t) => t.id === me.teamId) : undefined;
@@ -373,23 +387,22 @@ function PlayerHomeInner() {
     [me, schedules],
   );
 
-  const myTasks = useMemo(
-    () =>
-      me
-        ? tasks.filter(
-            (t) => t.teamId === me.teamId || t.playerId === currentPlayerId,
-          )
-        : ([] as Task[]),
-    [me, tasks, currentPlayerId],
-  );
+  const myTasks = useMemo(() => {
+    if (!me) return [] as Task[];
+    return tasks.filter((t) =>
+      playerCanAccessTeamScopedTask(currentPlayerId, me.teamId, {
+        teamId: t.teamId ?? null,
+        playerId: t.playerId ?? null,
+        details: t.details,
+      }),
+    );
+  }, [me, tasks, currentPlayerId]);
 
   const [taskFilter, setTaskFilter] = useState<"all" | "team" | "personal">(
     "all",
   );
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
-  const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [statDef, setStatDef] = useState<StatDefinition | null>(null);
   const [statValues, setStatValues] = useState<Record<string, number> | null>(null);
 
@@ -420,10 +433,11 @@ function PlayerHomeInner() {
   useEffect(() => {
     let cancelled = false;
     async function loadStats() {
-      if (!currentPlayerId) return;
+      if (!currentPlayerId || !isLoggedIn) return;
       try {
         const res = await fetch(
           `/api/players/${encodeURIComponent(currentPlayerId)}/evaluations`,
+          { credentials: "same-origin" },
         );
         if (!res.ok) return;
         const evals = (await res.json()) as {
@@ -439,7 +453,9 @@ function PlayerHomeInner() {
         const teamId = evals[0]?.teamId;
         let def: StatDefinition = DEFAULT_STAT_DEFINITION;
         if (teamId) {
-          const teamRes = await fetch(`/api/teams/${encodeURIComponent(teamId)}`);
+          const teamRes = await fetch(`/api/teams/${encodeURIComponent(teamId)}`, {
+            credentials: "same-origin",
+          });
           if (teamRes.ok) {
             const teamData = (await teamRes.json()) as Team & {
               statDefinition?: StatDefinition | null;
@@ -495,7 +511,7 @@ function PlayerHomeInner() {
     return () => {
       cancelled = true;
     };
-  }, [currentPlayerId]);
+  }, [currentPlayerId, isLoggedIn]);
 
   async function toggleCompleted(id: string) {
     if (!currentPlayerId) return;
@@ -894,9 +910,21 @@ function PlayerHomeInner() {
                       등록된 과제가 없습니다.
                     </p>
                   ) : filteredTasks.length === 0 ? (
-                    <p className="text-sm text-slate-400">
-                      선택한 필터에 해당하는 과제가 없습니다.
-                    </p>
+                    <div className="space-y-2 text-sm text-slate-400">
+                      <p>선택한 필터에 해당하는 과제가 없습니다.</p>
+                      {(taskFilter !== "all" || overdueOnly) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTaskFilter("all");
+                            setOverdueOnly(false);
+                          }}
+                          className="rounded-md border border-sky-300 bg-white px-2 py-1 text-xs text-sky-800 hover:bg-sky-50"
+                        >
+                          전체 보기로 초기화
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <ul className="space-y-3 text-sm">
                       {filteredTasks.map((t) => {

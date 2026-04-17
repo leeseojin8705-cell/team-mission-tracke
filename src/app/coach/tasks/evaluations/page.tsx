@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client";
 
 import Link from "next/link";
@@ -33,9 +32,10 @@ export default function TaskEvaluationDashboardPage() {
         const data = (await res.json()) as Team[];
         if (cancelled) return;
         setTeams(data);
-        if (!selectedTeamId && data[0]) {
-          setSelectedTeamId(data[0].id);
-        }
+        setSelectedTeamId((prev) => {
+          if (prev && data.some((t) => t.id === prev)) return prev;
+          return data[0]?.id ?? "";
+        });
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "오류가 발생했습니다.");
@@ -48,7 +48,7 @@ export default function TaskEvaluationDashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedTeamId]);
+  }, []);
 
   useEffect(() => {
     if (!selectedTeamId) {

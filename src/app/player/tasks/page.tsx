@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { TaskCoachBlueprintView } from "@/components/TaskCoachBlueprintView";
 import type { Task, TaskDetails } from "@/lib/types";
@@ -128,8 +127,6 @@ function isTodayForTask(task: Task): boolean {
 }
 
 function PlayerTasksInner() {
-  const searchParams = useSearchParams();
-  const playerIdFromUrl = searchParams.get("playerId");
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [tasks, setTasks] = useState<TaskWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,6 +136,8 @@ function PlayerTasksInner() {
     "all" | "team" | "personal" | "completed" | "incomplete"
   >("all");
   const [todayOnly, setTodayOnly] = useState(false);
+  /** 코치가 넣은 시간대(timeStart~timeEnd) 안의 과제만 — 끄면 홈 대시보드와 동일하게 ‘받은 과제’ 전체에 가깝게 표시 */
+  const [strictTimeWindow, setStrictTimeWindow] = useState(false);
   const [evalStatusMap, setEvalStatusMap] = useState<
     Record<string, EvalBadgeStatus>
   >({});
@@ -162,7 +161,7 @@ function PlayerTasksInner() {
         const sessionRole = sessionData.session?.role;
         if (sessionRole === "coach" || sessionRole === "owner") {
           throw new Error(
-            "코치·구단 계정으로는 선수용 「내 과제」를 열 수 없습니다. 선수 로그인을 하거나, 코치가 준 선수 전용 링크(?playerId=)로만 접속해 주세요.",
+            "코치·구단 계정으로는 선수용 「내 과제」를 열 수 없습니다. 선수 계정으로 로그인해 주세요.",
           );
         }
         const sessionPlayerId =
@@ -170,25 +169,12 @@ function PlayerTasksInner() {
             ? sessionData.session.playerId ?? null
             : null;
 
-        let pid = sessionPlayerId;
-        if (!pid) {
-          const fromUrl = playerIdFromUrl?.trim();
-          if (fromUrl) pid = fromUrl;
-        }
-        if (!pid) {
-          try {
-            const stored = window.localStorage.getItem("tmt:lastPlayerId");
-            if (stored) pid = stored;
-          } catch {
-            /* ignore */
-          }
-        }
-
-        if (!pid) {
+        if (!sessionPlayerId) {
           throw new Error(
-            "선수 정보를 찾을 수 없습니다. 로그인하거나, 홈에서 코치가 준 링크(?playerId=)로 접속해 주세요.",
+            "과제 목록을 보려면 선수 계정으로 로그인해 주세요. (홈에서 개인 번호·비밀번호로 로그인)",
           );
         }
+        const pid = sessionPlayerId;
         if (cancelled) return;
         setPlayerId(pid);
         setAffiliationName(null);
@@ -208,11 +194,7 @@ function PlayerTasksInner() {
         const playerJson = (await playerRes.json()) as { teamId?: string | null };
         const teamId = playerJson?.teamId;
 
-        const tasksUrl =
-          sessionPlayerId && sessionPlayerId === pid
-            ? "/api/tasks"
-            : `/api/tasks?playerId=${encodeURIComponent(pid)}`;
-        const tasksRes = await fetch(tasksUrl, { credentials: "same-origin" });
+        const tasksRes = await fetch("/api/tasks", { credentials: "same-origin" });
         if (!tasksRes.ok) {
           const errBody = (await tasksRes.json().catch(() => ({}))) as {
             error?: string;
@@ -250,7 +232,7 @@ function PlayerTasksInner() {
               if (!cancelled && tm?.name) setAffiliationName(tm.name);
             }
             const evalRes = await fetch(
-              `/api/teams/${encodeURIComponent(teamId)}/player-evaluations?forPlayerId=${encodeURIComponent(pid)}`,
+              `/api/teams/${encodeURIComponent(teamId)}/player-evaluations`,
               { credentials: "same-origin" },
             );
             if (evalRes.ok) {
@@ -291,7 +273,7 @@ function PlayerTasksInner() {
     return () => {
       cancelled = true;
     };
-  }, [playerIdFromUrl]);
+  }, []);
 
   const visibleTasks = useMemo(() => {
     if (!playerId) return [];
@@ -328,8 +310,8 @@ function PlayerTasksInner() {
         // 개인 과제: 나에게 직접 지정된 것
         if (t.playerId && t.playerId !== playerId) return false;
 
-        // 기간/요일/시간 안에 있는 과제만
-        if (!isNowWithinTaskWindow(t)) return false;
+        // 선택 시에만: 코치가 설정한 ‘오늘 날짜·요일·당일 시간대’까지 모두 만족하는 과제만 (기본은 끔 → 홈과 목록 불일치 방지)
+        if (strictTimeWindow && !isNowWithinTaskWindow(t)) return false;
         if (todayOnly && !isTodayForTask(t)) return false;
 
         // 기간 필터: 마감일/단일일자/종료일 중 하나를 기준으로 from/to 안에 있는지만 확인
@@ -368,7 +350,16 @@ function PlayerTasksInner() {
         return (a.task.title ?? "").localeCompare(b.task.title ?? "", "ko");
       })
       .map((x) => x.task);
-  }, [playerId, tasks, todayOnly, periodPreset, dateFrom, dateTo, sortOrder]);
+  }, [
+    playerId,
+    tasks,
+    todayOnly,
+    strictTimeWindow,
+    periodPreset,
+    dateFrom,
+    dateTo,
+    sortOrder,
+  ]);
 
   const summary = useMemo(() => {
     const total = visibleTasks.length;
@@ -410,8 +401,9 @@ function PlayerTasksInner() {
             )}
           </div>
           <p className="px-4 py-3 text-sm text-slate-400">
-            코치가 등록한 과제와 내가 만든 개인 과제 중, 지금 기간·요일·시간대에 해당하는 과제를 볼 수 있습니다. 코치가
-            입력한 전술·포메이션·과제 줄은 카드에서 함께 확인할 수 있습니다.
+            코치가 등록한 과제와 개인 과제가 표시됩니다. 아래에서 기간·오늘 할 일·
+            <span className="text-slate-300">코치 지정 시간대만</span> 등으로 좁힐 수 있습니다.
+            코치가 입력한 전술·포메이션·과제 줄은 카드에서 확인할 수 있습니다.
           </p>
         </div>
 
@@ -426,6 +418,15 @@ function PlayerTasksInner() {
                   className="h-3 w-3 rounded border-slate-600 bg-slate-900"
                 />
                 오늘 해야 하는 과제만
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={strictTimeWindow}
+                  onChange={(e) => setStrictTimeWindow(e.target.checked)}
+                  className="h-3 w-3 rounded border-slate-600 bg-slate-900"
+                />
+                코치 지정 시간대 안만
               </label>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-slate-400">기간</span>
@@ -492,9 +493,15 @@ function PlayerTasksInner() {
         ) : !playerId ? (
           <p className="text-sm text-slate-400">선수 로그인 정보가 없습니다. 다시 로그인해 주세요.</p>
         ) : visibleTasks.length === 0 ? (
-          <p className="text-sm text-slate-400">
-            지금 진행 중인 과제가 없습니다. 코치가 과제를 등록하면 이곳에 표시됩니다.
-          </p>
+          <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-400">
+            <p>조건에 맞는 과제가 없습니다.</p>
+            <p className="text-[11px] text-slate-500">
+              코치가 부여한 과제가 안 보이면 위에서「오늘 해야 하는 과제만」「코치 지정 시간대 안만」을
+              끄고, 기간을「전체」로 바꿔 보세요.「최근 30일」이면 마감·일정 종료일이 그 범위 밖인
+              과제는 숨겨질 수 있습니다. 홈 대시보드의 할당된 과제 수와 맞추려면 이렇게 필터를
+              풀어 주세요.
+            </p>
+          </div>
         ) : (
           <>
             <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-3 text-xs text-slate-200 md:grid-cols-3">

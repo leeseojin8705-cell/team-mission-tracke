@@ -107,41 +107,43 @@ export default function CoachTeamReportPage() {
 
   useEffect(() => {
     if (!teamId) return;
+    const tid = teamId;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    const safeJson = async (r: Response, fallback: unknown) => {
-      const text = await r.text();
-      if (!text.trim()) return fallback;
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      setLoading(true);
+      setError(null);
+      const safeJson = async (r: Response, fallback: unknown) => {
+        const text = await r.text();
+        if (!text.trim()) return fallback;
+        try {
+          return JSON.parse(text) as unknown;
+        } catch {
+          return fallback;
+        }
+      };
       try {
-        return JSON.parse(text) as unknown;
-      } catch {
-        return fallback;
-      }
-    };
-    Promise.all([
-      fetch(`/api/teams/${teamId}`).then((r) => (r.ok ? r.json() : null)) as Promise<Team | null>,
-      fetch(`/api/players?teamId=${encodeURIComponent(teamId)}`).then((r) =>
-        safeJson(r, []),
-      ) as Promise<Player[]>,
-      fetch(`/api/teams/${teamId}/player-evaluations`).then((r) =>
-        safeJson(r, []),
-      ) as Promise<PlayerEvalRow[]>,
-    ])
-      .then(([teamRes, playersList, evalsList]) => {
+        const [teamRes, playersList, evalsList] = await Promise.all([
+          fetch(`/api/teams/${tid}`).then((r) => (r.ok ? r.json() : null)) as Promise<Team | null>,
+          fetch(`/api/players?teamId=${encodeURIComponent(tid)}`).then((r) =>
+            safeJson(r, []),
+          ) as Promise<Player[]>,
+          fetch(`/api/teams/${tid}/player-evaluations`).then((r) =>
+            safeJson(r, []),
+          ) as Promise<PlayerEvalRow[]>,
+        ]);
         if (cancelled) return;
         setTeam(teamRes ?? null);
         setPlayers(Array.isArray(playersList) ? playersList : []);
         setEvaluations(Array.isArray(evalsList) ? evalsList : []);
-      })
-      .catch((e) => {
+      } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "데이터를 불러오지 못했습니다.");
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    });
     return () => {
       cancelled = true;
     };

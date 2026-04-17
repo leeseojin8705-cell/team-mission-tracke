@@ -34,12 +34,13 @@ export function CoachAppChrome({
   const [contextTeamName, setContextTeamName] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!teamIdParam) {
-      setContextTeamName(null);
-      return;
-    }
     let cancelled = false;
-    (async () => {
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      if (!teamIdParam) {
+        setContextTeamName(null);
+        return;
+      }
       try {
         const res = await fetch(`/api/teams/${teamIdParam}`);
         if (!res.ok) {
@@ -51,7 +52,7 @@ export function CoachAppChrome({
       } catch {
         if (!cancelled) setContextTeamName(null);
       }
-    })();
+    });
     return () => {
       cancelled = true;
     };

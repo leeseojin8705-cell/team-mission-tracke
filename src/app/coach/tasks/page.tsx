@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client";
 
 import Link from "next/link";
@@ -27,10 +26,13 @@ import {
   getTaskScores,
   type EvaluationRow,
 } from "@/lib/taskScore";
+import { readApiErrorMessage } from "@/lib/apiError";
 import { assignPlayerToUniqueSlot } from "@/lib/formationSlotAssignments";
+import {
+  getTeamTaskTargetPlayerIds,
+  normalizeTaskDetails as normalizeDetailsForTaskTargets,
+} from "@/lib/taskDashboardCounts";
 import { FlowPitchWatermark } from "@/components/FlowLogo";
-
-const categories: TaskCategory[] = ["기술", "체력", "멘탈", "전술"];
 
 const MAX_SUB_POINTS = 7;
 
@@ -79,6 +81,13 @@ function hasDuplicateAssignmentRows(
     keys.push(`${t.toLowerCase()}::${scopes.join("|")}`);
   }
   return keys.length > 1 && new Set(keys).size !== keys.length;
+}
+
+/** 선수 관리에 저장된 포지션 — 포메이션 슬롯 번호와는 별개 */
+function formatPlayerPositionShort(position: string | null | undefined): string {
+  const t = position?.trim();
+  if (!t) return "미등록";
+  return t.toUpperCase();
 }
 
 type TargetType = "team" | "player";
@@ -271,6 +280,8 @@ export default function CoachTasksPage() {
   const [targetId, setTargetId] = useState<string>("");
   /** 선수 과제: 동일 내용으로 여러 명에게 일괄 생성 */
   const [targetPlayerIds, setTargetPlayerIds] = useState<string[]>([]);
+  const initialTargetsRef = useRef({ targetType, targetId, targetPlayerIds });
+  initialTargetsRef.current = { targetType, targetId, targetPlayerIds };
   /** 교체(벤치) 필드 포인트 — 선발 슬롯과 별도 색상 */
   const [formationSubPoints, setFormationSubPoints] = useState<
     { playerId: string; x: number; y: number }[]
@@ -530,6 +541,8 @@ export default function CoachTasksPage() {
     if (!scopeTeamId) return [];
     return players.filter((p) => p.teamId === scopeTeamId);
   }, [currentTeamIdForTask, lockedTeamId, players]);
+  const entryCandidatePlayersRef = useRef(entryCandidatePlayers);
+  entryCandidatePlayersRef.current = entryCandidatePlayers;
   const entryPlayerMap = useMemo(
     () => Object.fromEntries(entryCandidatePlayers.map((p) => [p.id, p])),
     [entryCandidatePlayers],
@@ -561,20 +574,48 @@ export default function CoachTasksPage() {
     );
   }, [assignedPlayerIds]);
 
-  const formationDragPlayers = useMemo(
-    () =>
-      rosterPickMode
-        ? []
-        : entryCandidatePlayers.filter((p) => rosterSelectedIds.has(p.id)),
-    [rosterPickMode, entryCandidatePlayers, rosterSelectedIds],
-  );
+  const formationDragPlayers = useMemo(() => {
+    if (rosterPickMode) return [];
+    let base = entryCandidatePlayers.filter((p) => rosterSelectedIds.has(p.id));
+    if (targetType === "player" && targetPlayerIds.length > 0) {
+      const allow = new Set(targetPlayerIds);
+      base = base.filter((p) => allow.has(p.id));
+    }
+    const posOrder: Record<string, number> = { GK: 0, DF: 1, MF: 2, FW: 3 };
+    return [...base].sort((a, b) => {
+      const pa = posOrder[a.position ?? ""] ?? 99;
+      const pb = posOrder[b.position ?? ""] ?? 99;
+      if (pa !== pb) return pa - pb;
+      return a.name.localeCompare(b.name, "ko");
+    });
+  }, [
+    rosterPickMode,
+    entryCandidatePlayers,
+    rosterSelectedIds,
+    targetType,
+    targetPlayerIds,
+  ]);
 
   const slotAllowedPlayerIds = useMemo(() => {
     if (rosterPickMode) {
       return new Set(entryCandidatePlayers.map((p) => p.id));
     }
+    if (targetType === "player" && targetPlayerIds.length > 0) {
+      const fromRoster = [...rosterSelectedIds].filter((id) =>
+        targetPlayerIds.includes(id),
+      );
+      return new Set(
+        fromRoster.length > 0 ? fromRoster : targetPlayerIds,
+      );
+    }
     return rosterSelectedIds;
-  }, [rosterPickMode, entryCandidatePlayers, rosterSelectedIds]);
+  }, [
+    rosterPickMode,
+    entryCandidatePlayers,
+    rosterSelectedIds,
+    targetType,
+    targetPlayerIds,
+  ]);
 
   const entryRosterKey = useMemo(
     () =>
@@ -660,7 +701,7 @@ export default function CoachTasksPage() {
       skipRosterResetRef.current = false;
       return;
     }
-    const list = entryCandidatePlayers;
+    const list = entryCandidatePlayersRef.current;
     if (list.length === 0) {
       setRosterSelectedIds(new Set());
       setRosterPickMode(true);
@@ -669,6 +710,18 @@ export default function CoachTasksPage() {
     setRosterSelectedIds(new Set(list.map((p) => p.id)));
     setRosterPickMode(true);
   }, [entryRosterKey]);
+
+  const targetPlayerIdsKey = useMemo(
+    () => [...targetPlayerIds].sort().join("\u0000"),
+    [targetPlayerIds],
+  );
+
+  /** 대상 선수(복수) 체크와 포메이션 명단을 맞춤 — 선택한 선수만 필드에 올림 */
+  useEffect(() => {
+    if (targetType !== "player" || targetPlayerIds.length === 0) return;
+    setRosterSelectedIds(new Set(targetPlayerIds));
+    setRosterPickMode(false);
+  }, [targetType, targetPlayerIdsKey, targetPlayerIds]);
 
   const [filterType, setFilterType] = useState<TargetType | "all">("all");
   const [filterTeamId, setFilterTeamId] = useState<string>("all");
@@ -727,41 +780,44 @@ export default function CoachTasksPage() {
           throw new Error("데이터를 불러오지 못했습니다.");
         }
 
-        const [teamsData, playersData, tasksDataRaw]: [Team[], Player[], any[]] =
-          await Promise.all([
-            teamsRes.json(),
-            playersRes.json(),
-            tasksRes.json(),
-          ]);
+        const [teamsData, playersData, tasksDataRaw] = await Promise.all([
+          teamsRes.json() as Promise<Team[]>,
+          playersRes.json() as Promise<Player[]>,
+          tasksRes.json() as Promise<Record<string, unknown>[]>,
+        ]);
 
         if (!cancelled) {
           setTeams(teamsData);
           setPlayers(playersData);
-          const tasksData: Task[] = tasksDataRaw.map((t) => ({
-            ...t,
-            dueDate:
-              t.dueDate && typeof t.dueDate !== "string"
-                ? new Date(t.dueDate as unknown as string).toISOString()
-                : t.dueDate,
-            details:
-              typeof t.details === "string"
-                ? (() => {
-                    try {
-                      return JSON.parse(t.details);
-                    } catch {
-                      return null;
-                    }
-                  })()
-                : t.details ?? null,
-          }));
+          const tasksData: Task[] = tasksDataRaw.map((t) => {
+            const row = t as Record<string, unknown>;
+            return {
+              ...row,
+              dueDate:
+                row.dueDate && typeof row.dueDate !== "string"
+                  ? new Date(row.dueDate as string).toISOString()
+                  : (row.dueDate as string | undefined),
+              details:
+                typeof row.details === "string"
+                  ? (() => {
+                      try {
+                        return JSON.parse(row.details as string) as Task["details"];
+                      } catch {
+                        return null;
+                      }
+                    })()
+                  : ((row.details as Task["details"]) ?? null),
+            } as Task;
+          });
           setTasks(tasksData);
 
-          if (targetType === "team" && !targetId) {
+          const { targetType: tt, targetId: tid } = initialTargetsRef.current;
+          if (tt === "team" && !tid) {
             const firstTeam = lockedTeamId
               ? teamsData.find((t) => t.id === lockedTeamId)
               : teamsData[0];
             if (firstTeam) setTargetId(firstTeam.id);
-          } else if (targetType === "player") {
+          } else if (tt === "player") {
             const firstPlayer = lockedTeamId
               ? playersData.find((p) => p.teamId === lockedTeamId)
               : playersData[0];
@@ -817,7 +873,7 @@ export default function CoachTasksPage() {
         setTargetPlayerIds(next);
       }
     }
-  }, [lockedTeamId, players, targetPlayerIds, targetType]);
+  }, [lockedTeamId, players, targetId, targetPlayerIds, targetType]);
 
   // 현재 대상 팀 기준으로 코칭 스텝(평가자 후보) 불러오기
   useEffect(() => {
@@ -1030,9 +1086,9 @@ export default function CoachTasksPage() {
 
     const finalCategory = mappedCategory ?? category;
 
-    const details = {
+    const details: TaskDetails = {
       htmlTaskType,
-      htmlCategory,
+      htmlCategory: htmlCategory ?? undefined,
       taskType: taskTypeSelections[0] ?? "연습 및 훈련",
       taskTypes:
         taskTypeSelections.length > 1 ? taskTypeSelections : undefined,
@@ -1084,10 +1140,18 @@ export default function CoachTasksPage() {
       setError(null);
 
       if (editingId) {
+        const multiAssignee =
+          targetType === "player" && targetPlayerIds.length > 1;
         const patchTargetId =
           targetType === "team"
             ? targetId
             : targetPlayerIds[0] ?? targetId;
+        const detailsPatch: TaskDetails = { ...details };
+        if (multiAssignee) {
+          detailsPatch.assigneePlayerIds = [...targetPlayerIds];
+        } else {
+          delete detailsPatch.assigneePlayerIds;
+        }
         const res = await fetch(`/api/tasks/${editingId}`, {
           method: "PATCH",
           headers: {
@@ -1099,7 +1163,11 @@ export default function CoachTasksPage() {
             dueDate: finalDueDate,
             targetType,
             targetId: patchTargetId,
-            details,
+            targetIds:
+              targetType === "player" && targetPlayerIds.length > 0
+                ? targetPlayerIds
+                : undefined,
+            details: detailsPatch,
           }),
         });
 
@@ -1343,8 +1411,17 @@ export default function CoachTasksPage() {
         task.details && Array.isArray((task.details as TaskDetails).players)
           ? ((task.details as TaskDetails).players as string[])
           : [];
+      const assigneesRoster = (task.details as TaskDetails | undefined)
+        ?.assigneePlayerIds;
       skipRosterResetRef.current = true;
-      if (savedPl.length > 0) {
+      if (
+        Array.isArray(assigneesRoster) &&
+        assigneesRoster.length > 0 &&
+        task.teamId
+      ) {
+        setRosterSelectedIds(new Set(assigneesRoster));
+        setRosterPickMode(false);
+      } else if (savedPl.length > 0) {
         setRosterSelectedIds(new Set(savedPl));
         setRosterPickMode(false);
       } else {
@@ -1353,7 +1430,12 @@ export default function CoachTasksPage() {
       }
     }
 
-    if (task.teamId) {
+    const assignees = (task.details as TaskDetails | undefined)?.assigneePlayerIds;
+    if (Array.isArray(assignees) && assignees.length > 0 && task.teamId) {
+      setTargetType("player");
+      setTargetPlayerIds([...assignees]);
+      setTargetId("");
+    } else if (task.teamId) {
       setTargetType("team");
       setTargetId(task.teamId);
       setTargetPlayerIds([]);
@@ -1374,19 +1456,30 @@ export default function CoachTasksPage() {
   }
 
   async function handleDelete(id: string) {
+    if (
+      !window.confirm(
+        "이 과제를 삭제할까요? 진행 기록·과제 연동 평가도 함께 삭제됩니다.",
+      )
+    ) {
+      return;
+    }
     try {
       setSubmitting(true);
       setError(null);
 
-      const res = await fetch(`/api/tasks/${id}`, {
+      const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
 
       if (!res.ok) {
-        throw new Error("과제를 삭제하지 못했습니다.");
+        const detail = await readApiErrorMessage(res);
+        throw new Error(detail ?? "과제를 삭제하지 못했습니다.");
       }
 
       setTasks((prev) => prev.filter((t) => t.id !== id));
+      if (selectedTaskForModal?.id === id) {
+        setSelectedTaskForModal(null);
+      }
       if (editingId === id) {
         resetForm();
       }
@@ -1512,15 +1605,34 @@ export default function CoachTasksPage() {
 
         await Promise.all(
           visibleTasks.map(async (t) => {
+            const assigneeIds = (t.details as TaskDetails | undefined)
+              ?.assigneePlayerIds;
+            const assigneeSet =
+              Array.isArray(assigneeIds) && assigneeIds.length > 0
+                ? new Set(assigneeIds)
+                : null;
+
             // 1) TaskProgress: 완료/전체
             let completed = 0;
             let total = 0;
             try {
               const res = await fetch(`/api/task-progress?taskId=${encodeURIComponent(t.id)}`);
               if (res.ok) {
-                const list: { completed: boolean }[] = await res.json();
-                total = list.length;
-                completed = list.filter((p) => p.completed).length;
+                const list: { playerId: string; completed: boolean }[] =
+                  await res.json();
+                const scoped = assigneeSet
+                  ? list.filter((p) => assigneeSet.has(p.playerId))
+                  : list;
+                if (assigneeSet) {
+                  total = assigneeSet.size;
+                  const byPlayer = new Map(scoped.map((p) => [p.playerId, p]));
+                  for (const id of assigneeSet) {
+                    if (byPlayer.get(id)?.completed) completed += 1;
+                  }
+                } else {
+                  total = scoped.length;
+                  completed = scoped.filter((p) => p.completed).length;
+                }
               }
             } catch {
               // ignore
@@ -1539,7 +1651,12 @@ export default function CoachTasksPage() {
                   )}/player-evaluations?taskId=${encodeURIComponent(t.id)}`,
                 );
                 if (evalRes.ok) {
-                  const evalList = (await evalRes.json()) as EvaluationRow[];
+                  let evalList = (await evalRes.json()) as EvaluationRow[];
+                  if (assigneeSet) {
+                    evalList = evalList.filter((row) =>
+                      assigneeSet.has(row.subjectPlayerId),
+                    );
+                  }
                   if (evalList.length > 0) {
                     const byPhase = aggregatePhaseScores(evalList);
                     const playerIds = Object.keys(byPhase);
@@ -1719,7 +1836,18 @@ export default function CoachTasksPage() {
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {visibleTasks.slice(0, 6).map((task) => (
+            {visibleTasks.slice(0, 6).map((task) => {
+              const assignN = (task.details as TaskDetails | undefined)
+                ?.assigneePlayerIds?.length;
+              const badge =
+                task.teamId && assignN && assignN > 0
+                  ? `팀·${assignN}명`
+                  : task.teamId
+                    ? "팀"
+                    : task.playerId
+                      ? "선수"
+                      : "기타";
+              return (
               <div
                 key={task.id}
                 className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50/92 px-3 py-1.5 text-left"
@@ -1730,7 +1858,7 @@ export default function CoachTasksPage() {
                   className="flex flex-1 items-center gap-2 text-left hover:text-sky-800"
                 >
                   <span className="rounded-full bg-sky-200 px-2 py-0.5 text-[10px] text-slate-600">
-                    {task.teamId ? "팀" : task.playerId ? "선수" : "기타"}
+                    {badge}
                   </span>
                   <span className="text-[12px] font-medium text-slate-900">
                     {task.title}
@@ -1744,16 +1872,17 @@ export default function CoachTasksPage() {
                     </span>
                   )}
                 </button>
-                {task.teamId && (
+                {(task.teamId || task.playerId) && (
                   <Link
                     href={`/coach/tasks/${task.id}/results`}
                     className="rounded-md border border-sky-300 px-2 py-1 text-[10px] text-slate-700 hover:border-sky-500 hover:text-sky-800"
                   >
-                    평가 결과
+                    선수별 평가
                   </Link>
                 )}
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>
@@ -2255,7 +2384,8 @@ export default function CoachTasksPage() {
                           </button>
                         </div>
                         <p className="text-[10px] text-slate-500">
-                          선택한 선수 수만큼 동일 과제가 생성됩니다.
+                          복수 선택 시 목록에는 <strong>과제 한 줄</strong>만 생기며, 눌러서 선수별
+                          평가·진행을 확인합니다. 포메이션 명단은 선택한 선수만 표시됩니다.
                         </p>
                       </>
                     )}
@@ -2668,7 +2798,9 @@ export default function CoachTasksPage() {
                         : null;
                       const badgeText = assignedPlayer
                         ? [
-                            assignedPlayer.position?.toUpperCase(),
+                            assignedPlayer.position?.trim()
+                              ? assignedPlayer.position.toUpperCase()
+                              : "미등록",
                             assignedPlayer.loginId ? `#${assignedPlayer.loginId}` : null,
                           ]
                             .filter(Boolean)
@@ -2956,7 +3088,8 @@ export default function CoachTasksPage() {
                     <div className="space-y-2">
                       <p className="text-[10px] text-slate-500">
                         팀 전체 명단에서 이번 과제에 넣을 선수를 체크한 뒤, 명단을
-                        확정하면 필드에 드래그할 수 있습니다.
+                        확정하면 필드에 드래그할 수 있습니다. 오른쪽 포지션은 선수
+                        관리에 등록된 값입니다.
                       </p>
                       <div className="max-h-52 overflow-y-auto rounded border border-sky-200 bg-white/95 px-2 py-2">
                         <ul className="space-y-1.5">
@@ -2977,11 +3110,12 @@ export default function CoachTasksPage() {
                                   }}
                                 />
                                 <span>{p.name}</span>
-                                {p.position ? (
-                                  <span className="text-[10px] text-slate-500">
-                                    {p.position}
-                                  </span>
-                                ) : null}
+                                <span
+                                  className={`text-[10px] ${p.position?.trim() ? "text-sky-700 font-medium" : "text-slate-400"}`}
+                                  title="선수 관리에 등록된 포지션(FW/MF/DF/GK 등)"
+                                >
+                                  {formatPlayerPositionShort(p.position)}
+                                </span>
                               </label>
                             </li>
                           ))}
@@ -3031,6 +3165,12 @@ export default function CoachTasksPage() {
                     </div>
                   ) : (
                     <div>
+                      <p className="mb-1.5 text-[9px] leading-snug text-slate-500">
+                        카드의{" "}
+                        <span className="font-medium text-sky-700">포지션</span>은 선수
+                        관리에 등록된 값입니다. 필드의 숫자·GK는 포메이션 슬롯 순서이며,
+                        아래 「과제 줄」의 FW/MF/DF/GK 가중치와 대조할 수 있습니다.
+                      </p>
                       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                         <p className="text-[10px] text-slate-500">
                           확정 명단 ({formationDragPlayers.length}명) — 탭 선택 ·
@@ -3060,6 +3200,7 @@ export default function CoachTasksPage() {
                               role="button"
                               tabIndex={0}
                               draggable
+                              title={`${p.name} · 포지션 ${formatPlayerPositionShort(p.position)} (선수 관리)`}
                               onDragStart={(e) => {
                                 e.dataTransfer.setData("text/plain", p.id);
                                 e.dataTransfer.setData(
@@ -3075,18 +3216,29 @@ export default function CoachTasksPage() {
                                 }
                               }}
                               onClick={toggle}
-                              className={`cursor-grab rounded-md border px-1.5 py-0.5 text-[10px] transition active:cursor-grabbing ${
+                              className={`flex min-w-[5.5rem] flex-col gap-0.5 cursor-grab rounded-md border px-1.5 py-1 text-left text-[10px] transition active:cursor-grabbing ${
                                 on
                                   ? "border-lime-400 bg-lime-400 font-medium text-slate-950 shadow-sm shadow-lime-500/20"
                                   : "border-sky-300/90 bg-white/92 text-slate-700 hover:border-sky-400"
                               }`}
                             >
-                              {p.name}
-                              {assignedPlayerIds.has(p.id) && (
-                                <span className="ml-1 text-[9px] text-amber-300">
-                                  ●
-                                </span>
-                              )}
+                              <span className="flex items-center gap-1">
+                                <span className="truncate font-medium">{p.name}</span>
+                                {assignedPlayerIds.has(p.id) && (
+                                  <span className="shrink-0 text-[9px] text-amber-700">
+                                    ●
+                                  </span>
+                                )}
+                              </span>
+                              <span
+                                className={`text-[9px] leading-none ${
+                                  p.position?.trim()
+                                    ? "font-semibold text-sky-900"
+                                    : "text-slate-500"
+                                }`}
+                              >
+                                {formatPlayerPositionShort(p.position)}
+                              </span>
                             </div>
                           );
                         })}
@@ -3098,7 +3250,7 @@ export default function CoachTasksPage() {
               <p className="text-[10px] text-slate-500">
                 {rosterPickMode
                   ? `명단 선택 중 (체크 ${rosterSelectedIds.size}명 / 전체 ${entryCandidatePlayers.length}명)`
-                  : `탭 선택 ${selectedPlayerIds.size}명 · 확정 명단 ${formationDragPlayers.length}명`}
+                  : `대상 선수 ${targetPlayerIds.length}명 · 포메이션 명단 ${formationDragPlayers.length}명`}
                 {displayFormationSlots.length > 0
                   ? ` · 필드 ${displayFormationSlots.length}포지션 표시`
                   : " · 프리셋 또는 직접 배치를 선택하면 표시됩니다"}
@@ -3146,9 +3298,15 @@ export default function CoachTasksPage() {
               )}
             </p>
             <p className="text-slate-500">
-              <span className="text-slate-600">가중치(%)</span>는 바로 입력할 수 있습니다.{" "}
-              0보다 큰 값을 넣으면 해당 포지션이 자동으로 켜집니다. 포지션 버튼을 끄면 그 줄의
-              비율은 0으로 돌아갑니다.
+              <span className="text-slate-600">가중치(%)</span>는 숫자만 입력합니다.{" "}
+              <strong>FW / MF / DF</strong>는 한 줄에 하나만 지정할 수 있으며, 하나를 켜거나
+              비율을 넣으면 나머지는 꺼집니다. <strong>GK</strong>는 별도로 켤 수 있습니다.
+            </p>
+            <p className="text-sky-900/85">
+              이 비율은 <strong>과제 안내·기록용</strong>입니다. 선수에게 과제가{" "}
+              <strong>보이는 범위</strong>는 위 「대상(팀·선수)」·복수 지정(
+              <span className="whitespace-nowrap">지정 선수 N명</span>)으로 정해지며,
+              포메이션 카드의 포지션과 자동으로 맞춰 나뉘지 않습니다.
             </p>
             {hasDuplicateAssignmentRows(assignmentRows) && (
               <p className="text-rose-600">
@@ -3158,7 +3316,7 @@ export default function CoachTasksPage() {
             )}
           </div>
           <div className="space-y-3">
-            {assignmentRows.map((row, idx) => (
+            {assignmentRows.map((row) => (
               <div
                 key={row.id}
                 className="rounded-lg border border-sky-300 bg-sky-50/92 p-3"
@@ -3214,7 +3372,6 @@ export default function CoachTasksPage() {
                         ["fw", "FW", row.fw, row.fwWeight, "fwWeight"] as const,
                         ["mf", "MF", row.mf, row.mfWeight, "mfWeight"] as const,
                         ["df", "DF", row.df, row.dfWeight, "dfWeight"] as const,
-                        ["gk", "GK", row.gk, row.gkWeight, "gkWeight"] as const,
                       ] as const
                     ).map(([key, label, on, val, weightKey]) => (
                       <div
@@ -3231,11 +3388,23 @@ export default function CoachTasksPage() {
                             setAssignmentRows((prev) =>
                               prev.map((r) => {
                                 if (r.id !== row.id) return r;
-                                const nextOn = !r[key as keyof AssignmentRow] as boolean;
+                                const k = key as "fw" | "mf" | "df";
+                                const nextOn = !r[k];
+                                if (!nextOn) {
+                                  return {
+                                    ...r,
+                                    [k]: false,
+                                    [weightKey]: 0,
+                                  };
+                                }
                                 return {
                                   ...r,
-                                  [key]: nextOn,
-                                  ...(nextOn ? {} : { [weightKey]: 0 }),
+                                  fw: k === "fw",
+                                  mf: k === "mf",
+                                  df: k === "df",
+                                  fwWeight: k === "fw" ? r.fwWeight : 0,
+                                  mfWeight: k === "mf" ? r.mfWeight : 0,
+                                  dfWeight: k === "df" ? r.dfWeight : 0,
                                 };
                               }),
                             )
@@ -3247,32 +3416,95 @@ export default function CoachTasksPage() {
                           {label}
                         </button>
                         <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={1}
-                          value={val}
+                          type="text"
+                          inputMode="numeric"
+                          disabled={!on}
+                          value={on ? String(val) : ""}
+                          placeholder={on ? "" : "—"}
+                          onFocus={(e) => e.currentTarget.select()}
                           onChange={(e) => {
+                            const raw = e.target.value.replace(/\D/g, "");
                             const next = Math.max(
                               0,
-                              Math.min(100, Number(e.target.value) || 0),
+                              Math.min(100, raw === "" ? 0 : Number(raw)),
                             );
                             setAssignmentRows((prev) =>
                               prev.map((r) => {
                                 if (r.id !== row.id) return r;
+                                const k = key as "fw" | "mf" | "df";
                                 return {
                                   ...r,
-                                  [weightKey]: next,
-                                  ...(next > 0 ? { [key]: true } : {}),
+                                  fw: k === "fw" && next > 0,
+                                  mf: k === "mf" && next > 0,
+                                  df: k === "df" && next > 0,
+                                  fwWeight: k === "fw" ? next : 0,
+                                  mfWeight: k === "mf" ? next : 0,
+                                  dfWeight: k === "df" ? next : 0,
                                 };
                               }),
                             );
                           }}
-                          className="h-7 w-12 rounded border border-sky-200 bg-white px-1.5 text-[10px] text-slate-900 outline-none"
+                          className="h-7 w-12 rounded border border-sky-200 bg-white px-1.5 text-[10px] text-slate-900 outline-none disabled:bg-slate-100 disabled:text-slate-400"
                         />
                         <span className="text-[10px]">%</span>
                       </div>
                     ))}
+                    <div
+                      className={`flex items-center gap-1 rounded border px-1.5 py-1 ${
+                        row.gk
+                          ? "border-sky-300 bg-white text-slate-700"
+                          : "border-sky-200/90 bg-sky-50/75 text-slate-500"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAssignmentRows((prev) =>
+                            prev.map((r) => {
+                              if (r.id !== row.id) return r;
+                              const nextOn = !r.gk;
+                              return {
+                                ...r,
+                                gk: nextOn,
+                                gkWeight: nextOn ? r.gkWeight : 0,
+                              };
+                            }),
+                          )
+                        }
+                        className={`rounded px-1.5 py-0.5 text-[10px] ${
+                          row.gk ? "text-lime-800" : "text-slate-400"
+                        }`}
+                      >
+                        GK
+                      </button>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        disabled={!row.gk}
+                        value={row.gk ? String(row.gkWeight) : ""}
+                        placeholder={row.gk ? "" : "—"}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/\D/g, "");
+                          const next = Math.max(
+                            0,
+                            Math.min(100, raw === "" ? 0 : Number(raw)),
+                          );
+                          setAssignmentRows((prev) =>
+                            prev.map((r) => {
+                              if (r.id !== row.id) return r;
+                              return {
+                                ...r,
+                                gk: next > 0,
+                                gkWeight: next,
+                              };
+                            }),
+                          );
+                        }}
+                        className="h-7 w-12 rounded border border-sky-200 bg-white px-1.5 text-[10px] text-slate-900 outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                      />
+                      <span className="text-[10px]">%</span>
+                    </div>
                   </div>
                   {assignmentRows.length > 1 && (
                     <button
@@ -3476,23 +3708,45 @@ export default function CoachTasksPage() {
             className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-sky-200 bg-white p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="mb-1 text-lg font-semibold text-slate-900">
-              과제 정보 — {selectedTaskForModal.title}
-            </h3>
-            <p className="mb-4 text-xs text-slate-400">
-              이 과제에 저장된 유형·일정·대상 선수 등을 한눈에 확인할 수 있습니다.
-            </p>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <h3 className="mb-1 text-lg font-semibold text-slate-900">
+                  과제 정보 — {selectedTaskForModal.title}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  이 과제에 저장된 유형·일정·대상 선수 등을 한눈에 확인할 수 있습니다. 아래「선수별
+                  진행도」와 동일 선수 기준으로 상세 평가 화면으로 이동합니다.
+                </p>
+              </div>
+              {(selectedTaskForModal.teamId || selectedTaskForModal.playerId) && (
+                <Link
+                  href={`/coach/tasks/${selectedTaskForModal.id}/results`}
+                  className="shrink-0 rounded-lg border border-sky-400 bg-sky-100 px-3 py-2 text-xs font-semibold text-sky-900 hover:bg-sky-200"
+                >
+                  선수별 평가 보기
+                </Link>
+              )}
+            </div>
 
             <div className="space-y-3 text-sm">
               <div className="space-y-3 text-xs">
                 <div>
                   <div className="text-slate-400">대상</div>
                   <div className="mt-1 text-slate-900">
-                    {selectedTaskForModal.teamId
-                      ? "팀 과제"
-                      : selectedTaskForModal.playerId
-                        ? "개인 과제"
-                        : "—"}
+                    {(() => {
+                      const asn = (selectedTaskForModal.details as TaskDetails | undefined)
+                        ?.assigneePlayerIds;
+                      if (
+                        selectedTaskForModal.teamId &&
+                        Array.isArray(asn) &&
+                        asn.length > 0
+                      ) {
+                        return `팀 과제 · 지정 선수 ${asn.length}명`;
+                      }
+                      if (selectedTaskForModal.teamId) return "팀 과제(전체)";
+                      if (selectedTaskForModal.playerId) return "개인 과제";
+                      return "—";
+                    })()}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -3660,15 +3914,34 @@ export default function CoachTasksPage() {
               {/* 선수별 진행도 */}
               {(() => {
                 const task = selectedTaskForModal;
-                const playerIds: string[] =
-                  task.details?.players && task.details.players.length > 0
-                    ? task.details.players
-                    : task.teamId
-                      ? players.filter((p) => p.teamId === task.teamId).map((p) => p.id)
-                      : task.playerId
-                        ? [task.playerId]
-                        : [];
-                if (playerIds.length === 0) return null;
+                const teamPids = players
+                  .filter((p) => p.teamId === task.teamId)
+                  .map((p) => p.id);
+                const playerIds: string[] = task.playerId
+                  ? [task.playerId]
+                  : task.teamId
+                    ? getTeamTaskTargetPlayerIds(
+                        normalizeDetailsForTaskTargets(task.details),
+                        teamPids,
+                      )
+                    : [];
+                const posOrderModal: Record<string, number> = {
+                  GK: 0,
+                  DF: 1,
+                  MF: 2,
+                  FW: 3,
+                };
+                const sortedPlayerIds = [...playerIds].sort((a, b) => {
+                  const pa = players.find((p) => p.id === a)?.position;
+                  const pb = players.find((p) => p.id === b)?.position;
+                  const oa = posOrderModal[pa ?? ""] ?? 99;
+                  const ob = posOrderModal[pb ?? ""] ?? 99;
+                  if (oa !== ob) return oa - ob;
+                  const na = players.find((p) => p.id === a)?.name ?? a;
+                  const nb = players.find((p) => p.id === b)?.name ?? b;
+                  return na.localeCompare(nb, "ko");
+                });
+                if (sortedPlayerIds.length === 0) return null;
                 return (
                   <div>
                     <div className="mb-2 text-xs text-slate-400">선수별 진행도</div>
@@ -3682,7 +3955,7 @@ export default function CoachTasksPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {playerIds.map((pid) => {
+                          {sortedPlayerIds.map((pid) => {
                             const player = players.find((p) => p.id === pid);
                             const prog = taskProgressList.find((p) => p.playerId === pid);
                             const completed = prog?.completed ?? false;
@@ -3747,7 +4020,7 @@ export default function CoachTasksPage() {
               })()}
             </div>
 
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -3757,6 +4030,14 @@ export default function CoachTasksPage() {
                 className="rounded-lg border border-sky-500 px-4 py-2 text-xs font-medium text-sky-700 hover:bg-sky-100"
               >
                 이 과제 수정
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => void handleDelete(selectedTaskForModal.id)}
+                className="rounded-lg border border-rose-600 px-4 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+              >
+                삭제
               </button>
               <button
                 type="button"
@@ -3777,21 +4058,25 @@ export default function CoachTasksPage() {
       )}
 
       <div className="overflow-hidden rounded-2xl border border-sky-200/90 bg-sky-50/85">
-        <table className="min-w-full text-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-[56rem] w-full text-sm">
           <thead className="bg-sky-100">
             <tr>
               <th className="px-4 py-2 text-left">제목</th>
               <th className="px-4 py-2 text-left">대상(팀/선수)</th>
               <th className="px-4 py-2 text-left">카테고리</th>
               <th className="px-4 py-2 text-left">마감일</th>
-            <th className="px-4 py-2 text-right">진행 / 평가 요약</th>
+              <th className="px-4 py-2 text-right">진행 / 평가 요약</th>
+              <th className="sticky right-0 z-20 bg-sky-100 px-4 py-2 text-right shadow-[-6px_0_8px_-4px_rgba(15,23,42,0.12)]">
+                작업
+              </th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-4 py-6 text-center text-sm text-slate-400"
                 >
                   과제 목록을 불러오는 중입니다...
@@ -3800,7 +4085,7 @@ export default function CoachTasksPage() {
             ) : tasks.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-4 py-6 text-center text-sm text-slate-400"
                 >
                   등록된 과제가 없습니다. 위 폼에서 과제를 추가해 보세요.
@@ -3809,7 +4094,7 @@ export default function CoachTasksPage() {
             ) : visibleTasks.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-4 py-6 text-center text-sm text-slate-400"
                 >
                   {lockedTeamId
@@ -3825,13 +4110,34 @@ export default function CoachTasksPage() {
                 const player = task.playerId
                   ? players.find((p) => p.id === task.playerId)
                   : undefined;
+                const assignN = (task.details as TaskDetails | undefined)
+                  ?.assigneePlayerIds?.length;
 
                 const targetName = team?.name ?? player?.name ?? "-";
+                const targetCell =
+                  team && assignN && assignN > 0 ? (
+                    <span className="inline-flex flex-col gap-0.5">
+                      <span>{team.name}</span>
+                      <span className="rounded bg-sky-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">
+                        지정 선수 {assignN}명
+                      </span>
+                    </span>
+                  ) : (
+                    targetName
+                  );
 
                 return (
                   <tr key={task.id} className="border-t border-sky-200/90">
-                    <td className="px-4 py-2">{task.title}</td>
-                    <td className="px-4 py-2 text-slate-700">{targetName}</td>
+                    <td className="px-4 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTaskForModal(task)}
+                        className="text-left font-medium text-slate-900 hover:text-sky-800 hover:underline"
+                      >
+                        {task.title}
+                      </button>
+                    </td>
+                    <td className="px-4 py-2 text-slate-700">{targetCell}</td>
                     <td className="px-4 py-2 text-slate-600">
                       {task.category ?? "-"}
                     </td>
@@ -3905,21 +4211,31 @@ export default function CoachTasksPage() {
                         );
                       })()}
                     </td>
-                    <td className="px-4 py-2 text-right text-xs space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEdit(task)}
-                        className="rounded-md border border-sky-300 px-2 py-1 hover:bg-sky-100"
-                      >
-                        수정
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(task.id)}
-                        className="rounded-md border border-rose-600 px-2 py-1 text-rose-200 hover:bg-rose-950"
-                      >
-                        삭제
-                      </button>
+                    <td className="sticky right-0 z-10 bg-sky-50 px-4 py-2 text-right text-xs shadow-[-6px_0_8px_-4px_rgba(15,23,42,0.1)]">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {(task.teamId || task.playerId) && (
+                          <Link
+                            href={`/coach/tasks/${task.id}/results`}
+                            className="rounded-md border border-sky-400 bg-sky-100 px-2 py-1 font-medium text-sky-900 hover:bg-sky-200"
+                          >
+                            선수별 평가
+                          </Link>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(task)}
+                          className="rounded-md border border-sky-300 px-2 py-1 hover:bg-sky-100"
+                        >
+                          수정
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete(task.id)}
+                          className="rounded-md border border-rose-600 px-2 py-1 text-rose-700 hover:bg-rose-50"
+                        >
+                          삭제
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -3927,6 +4243,7 @@ export default function CoachTasksPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

@@ -64,11 +64,6 @@ const sslCa = (() => {
   return normalized;
 })();
 
-// Tiny runtime signal for debugging (does not print secrets)
-if (process.env.NODE_ENV === "production") {
-  console.log("[prisma] ssl ca present:", Boolean(sslCa), "len:", sslCa ? sslCa.length : 0);
-}
-
 /**
  * Supabase/Neon 등은 TLS 필수. dev에서 sslmode를 URL에서 뺐으므로 Pool에 명시해야 함.
  * - Supabase + CA 없음: 연결은 TLS 유지, 체인 검증만 완화 (풀러·서버리스에서 흔함)

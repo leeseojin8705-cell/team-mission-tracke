@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { TaskCoachBlueprintView } from "@/components/TaskCoachBlueprintView";
 import {
@@ -36,8 +36,6 @@ type EvaluationSummary = {
 
 function PlayerTaskDetailInner() {
   const params = useParams();
-  const searchParams = useSearchParams();
-  const playerIdFromUrl = searchParams.get("playerId");
   const id = typeof params.id === "string" ? params.id : null;
 
   const [playerId, setPlayerId] = useState<string | null>(null);
@@ -69,7 +67,7 @@ function PlayerTaskDetailInner() {
         const sessionRole = sessionData.session?.role;
         if (sessionRole === "coach" || sessionRole === "owner") {
           throw new Error(
-            "코치·구단 계정으로는 선수용 「내 과제」를 열 수 없습니다. 선수 로그인을 하거나, 코치가 준 선수 전용 링크(?playerId=)로만 접속해 주세요.",
+            "코치·구단 계정으로는 선수용 「내 과제」를 열 수 없습니다. 선수 계정으로 로그인해 주세요.",
           );
         }
         const sessionPlayerId =
@@ -77,24 +75,12 @@ function PlayerTaskDetailInner() {
             ? sessionData.session.playerId ?? null
             : null;
 
-        let pid = sessionPlayerId;
-        if (!pid) {
-          const fromUrl = playerIdFromUrl?.trim();
-          if (fromUrl) pid = fromUrl;
-        }
-        if (!pid) {
-          try {
-            const stored = window.localStorage.getItem("tmt:lastPlayerId");
-            if (stored) pid = stored;
-          } catch {
-            /* ignore */
-          }
-        }
-        if (!pid) {
+        if (!sessionPlayerId) {
           throw new Error(
-            "선수 정보를 찾을 수 없습니다. 로그인하거나 링크(?playerId=)로 접속해 주세요.",
+            "과제를 보려면 선수 계정으로 로그인해 주세요. (홈에서 개인 번호·비밀번호로 로그인)",
           );
         }
+        const pid = sessionPlayerId;
         if (cancelled) return;
 
         const playerRes = await fetch(
@@ -114,11 +100,10 @@ function PlayerTaskDetailInner() {
         if (cancelled) return;
         setPlayerId(pid);
 
-        const taskUrl =
-          sessionPlayerId && sessionPlayerId === pid
-            ? `/api/tasks/${encodeURIComponent(id)}`
-            : `/api/tasks/${encodeURIComponent(id)}?playerId=${encodeURIComponent(pid)}`;
-        const taskRes = await fetch(taskUrl, { credentials: "same-origin" });
+        const taskRes = await fetch(
+          `/api/tasks/${encodeURIComponent(id)}`,
+          { credentials: "same-origin" },
+        );
         if (!taskRes.ok) {
           const errBody = (await taskRes.json().catch(() => ({}))) as {
             error?: string;
@@ -181,7 +166,7 @@ function PlayerTaskDetailInner() {
             fetch(
               `/api/teams/${encodeURIComponent(teamId)}/player-evaluations?taskId=${encodeURIComponent(
                 id,
-              )}&forPlayerId=${encodeURIComponent(pid)}`,
+              )}`,
               { credentials: "same-origin" },
             ),
             fetch(`/api/players?teamId=${encodeURIComponent(teamId)}`, {
@@ -277,7 +262,7 @@ function PlayerTaskDetailInner() {
     return () => {
       cancelled = true;
     };
-  }, [id, playerIdFromUrl]);
+  }, [id]);
 
   const d = useMemo(() => task?.details ?? null, [task]);
 

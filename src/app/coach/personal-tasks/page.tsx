@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Task, TeamStaff, Player } from "@/lib/types";
 
 type TaskWithDetails = Task & {
@@ -12,6 +12,8 @@ type TaskWithDetails = Task & {
 export default function CoachPersonalTasksPage() {
   const searchParams = useSearchParams();
   const staffIdFromUrl = searchParams.get("staffId") ?? "";
+  const staffIdFromUrlRef = useRef(staffIdFromUrl);
+  staffIdFromUrlRef.current = staffIdFromUrl;
   const [staff, setStaff] = useState<TeamStaff[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [tasks, setTasks] = useState<TaskWithDetails[]>([]);
@@ -38,38 +40,41 @@ export default function CoachPersonalTasksPage() {
         }
 
         const playersData = (await playersRes.json()) as Player[];
-        const tasksRaw = (await tasksRes.json()) as any[];
+        const tasksRaw = (await tasksRes.json()) as Record<string, unknown>[];
 
         if (cancelled) return;
 
         setPlayers(playersData);
 
-        const parsedTasks: TaskWithDetails[] = tasksRaw.map((t) => ({
-          ...t,
-          details:
-            typeof t.details === "string"
+        const parsedTasks: TaskWithDetails[] = tasksRaw.map((t) => {
+          const detailsRaw = t.details;
+          const details =
+            typeof detailsRaw === "string"
               ? (() => {
                   try {
-                    return JSON.parse(t.details);
+                    return JSON.parse(detailsRaw) as Task["details"];
                   } catch {
                     return null;
                   }
                 })()
-              : t.details ?? null,
-        }));
+              : ((detailsRaw as Task["details"]) ?? null);
+          return { ...t, details } as TaskWithDetails;
+        });
         setTasks(parsedTasks);
 
         if (staffRes && staffRes.ok) {
           const staffData = (await staffRes.json()) as TeamStaff[];
           setStaff(staffData);
-          // URL 로 특정 staffId 가 넘어온 경우 그 값만 사용하고, 없으면 첫 코치 자동 선택
-          if (!selectedStaffId) {
-            const initial =
-              staffIdFromUrl && staffData.some((s) => s.id === staffIdFromUrl)
-                ? staffIdFromUrl
-                : staffData[0]?.id ?? "";
-            setSelectedStaffId(initial);
-          }
+          const urlId = staffIdFromUrlRef.current;
+          setSelectedStaffId((prev) => {
+            if (urlId && staffData.some((s) => s.id === urlId)) {
+              return urlId;
+            }
+            if (prev && staffData.some((s) => s.id === prev)) {
+              return prev;
+            }
+            return staffData[0]?.id ?? "";
+          });
         } else {
           setStaff([]);
         }
@@ -87,6 +92,11 @@ export default function CoachPersonalTasksPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!staffIdFromUrl) return;
+    setSelectedStaffId(staffIdFromUrl);
+  }, [staffIdFromUrl]);
 
   const visible = useMemo(() => {
     // 선수 개인 과제 중, 어떤 코치에게라도 평가를 요청한 과제만 대상으로 삼는다.

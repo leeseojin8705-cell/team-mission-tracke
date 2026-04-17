@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { Player, StatDefinition, TeamStaff } from "@/lib/types";
 import { DEFAULT_STAT_DEFINITION, isMeasurementCategory } from "@/lib/statDefinition";
 
@@ -13,6 +13,8 @@ function EvaluateContent() {
   const urlEvaluatorStaffId = searchParams.get("evaluatorStaffId") ?? "";
 
   const [subjectPlayerId, setSubjectPlayerId] = useState(urlPlayerId);
+  const subjectPlayerIdRef = useRef(subjectPlayerId);
+  subjectPlayerIdRef.current = subjectPlayerId;
   const [playerList, setPlayerList] = useState<Player[]>([]);
   const [evaluatorStaffId, setEvaluatorStaffId] = useState("");
   const [staffList, setStaffList] = useState<TeamStaff[]>([]);
@@ -24,8 +26,6 @@ function EvaluateContent() {
   const [submitting, setSubmitting] = useState(false);
 
   const subjectPlayer = playerList.find((p) => p.id === subjectPlayerId);
-  const name = subjectPlayer?.name ?? "";
-  const position = subjectPlayer?.position ?? "";
 
   useEffect(() => {
     setSubjectPlayerId((prev) => (urlPlayerId || prev));
@@ -74,8 +74,12 @@ function EvaluateContent() {
         } else if (coaches.length) {
           setEvaluatorStaffId((prev) => prev || coaches[0].id);
         }
-        if (players.length && !subjectPlayerId) setSubjectPlayerId((prev) => prev || players[0].id);
-        else if (urlPlayerId && players.some((p) => p.id === urlPlayerId)) setSubjectPlayerId(urlPlayerId);
+        const curSubject = subjectPlayerIdRef.current;
+        if (players.length && !curSubject) {
+          setSubjectPlayerId((prev) => prev || players[0].id);
+        } else if (urlPlayerId && players.some((p) => p.id === urlPlayerId)) {
+          setSubjectPlayerId(urlPlayerId);
+        }
       })
       .catch(() => {
         if (!cancelled) setPlayerList([]);
@@ -83,8 +87,10 @@ function EvaluateContent() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
-  }, [teamId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [teamId, urlPlayerId, urlEvaluatorStaffId]);
 
   useEffect(() => {
     if (!teamId || !subjectPlayerId || !evaluatorStaffId) return;

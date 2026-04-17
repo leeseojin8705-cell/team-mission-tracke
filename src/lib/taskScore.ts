@@ -11,6 +11,8 @@ export interface EvaluationRow {
   subjectPlayerId: string;
   phase?: string | EvalPhaseType | null;
   scores: Record<string, number[]>;
+  /** 평가 행 생성 시각(ISO 등) — 대시보드 기간 필터용 */
+  createdAt?: string | null;
 }
 
 export interface PhaseAverages {

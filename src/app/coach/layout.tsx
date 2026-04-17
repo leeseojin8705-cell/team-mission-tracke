@@ -13,8 +13,6 @@ import { CoachAppChrome } from "./CoachAppChrome";
 export default function CoachLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
-  const [codeInput, setCodeInput] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
@@ -70,29 +68,6 @@ export default function CoachLayout({ children }: { children: ReactNode }) {
     syncAdminPinCookieFromSession();
     return installCoachAdminFetchInterceptor();
   }, []);
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const expected = process.env.NEXT_PUBLIC_COACH_ACCESS_CODE;
-
-    if (!expected) {
-      setAuthorized(true);
-      setError(null);
-      return;
-    }
-
-    if (codeInput.trim() === expected) {
-      try {
-        window.localStorage.setItem("tmt:coachCode", codeInput.trim());
-      } catch {
-        // 저장 실패는 무시
-      }
-      setAuthorized(true);
-      setError(null);
-    } else {
-      setError("접속 코드가 올바르지 않습니다.");
-    }
-  }
 
   if (!authorized) {
     return (

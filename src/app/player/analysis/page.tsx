@@ -190,11 +190,11 @@ function PlayerAnalysisInner() {
         const p = player;
         if (!tid || !p) return;
         const pid = p.id;
-        const taskUrl =
-          sessionPlayerId && sessionPlayerId === pid
-            ? `/api/tasks/${encodeURIComponent(tid)}`
-            : `/api/tasks/${encodeURIComponent(tid)}?playerId=${encodeURIComponent(pid)}`;
-        const res = await fetch(taskUrl, { credentials: "same-origin" });
+        if (!sessionPlayerId || sessionPlayerId !== pid) return;
+        const res = await fetch(
+          `/api/tasks/${encodeURIComponent(tid)}`,
+          { credentials: "same-origin" },
+        );
         if (!res.ok) return;
         const task = (await res.json()) as {
           details?: {
@@ -264,7 +264,7 @@ function PlayerAnalysisInner() {
         : { atk: [], def: [], pass: [], gk: [] };
     setInitialEvents(next);
     setPlayerEvents(next);
-  }, [selectedAnalysisId, currentPlayerId, selectedAnalysis?.id]);
+  }, [selectedAnalysisId, currentPlayerId, selectedAnalysis]);
 
   const handleAnalysisSelect = useCallback((id: string) => {
     setSelectedAnalysisId(id);

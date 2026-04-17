@@ -455,6 +455,13 @@ export default function FootballTacticsAnalyzer({
           ctx.lineTo(ev.ex, ev.ey);
           ctx.stroke();
         });
+        gkO.forEach((ev) => {
+          const tp = GK_TYPES.find((t) => t.id === ev.type);
+          ctx.fillStyle = (tp ? tp.color : "#fff") + "cc";
+          ctx.beginPath();
+          ctx.arc(ev.cx, ev.cy, 4, 0, Math.PI * 2);
+          ctx.fill();
+        });
       }
       ctx.restore();
     });
@@ -463,11 +470,15 @@ export default function FootballTacticsAnalyzer({
   const hasInitializedRef = useRef(false);
   useEffect(() => {
     if (!initialData || hasInitializedRef.current) return;
-    setAtkEvents((initialData.atk ?? []).map(ensureHalf));
-    setDefEvents((initialData.def ?? []).map(ensureHalf));
-    setPassEvents((initialData.pass ?? []).map(ensureHalf));
-    setGkEvents((initialData.gk ?? []).map(ensureHalf));
-    hasInitializedRef.current = true;
+    const data = initialData;
+    void Promise.resolve().then(() => {
+      if (hasInitializedRef.current) return;
+      setAtkEvents((data.atk ?? []).map(ensureHalf));
+      setDefEvents((data.def ?? []).map(ensureHalf));
+      setPassEvents((data.pass ?? []).map(ensureHalf));
+      setGkEvents((data.gk ?? []).map(ensureHalf));
+      hasInitializedRef.current = true;
+    });
   }, [initialData]);
 
   useEffect(() => {

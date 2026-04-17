@@ -1,10 +1,9 @@
-// @ts-nocheck
 "use client";
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import type { StatCategory, StatDefinition } from "@/lib/types";
+import type { StatCategory, StatDefinition, TeamStaff } from "@/lib/types";
 import {
   DEFAULT_STAT_DEFINITION,
   formatCategoryValue,
@@ -19,11 +18,6 @@ type EvalRow = {
   phase?: string | null;
   scores: Record<string, number[]>;
   createdAt?: string | null;
-};
-
-type TeamStaff = {
-  id: string;
-  name: string;
 };
 
 type PersonalRecord = {
@@ -154,94 +148,100 @@ function PlayerReportContent() {
   const [affiliationName, setAffiliationName] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!playerId) {
-      setAffiliationName(null);
-      return;
-    }
     let cancelled = false;
-    fetch(`/api/players/${encodeURIComponent(playerId)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((p: { teamId?: string | null } | null) => {
-        if (!p?.teamId || cancelled) return null;
-        return fetch(`/api/teams/${encodeURIComponent(p.teamId)}`);
-      })
-      .then((r) => (r && r.ok ? r.json() : null))
-      .then((t: { name?: string } | null) => {
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      if (!playerId) {
+        setAffiliationName(null);
+        return;
+      }
+      try {
+        const fetchOpts = { credentials: "same-origin" as const };
+        const pr = await fetch(
+          `/api/players/${encodeURIComponent(playerId)}`,
+          fetchOpts,
+        );
+        const p = (pr.ok ? await pr.json() : null) as { teamId?: string | null } | null;
+        if (!p?.teamId || cancelled) {
+          if (!cancelled) setAffiliationName(null);
+          return;
+        }
+        const tr = await fetch(`/api/teams/${encodeURIComponent(p.teamId)}`, {
+          credentials: "same-origin",
+        });
+        const t = (tr.ok ? await tr.json() : null) as { name?: string } | null;
         if (!cancelled) setAffiliationName(t?.name ?? null);
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setAffiliationName(null);
-      });
+      }
+    });
     return () => {
       cancelled = true;
     };
   }, [playerId]);
 
   useEffect(() => {
-    if (!playerId) {
-      setLoading(false);
-      return;
-    }
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    const safeJson = async <T,>(r: Response, fallback: T): Promise<T> => {
-      const text = await r.text();
-      if (!text.trim()) return fallback;
-      try {
-        return JSON.parse(text) as T;
-      } catch {
-        return fallback;
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      if (!playerId) {
+        setLoading(false);
+        return;
       }
-    };
-    fetch(`/api/players/${playerId}/evaluations`)
-      .then((r) =>
-        safeJson(
-          r,
-          [] as (EvalRow & {
-            teamId?: string;
-          })[],
-        ),
-      )
-      .then((list) => {
+      setLoading(true);
+      setError(null);
+      const safeJson = async <T,>(r: Response, fallback: T): Promise<T> => {
+        const text = await r.text();
+        if (!text.trim()) return fallback;
+        try {
+          return JSON.parse(text) as T;
+        } catch {
+          return fallback;
+        }
+      };
+      try {
+        const fetchOpts = { credentials: "same-origin" as const };
+        const evalRes = await fetch(
+          `/api/players/${encodeURIComponent(playerId)}/evaluations`,
+          fetchOpts,
+        );
+        const list = await safeJson(evalRes, [] as (EvalRow & { teamId?: string })[]);
         if (cancelled) return;
         const evals = Array.isArray(list) ? (list as EvalRow[]) : [];
         setEvaluations(evals);
-        const teamId = (list as { teamId?: string }[])[0]?.teamId;
+        const teamId = evals[0]?.teamId;
         if (teamId) {
-          return Promise.all([
-            fetch(`/api/teams/${teamId}`).then((r) =>
+          const [teamRes, staffList] = await Promise.all([
+            fetch(`/api/teams/${teamId}`, fetchOpts).then((r) =>
               r.ok ? r.json() : null,
             ) as Promise<{ statDefinition?: StatDefinition | null } | null>,
-            fetch(`/api/teams/${teamId}/staff`).then((r) =>
+            fetch(`/api/teams/${teamId}/staff`, fetchOpts).then((r) =>
               safeJson(r, [] as TeamStaff[]),
             ),
           ]);
+          if (!cancelled) {
+            if (teamRes?.statDefinition) setDef(teamRes.statDefinition);
+            else setDef(DEFAULT_STAT_DEFINITION);
+            const staff = Array.isArray(staffList) ? staffList : [];
+            const map: Record<string, TeamStaff> = {};
+            staff.forEach((s) => {
+              map[s.id] = s;
+            });
+            setStaffMap(map);
+          }
+        } else if (!cancelled) {
+          setDef(DEFAULT_STAT_DEFINITION);
         }
-        return undefined;
-      })
-      .then((res) => {
-        if (!cancelled && res) {
-          const [teamRes, staffList] = res;
-          if (teamRes?.statDefinition) setDef(teamRes.statDefinition);
-          else setDef(DEFAULT_STAT_DEFINITION);
-          const staff = Array.isArray(staffList) ? staffList : [];
-          const map: Record<string, TeamStaff> = {};
-          staff.forEach((s) => {
-            map[s.id] = s;
-          });
-          setStaffMap(map);
-        }
-      })
-      .catch((e) => {
+      } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "평가 데이터를 불러오지 못했습니다.");
+          setError(
+            e instanceof Error ? e.message : "평가 데이터를 불러오지 못했습니다.",
+          );
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
-
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -250,7 +250,10 @@ function PlayerReportContent() {
   useEffect(() => {
     if (!playerId) return;
     let cancelled = false;
-    fetch(`/api/player-match-records?playerId=${encodeURIComponent(playerId)}`)
+    fetch(
+      `/api/player-match-records?playerId=${encodeURIComponent(playerId)}`,
+      { credentials: "same-origin" },
+    )
       .then((r) => (r.ok ? r.json() : []))
       .then((data: PersonalRecord[]) => {
         if (!cancelled && Array.isArray(data)) {
@@ -392,12 +395,6 @@ function PlayerReportContent() {
       losses,
     };
   }, [records]);
-
-  function handlePrint() {
-    if (typeof window !== "undefined") {
-      window.print();
-    }
-  }
 
   if (!playerId) {
     return (

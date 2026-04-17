@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Player, Team } from "@/lib/types";
+import { ProfilePhotoPreview } from "@/components/ProfilePhotoPreview";
 
 export default function PlayerProfilePage() {
   const [player, setPlayer] = useState<Player | null>(null);
@@ -255,18 +256,7 @@ export default function PlayerProfilePage() {
                     }}
                     className="w-full text-xs text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-100 hover:file:bg-slate-600"
                   />
-                  {form.photo && (
-                    <div className="mt-2 flex justify-center">
-                      <img
-                        src={form.photo}
-                        alt=""
-                        className="max-h-32 rounded-lg border border-slate-600 object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = "none";
-                        }}
-                      />
-                    </div>
-                  )}
+                  <ProfilePhotoPreview key={form.photo} src={form.photo} />
                 </div>
                 <button
                   type="submit"

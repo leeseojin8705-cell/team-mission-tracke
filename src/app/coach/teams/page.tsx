@@ -42,6 +42,8 @@ export default function CoachTeamsPage() {
   const [statCategoryWeights, setStatCategoryWeights] = useState<Record<string, number>>({});
   const [statEvalType, setStatEvalType] = useState<Record<string, CategoryEvaluationType>>({});
   const [statEvalUnit, setStatEvalUnit] = useState<Record<string, string>>({});
+  /** 스탯 활성 카테고리 중 선수 자기평가에 쓸 카테고리(미체크 시 코치 평가에만 사용) */
+  const [statSelfEvalCats, setStatSelfEvalCats] = useState<Set<string>>(new Set());
 
   const [expandedEvaluations, setExpandedEvaluations] = useState<{ evaluatorStaffId: string; subjectStaffId: string; scores: Record<string, number[]> }[]>([]);
   const [expandedEvaluationsLoading, setExpandedEvaluationsLoading] = useState(false);
@@ -137,6 +139,7 @@ export default function CoachTeamsPage() {
     setStatCategoryWeights({});
     setStatEvalType({});
     setStatEvalUnit({});
+    setStatSelfEvalCats(new Set());
   }
 
   function initStatDefinitionFrom(def: StatDefinition | null | undefined) {
@@ -178,6 +181,19 @@ export default function CoachTeamsPage() {
     });
     setStatEvalType(evalTypes);
     setStatEvalUnit(evalUnits);
+
+    if (def && def.selfEvalCategoryIds !== undefined) {
+      const se = def.selfEvalCategoryIds;
+      if (Array.isArray(se) && se.length === 0) {
+        setStatSelfEvalCats(new Set());
+      } else if (Array.isArray(se)) {
+        setStatSelfEvalCats(new Set(se.filter((id) => active.has(id))));
+      } else {
+        setStatSelfEvalCats(new Set(active));
+      }
+    } else {
+      setStatSelfEvalCats(new Set(active));
+    }
   }
 
   function buildStatDefinition(): StatDefinition {
@@ -207,7 +223,21 @@ export default function CoachTeamsPage() {
       categoryEvaluationType[c.id] = statEvalType[c.id] === "measurement" ? "measurement" : "rating";
       categoryUnit[c.id] = (statEvalUnit[c.id] ?? "").trim();
     });
-    return { categories, items, categoryWeights, categoryEvaluationType, categoryUnit };
+    const activeIds = categories.map((c) => c.id);
+    const selfIncluded = activeIds.filter((id) => statSelfEvalCats.has(id));
+    const base: StatDefinition = {
+      categories,
+      items,
+      categoryWeights,
+      categoryEvaluationType,
+      categoryUnit,
+    };
+    /** 항상 명시 저장: 전부 선택 시에도 생략하면(undefined) 선수 자기평가가 ‘활성 전체’로 해석됨 */
+    if (activeIds.length > 0) {
+      base.selfEvalCategoryIds =
+        selfIncluded.length > 0 ? [...selfIncluded] : [];
+    }
+    return base;
   }
 
   const staffTeamId = editingId ?? expandedId;
@@ -802,6 +832,14 @@ export default function CoachTeamsPage() {
             <p className="mb-3 text-xs text-slate-400">
               평가에 사용할 카테고리를 선택하고, 카테고리당 3·5·7개 항목 수·항목명·중요도(%)를 입력하세요. 중요도 합 100% 권장(가중 평균 반영). 저장 시 이 팀의 스탯 정의로 반영됩니다.
             </p>
+            <p className="mb-3 rounded-lg border border-emerald-500/25 bg-emerald-950/20 px-2 py-2 text-[11px] leading-snug text-emerald-100/90">
+              <strong className="text-emerald-200">선수 자기평가</strong>는 아래 각 카테고리에서「자기평가에
+              표시」로 고릅니다. 체크하지 않은 카테고리는 코치 스탯 평가 등에만 쓰이고, 선수 자기평가
+              화면에는 나오지 않습니다. 자기평가에 넣을 카테고리를 <strong className="text-emerald-200">전부
+              선택한 경우에도</strong> 팀 저장 시 그 목록이 그대로 저장되므로, 선수에게는 고른
+              카테고리만 보입니다. 항목 이름·개수를 바꾸려면 같은 칸에서 항목명을 수정한 뒤 팀 저장을
+              누르세요.
+            </p>
             <div className="space-y-2">
               {DEFAULT_STAT_DEFINITION.categories.map((cat) => {
                 const active = statActiveCats.has(cat.id);
@@ -821,11 +859,17 @@ export default function CoachTeamsPage() {
                             setStatItemCounts((prev) => ({ ...prev, [cat.id]: 3 }));
                             setStatItemLabels((prev) => ({ ...prev, [cat.id]: ["", "", ""] }));
                             setStatSectionsOpen((prev) => new Set([...prev, cat.id]));
+                            setStatSelfEvalCats((prev) => new Set([...prev, cat.id]));
                           } else {
                             next.delete(cat.id);
                             setStatItemCounts((prev => { const u = { ...prev }; delete u[cat.id]; return u; }));
                             setStatItemLabels((prev => { const u = { ...prev }; delete u[cat.id]; return u; }));
                             setStatSectionsOpen((prev) => { const s = new Set(prev); s.delete(cat.id); return s; });
+                            setStatSelfEvalCats((prev) => {
+                              const s = new Set(prev);
+                              s.delete(cat.id);
+                              return s;
+                            });
                           }
                           setStatActiveCats(next);
                         }}
@@ -835,6 +879,24 @@ export default function CoachTeamsPage() {
                     </label>
                     {active && (
                       <>
+                        <label className="mt-2 flex cursor-pointer items-center gap-2 border-b border-slate-700/50 pb-2">
+                          <input
+                            type="checkbox"
+                            checked={statSelfEvalCats.has(cat.id)}
+                            onChange={(e) => {
+                              setStatSelfEvalCats((prev) => {
+                                const n = new Set(prev);
+                                if (e.target.checked) n.add(cat.id);
+                                else n.delete(cat.id);
+                                return n;
+                              });
+                            }}
+                            className="rounded border-emerald-600"
+                          />
+                          <span className="text-xs text-emerald-200/95">
+                            자기평가에 표시 (선수 앱의 자기평가 화면)
+                          </span>
+                        </label>
                         <div className="mt-2 flex flex-wrap items-center gap-3">
                           <span className="text-xs text-slate-500">항목 개수:</span>
                           {([3, 5, 7] as const).map((n) => (

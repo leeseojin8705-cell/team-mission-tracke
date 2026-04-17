@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { getSession } from "@/lib/session";
 
 function parseScores(raw: string): Record<string, number[]> {
   try {
@@ -24,9 +26,27 @@ export async function GET(
     where: { id: playerId },
     select: { teamId: true },
   });
-  if (!player) {
+  if (!player?.teamId) {
     return NextResponse.json([], { status: 200 });
   }
+
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  }
+  if (session.role === "player") {
+    if (session.playerId !== playerId) {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+    }
+  } else if (session.role === "coach" || session.role === "owner") {
+    const ids = await getAccessibleTeamIds(session);
+    if (!ids.includes(player.teamId)) {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+    }
+  } else {
+    return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  }
+
   const list = await prisma.playerEvaluation.findMany({
     where: { teamId: player.teamId, subjectPlayerId: playerId },
     orderBy: { createdAt: "desc" },

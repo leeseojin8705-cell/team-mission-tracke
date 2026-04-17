@@ -25,7 +25,7 @@ export async function GET(req: Request) {
     const teamIdParam = searchParams.get("teamId");
     const category = searchParams.get("category");
 
-    let where: Prisma.AnnouncementWhereInput = {};
+    const where: Prisma.AnnouncementWhereInput = {};
 
     /** 코치/오너는 관리자 PIN이 있어도 접근 가능한 팀만 (전체 DB 공지 노출 방지) */
     if (session?.role === "coach" || session?.role === "owner") {

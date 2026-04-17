@@ -3,6 +3,10 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import {
+  getTeamTaskTargetPlayerIds,
+  normalizeTaskDetails,
+} from "@/lib/taskDashboardCounts";
 type TeamRow = Awaited<ReturnType<typeof prisma.team.findMany>>[number];
 type PlayerRow = Awaited<ReturnType<typeof prisma.player.findMany>>[number];
 type TaskRow = Awaited<ReturnType<typeof prisma.task.findMany>>[number];
@@ -17,13 +21,21 @@ function buildDashboardSummary(
   const teamMap = new Map(teams.map((t) => [t.id, t]));
   const playerMap = new Map(players.map((p) => [p.id, p]));
 
+  const playersByTeam = new Map<string, string[]>();
+  for (const pl of players) {
+    if (!pl.teamId) continue;
+    const arr = playersByTeam.get(pl.teamId) ?? [];
+    arr.push(pl.id);
+    playersByTeam.set(pl.teamId, arr);
+  }
+
   const teamTaskCounts: Record<
     string,
     { total: number; completed: number; name: string }
   > = {};
 
   for (const task of tasks) {
-    if (!task.teamId) continue;
+    if (!task.teamId || task.playerId) continue;
     const key = task.teamId;
     if (!teamTaskCounts[key]) {
       teamTaskCounts[key] = {
@@ -32,13 +44,20 @@ function buildDashboardSummary(
         name: teamMap.get(key)?.name ?? "알 수 없는 팀",
       };
     }
-    teamTaskCounts[key].total += 1;
+    const teamPids = playersByTeam.get(key) ?? [];
+    const d = normalizeTaskDetails(task.details);
+    const targets = getTeamTaskTargetPlayerIds(d, teamPids);
+    teamTaskCounts[key].total += targets.length > 0 ? targets.length : 0;
   }
 
   for (const p of progresses) {
     if (!p.completed) continue;
     const task = tasks.find((t) => t.id === p.taskId);
-    if (task?.teamId && teamTaskCounts[task.teamId]) {
+    if (!task?.teamId || task.playerId || !teamTaskCounts[task.teamId]) continue;
+    const teamPids = playersByTeam.get(task.teamId) ?? [];
+    const d = normalizeTaskDetails(task.details);
+    const targets = new Set(getTeamTaskTargetPlayerIds(d, teamPids));
+    if (targets.size > 0 && targets.has(p.playerId)) {
       teamTaskCounts[task.teamId].completed += 1;
     }
   }

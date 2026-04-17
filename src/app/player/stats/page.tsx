@@ -1,10 +1,9 @@
-// @ts-nocheck
 "use client";
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import type { StatCategory, StatDefinition, TeamStaff } from "@/lib/types";
+import type { StatCategory, StatDefinition } from "@/lib/types";
 import { aggregatePhaseScores, getImprovement, getTaskScores } from "@/lib/taskScore";
 import { DEFAULT_STAT_DEFINITION, formatCategoryValue, getWeightedOverall, isMeasurementCategory } from "@/lib/statDefinition";
 
@@ -115,7 +114,6 @@ function StatsContent() {
       createdAt?: string | null;
     }[]
   >([]);
-  const [staffMap, setStaffMap] = useState<Record<string, TeamStaff>>({});
   const [def, setDef] = useState<StatDefinition>(DEFAULT_STAT_DEFINITION);
   const [loading, setLoading] = useState(!!playerId);
   const [periodPreset, setPeriodPreset] = useState<"all" | "30d" | "custom">("all");
@@ -128,90 +126,89 @@ function StatsContent() {
   const [affiliationName, setAffiliationName] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!playerId) {
-      setAffiliationName(null);
-      return;
-    }
     let cancelled = false;
-    fetch(`/api/players/${encodeURIComponent(playerId)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((p: { teamId?: string | null } | null) => {
-        if (!p?.teamId || cancelled) return null;
-        return fetch(`/api/teams/${encodeURIComponent(p.teamId)}`);
-      })
-      .then((r) => (r && r.ok ? r.json() : null))
-      .then((t: { name?: string } | null) => {
-        if (cancelled) return;
-        setAffiliationName(t?.name ?? null);
-      })
-      .catch(() => {
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      if (!playerId) {
+        setAffiliationName(null);
+        return;
+      }
+      try {
+        const pr = await fetch(`/api/players/${encodeURIComponent(playerId)}`);
+        const p = (pr.ok ? await pr.json() : null) as { teamId?: string | null } | null;
+        if (!p?.teamId || cancelled) {
+          if (!cancelled) setAffiliationName(null);
+          return;
+        }
+        const tr = await fetch(`/api/teams/${encodeURIComponent(p.teamId)}`);
+        const t = (tr.ok ? await tr.json() : null) as { name?: string } | null;
+        if (!cancelled) setAffiliationName(t?.name ?? null);
+      } catch {
         if (!cancelled) setAffiliationName(null);
-      });
+      }
+    });
     return () => {
       cancelled = true;
     };
   }, [playerId]);
 
   useEffect(() => {
-    if (!playerId) {
-      setLoading(false);
-      return;
-    }
     let cancelled = false;
-    setLoading(true);
-    const safeJson = async <T,>(r: Response, fallback: T): Promise<T> => {
-      const text = await r.text();
-      if (!text.trim()) return fallback;
-      try {
-        return JSON.parse(text) as T;
-      } catch {
-        return fallback;
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      if (!playerId) {
+        setLoading(false);
+        return;
       }
-    };
-    fetch(`/api/players/${playerId}/evaluations`)
-      .then((r) =>
-        safeJson(
-          r,
-          [] as {
-            teamId?: string;
-            evaluatorStaffId: string;
-            phase?: string | null;
-            scores: Record<string, number[]>;
-            createdAt?: string | null;
-          }[],
-        ),
-      )
-      .then((list) => {
+      setLoading(true);
+      const safeJson = async <T,>(r: Response, fallback: T): Promise<T> => {
+        const text = await r.text();
+        if (!text.trim()) return fallback;
+        try {
+          return JSON.parse(text) as T;
+        } catch {
+          return fallback;
+        }
+      };
+      try {
+        const evalRes = await fetch(
+          `/api/players/${encodeURIComponent(playerId)}/evaluations`,
+          { credentials: "same-origin" },
+        );
+        const list = await safeJson(evalRes, [] as {
+          teamId?: string;
+          evaluatorStaffId: string;
+          phase?: string | null;
+          scores: Record<string, number[]>;
+          createdAt?: string | null;
+        }[]);
         if (cancelled) return;
         const evals = Array.isArray(list) ? list : [];
         setEvaluations(evals);
         const teamId = evals[0]?.teamId;
         if (teamId) {
-          return Promise.all([
-            fetch(`/api/teams/${teamId}`).then((r) => (r.ok ? r.json() : null)) as Promise<{ statDefinition?: StatDefinition | null } | null>,
-            fetch(`/api/teams/${teamId}/staff`).then((r) => safeJson(r, [] as TeamStaff[])),
-          ]);
+          const teamRes = await fetch(`/api/teams/${teamId}`, {
+            credentials: "same-origin",
+          });
+          const teamJson = teamRes.ok
+            ? ((await teamRes.json()) as { statDefinition?: StatDefinition | null })
+            : null;
+          if (!cancelled) {
+            if (teamJson?.statDefinition) setDef(teamJson.statDefinition);
+            else setDef(DEFAULT_STAT_DEFINITION);
+          }
+        } else if (!cancelled) {
+          setDef(DEFAULT_STAT_DEFINITION);
         }
-        return undefined;
-      })
-      .then((res) => {
-        if (!cancelled && res) {
-          const [teamRes, staffList] = res;
-          if (teamRes?.statDefinition) setDef(teamRes.statDefinition);
-          else setDef(DEFAULT_STAT_DEFINITION);
-          const staff = Array.isArray(staffList) ? staffList : [];
-          const map: Record<string, TeamStaff> = {};
-          staff.forEach((s) => { map[s.id] = s; });
-          setStaffMap(map);
-        }
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setEvaluations([]);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [playerId]);
 
   const filteredEvaluations = useMemo(() => {
@@ -340,18 +337,24 @@ function StatsContent() {
 
   // 스냅샷 불러오기/저장
   useEffect(() => {
-    if (!playerId) return;
-    try {
-      const raw =
-        typeof window !== "undefined"
-          ? window.localStorage.getItem(`tmt:player-stats-snapshots:${playerId}`)
-          : null;
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as PlayerSnapshot[];
-      if (Array.isArray(parsed)) setSnapshots(parsed);
-    } catch {
-      // ignore
-    }
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled || !playerId) return;
+      try {
+        const raw =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem(`tmt:player-stats-snapshots:${playerId}`)
+            : null;
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as PlayerSnapshot[];
+        if (Array.isArray(parsed)) setSnapshots(parsed);
+      } catch {
+        // ignore
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [playerId]);
 
   const handleSaveSnapshot = () => {

@@ -26,9 +26,8 @@ export async function GET(
   const { id: teamId } = await params;
   const url = new URL(req.url);
   const taskId = url.searchParams.get("taskId");
-  const forPlayerId = url.searchParams.get("forPlayerId");
 
-  /** 코치는 팀 전체, 선수·링크(forPlayerId)는 본인 행만 */
+  /** 코치는 팀 전체, 선수는 세션 본인 행만 */
   let subjectPlayerScope: string | null = null;
 
   if (session?.role === "player" && session.playerId) {
@@ -53,15 +52,6 @@ export async function GET(
     if (!team) {
       return NextResponse.json({ error: "팀을 찾을 수 없습니다." }, { status: 404 });
     }
-  } else if (!session && forPlayerId) {
-    const pl = await prisma.player.findUnique({
-      where: { id: forPlayerId },
-      select: { teamId: true },
-    });
-    if (pl?.teamId !== teamId) {
-      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
-    }
-    subjectPlayerScope = forPlayerId;
   } else {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
   }

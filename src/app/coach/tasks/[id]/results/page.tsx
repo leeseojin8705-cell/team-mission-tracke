@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client";
 
 import Link from "next/link";
@@ -29,13 +28,14 @@ export default function TaskResultPage() {
 
   useEffect(() => {
     if (!id) return;
+    const taskId = id;
     let cancelled = false;
     async function load() {
       try {
         setLoading(true);
         setError(null);
 
-        const taskRes = await fetch(`/api/tasks/${encodeURIComponent(id)}`);
+        const taskRes = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`);
         if (!taskRes.ok) throw new Error("과제 정보를 불러오지 못했습니다.");
         const taskData = (await taskRes.json()) as TaskWithDetails;
         if (cancelled) return;
@@ -53,7 +53,7 @@ export default function TaskResultPage() {
           fetch(
             `/api/teams/${encodeURIComponent(
               teamId,
-            )}/player-evaluations?taskId=${encodeURIComponent(id)}`,
+            )}/player-evaluations?taskId=${encodeURIComponent(taskId)}`,
           ),
         ]);
         if (!playersRes.ok || !evalRes.ok) {
@@ -65,9 +65,19 @@ export default function TaskResultPage() {
         setPlayers(playersData);
         setEvaluations(evalData);
 
-        if (!selectedPlayerId && playersData[0]) {
-          setSelectedPlayerId(playersData[0].id);
-        }
+        const assignees = taskData.details?.assigneePlayerIds;
+        const entryIds =
+          Array.isArray(assignees) && assignees.length > 0
+            ? assignees
+            : Array.isArray(taskData.details?.players) && taskData.details.players.length > 0
+              ? taskData.details.players
+              : playersData.map((p) => p.id);
+        const allowed = new Set(entryIds);
+        setSelectedPlayerId((prev) => {
+          if (prev && allowed.has(prev)) return prev;
+          const first = playersData.find((p) => allowed.has(p.id));
+          return first?.id ?? playersData[0]?.id ?? null;
+        });
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "오류가 발생했습니다.");
@@ -80,7 +90,7 @@ export default function TaskResultPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, selectedPlayerId]);
+  }, [id]);
 
   const byPhase = useMemo(
     () => aggregatePhaseScores(evaluations),
@@ -88,10 +98,26 @@ export default function TaskResultPage() {
   );
 
   const entryPlayers = useMemo(() => {
-    if (!task?.details?.players || !Array.isArray(task.details.players)) return players;
+    const posOrder: Record<string, number> = { GK: 0, DF: 1, MF: 2, FW: 3 };
+    const sortByPosition = (list: Player[]) =>
+      [...list].sort((a, b) => {
+        const pa = posOrder[a.position ?? ""] ?? 99;
+        const pb = posOrder[b.position ?? ""] ?? 99;
+        if (pa !== pb) return pa - pb;
+        return a.name.localeCompare(b.name, "ko");
+      });
+
+    const assignees = task?.details?.assigneePlayerIds;
+    if (Array.isArray(assignees) && assignees.length > 0) {
+      const set = new Set(assignees);
+      return sortByPosition(players.filter((p) => set.has(p.id)));
+    }
+    if (!task?.details?.players || !Array.isArray(task.details.players)) {
+      return sortByPosition(players);
+    }
     const set = new Set(task.details.players);
-    return players.filter((p) => set.has(p.id));
-  }, [players, task?.details?.players]);
+    return sortByPosition(players.filter((p) => set.has(p.id)));
+  }, [players, task?.details?.players, task?.details?.assigneePlayerIds]);
 
   const currentScores = useMemo(() => {
     if (!selectedPlayerId) return null;
@@ -137,8 +163,8 @@ export default function TaskResultPage() {
                 과제 결과 · {task.title}
               </h1>
               <p className="text-sm text-slate-400">
-                선수별 이해도·달성도·코치 평가 및 개선도를 확인할 수 있습니다. 이 화면은 현재 팀 전체
-                평가 데이터를 기준으로 집계됩니다.
+                선수별 이해도·달성도·코치 평가 및 개선도를 확인할 수 있습니다. 과제에 지정된 선수만
+                있는 경우 왼쪽 목록이 그 선수들로 한정됩니다.
               </p>
             </header>
 

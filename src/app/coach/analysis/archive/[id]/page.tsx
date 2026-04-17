@@ -51,41 +51,50 @@ export default function CoachAnalysisArchiveDetailPage() {
 
   useEffect(() => {
     if (!id) return;
+    const analysisId = id;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fetch(`/api/analyses/${id}`)
-      .then((r) => {
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const r = await fetch(`/api/analyses/${encodeURIComponent(analysisId)}`);
         if (!r.ok) throw new Error("경기를 불러오지 못했습니다.");
-        return r.json();
-      })
-      .then((data: AnalysisItem) => {
+        const data = (await r.json()) as AnalysisItem;
         if (!cancelled) setAnalysis(data);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "오류가 발생했습니다.");
-      })
-      .finally(() => {
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "오류가 발생했습니다.");
+        }
+      } finally {
         if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   useEffect(() => {
-    if (!analysis?.teamId) {
-      setPlayers([]);
-      return;
-    }
+    const teamId = analysis?.teamId;
     let cancelled = false;
-    fetch(`/api/players?teamId=${encodeURIComponent(analysis.teamId)}`)
-      .then((r) => r.json())
-      .then((list: PlayerRow[]) => {
-        if (!cancelled) setPlayers(list);
-      })
-      .catch(() => {
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      if (!teamId) {
+        setPlayers([]);
+        return;
+      }
+      try {
+        const r = await fetch(`/api/players?teamId=${encodeURIComponent(teamId)}`);
+        const list = (await r.json()) as PlayerRow[];
+        if (!cancelled) setPlayers(Array.isArray(list) ? list : []);
+      } catch {
         if (!cancelled) setPlayers([]);
-      });
-    return () => { cancelled = true; };
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [analysis?.teamId]);
 
   const playerEventsMap = analysis?.playerEvents ?? null;

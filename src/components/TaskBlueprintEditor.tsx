@@ -184,15 +184,18 @@ export function TaskBlueprintEditor({
         setFormation(next);
       }
     },
-    [formation],
+    [formation, setFormation, setCustomFormationSlots],
   );
 
-  const applyPresetToCustomField = useCallback((presetKey: string) => {
-    const seed = FORMATION_LAYOUTS[presetKey];
-    if (!seed) return;
-    setFormation("custom");
-    setCustomFormationSlots(clonePresetToCustomSlots(seed));
-  }, []);
+  const applyPresetToCustomField = useCallback(
+    (presetKey: string) => {
+      const seed = FORMATION_LAYOUTS[presetKey];
+      if (!seed) return;
+      setFormation("custom");
+      setCustomFormationSlots(clonePresetToCustomSlots(seed));
+    },
+    [setFormation, setCustomFormationSlots],
+  );
 
   useEffect(() => {
     if (!draggingSlotId) return;

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
 import { applyPlayerTaskVisibility } from "@/lib/playerTaskVisibility";
+import { playerCanAccessTeamScopedTask } from "@/lib/taskAssignees";
 import { isAdminApiRequest } from "@/lib/adminApiRequest";
 import type { Task } from "@/lib/types";
 
@@ -17,7 +18,6 @@ async function teamExists(teamId: string): Promise<boolean> {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const qpPlayerId = searchParams.get("playerId");
     const qpTeamId = searchParams.get("teamId");
     const listAll = searchParams.get("listAll") === "1";
 
@@ -71,24 +71,6 @@ export async function GET(req: Request) {
           OR: [{ teamId: { in: ids } }, { teamId: null }],
         };
       }
-    } else if (!session && qpPlayerId) {
-      const player = await prisma.player.findUnique({
-        where: { id: qpPlayerId },
-        select: { teamId: true },
-      });
-      if (!player) {
-        return NextResponse.json([]);
-      }
-      if (!player.teamId) {
-        where = { playerId: qpPlayerId };
-      } else {
-        where = {
-          OR: [
-            { playerId: qpPlayerId },
-            { teamId: player.teamId, playerId: null },
-          ],
-        };
-      }
     } else {
       return NextResponse.json([]);
     }
@@ -98,13 +80,23 @@ export async function GET(req: Request) {
       orderBy: { title: "asc" },
     });
 
-    const isPlayerView =
-      (session?.role === "player" && session.playerId) ||
-      (!session && qpPlayerId);
+    const isPlayerView = session?.role === "player" && session.playerId;
     if (isPlayerView) {
       const now = new Date();
+      const pid = session.playerId;
+      const playerRow = await prisma.player.findUnique({
+        where: { id: pid },
+        select: { teamId: true },
+      });
+      const scoped = tasks.filter((t) =>
+        playerCanAccessTeamScopedTask(pid, playerRow?.teamId, {
+          teamId: t.teamId,
+          playerId: t.playerId,
+          details: t.details,
+        }),
+      );
       return NextResponse.json(
-        tasks.map((t) => applyPlayerTaskVisibility(t as unknown as Task, now)),
+        scoped.map((t) => applyPlayerTaskVisibility(t as unknown as Task, now)),
       );
     }
 
@@ -266,22 +258,46 @@ export async function POST(req: Request) {
       );
     }
 
-    const created = await prisma.$transaction(
-      uniq.map((playerId) =>
-        prisma.task.create({
-          data: {
-            title: body.title,
-            category: body.category,
-            dueDate: body.dueDate ? new Date(body.dueDate) : null,
-            teamId,
-            playerId,
-            details: detailsStr,
-          },
-        }),
-      ),
-    );
+    /** 복수 선수: 지도자 목록에는 한 줄만 — 팀 스코프 1건 + details.assigneePlayerIds */
+    if (uniq.length > 1) {
+      let detailsObj: Record<string, unknown> = {};
+      if (body.details && typeof body.details === "object") {
+        detailsObj = { ...(body.details as Record<string, unknown>) };
+      } else if (detailsStr) {
+        try {
+          detailsObj = JSON.parse(detailsStr) as Record<string, unknown>;
+        } catch {
+          detailsObj = {};
+        }
+      }
+      detailsObj.assigneePlayerIds = uniq;
+      const mergedDetails = JSON.stringify(detailsObj);
+      const created = await prisma.task.create({
+        data: {
+          title: body.title,
+          category: body.category,
+          dueDate: body.dueDate ? new Date(body.dueDate) : null,
+          teamId,
+          playerId: null,
+          details: mergedDetails,
+        },
+      });
+      return NextResponse.json({ created: [created] }, { status: 201 });
+    }
 
-    return NextResponse.json({ created }, { status: 201 });
+    const playerId = uniq[0]!;
+    const created = await prisma.task.create({
+      data: {
+        title: body.title,
+        category: body.category,
+        dueDate: body.dueDate ? new Date(body.dueDate) : null,
+        teamId,
+        playerId,
+        details: detailsStr,
+      },
+    });
+
+    return NextResponse.json({ created: [created] }, { status: 201 });
   } catch (error) {
     console.error("POST /api/tasks error", error);
     const message =

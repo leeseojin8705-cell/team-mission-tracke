@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import type { Player, StatCategory, StatDefinition, Team } from "@/lib/types";
+import type { Player, StatCategory, StatDefinition, Task, Team } from "@/lib/types";
+import { readApiErrorMessage } from "@/lib/apiError";
+import { countDashboardTaskSlots } from "@/lib/taskDashboardCounts";
 import { DEFAULT_STAT_DEFINITION, isMeasurementCategory } from "@/lib/statDefinition";
 
 type ScheduleItem = { id: string; title: string; date: string; teamId: string };
@@ -155,6 +157,12 @@ export default function CoachHome() {
         const anyFailed =
           !teamsRes.ok || !playersRes.ok || !schedulesRes.ok || !tasksRes.ok;
 
+        let loadDetail: string | null = null;
+        if (anyFailed) {
+          const failed = [teamsRes, playersRes, schedulesRes, tasksRes].find((r) => !r.ok);
+          if (failed) loadDetail = await readApiErrorMessage(failed);
+        }
+
         if (!cancelled) {
           const teamList: Team[] = Array.isArray(teams) ? teams : [];
           const playerList: Player[] = Array.isArray(playersData) ? playersData : [];
@@ -176,10 +184,30 @@ export default function CoachHome() {
                 return pl?.teamId === scopeTeamId;
               })
             : tasksList;
+
+          const playersByTeamId = new Map<string, string[]>();
+          for (const p of playerList) {
+            if (!p.teamId) continue;
+            const arr = playersByTeamId.get(p.teamId) ?? [];
+            arr.push(p.id);
+            playersByTeamId.set(p.teamId, arr);
+          }
+          let taskSlotSum = 0;
+          for (const t of scopedTasks) {
+            const tm = t as Task;
+            if (tm.playerId) {
+              taskSlotSum += 1;
+            } else if (tm.teamId) {
+              taskSlotSum += countDashboardTaskSlots(tm, playersByTeamId.get(tm.teamId) ?? []);
+            } else {
+              taskSlotSum += 1;
+            }
+          }
+
           setTeamCount(scopedTeams.length);
           setPlayerCount(scopedPlayers.length);
           setScheduleCount(scopedSchedules.length);
-          setTaskCount(scopedTasks.length);
+          setTaskCount(taskSlotSum);
           setAnnouncementCount(annRes.ok ? (await annRes.json()).length : 0);
           setAnalysisCount(analysesRes.ok ? (await analysesRes.json()).length : 0);
           setTeamsForStats(scopedTeams);
@@ -199,7 +227,10 @@ export default function CoachHome() {
           setUpcomingSchedules(upcoming);
 
           if (anyFailed) {
-            setError("일부 데이터를 불러오지 못했습니다. 팀·선수·일정·과제를 먼저 등록해 보세요.");
+            setError(
+              loadDetail ??
+                "일부 데이터를 불러오지 못했습니다. 팀·선수·일정·과제를 먼저 등록해 보세요.",
+            );
           }
         }
 
@@ -311,7 +342,7 @@ export default function CoachHome() {
         }[];
         if (cancelled) return;
         const def: StatDefinition =
-          (teamData as any).statDefinition ?? DEFAULT_STAT_DEFINITION;
+          teamData.statDefinition ?? DEFAULT_STAT_DEFINITION;
         // 최근 30일만
         const now = new Date();
         const to = new Date(now);
@@ -391,9 +422,13 @@ export default function CoachHome() {
               <p className="text-[11px] text-slate-500">일정</p>
               <p className="text-lg font-semibold text-sky-900">{scheduleCount ?? (loading ? "…" : 0)}</p>
             </div>
-            <div className="rounded-xl border border-sky-100 bg-sky-50/90 px-3 py-2">
+            <div
+              className="rounded-xl border border-sky-100 bg-sky-50/90 px-3 py-2"
+              title="팀 과제는 배정(엔트리) 선수 수만큼 합산합니다."
+            >
               <p className="text-[11px] text-slate-500">과제</p>
               <p className="text-lg font-semibold text-sky-900">{taskCount ?? (loading ? "…" : 0)}</p>
+              <p className="text-[10px] text-slate-400">배정 인원 기준</p>
             </div>
             <div className="rounded-xl border border-sky-100 bg-sky-50/90 px-3 py-2">
               <p className="text-[11px] text-slate-500">공지</p>
@@ -545,6 +580,9 @@ export default function CoachHome() {
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-slate-400">
                   팀별 과제 완료율
+                </p>
+                <p className="text-[10px] text-slate-400">
+                  총·완료 수는 팀 과제별 배정(엔트리) 선수 수를 기준으로 합니다.
                 </p>
                 {filteredTeamSummary.length === 0 ? (
                   <p className="text-xs text-slate-500">

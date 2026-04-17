@@ -48,8 +48,10 @@ function EvaluateContent() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
-  }, [teamId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [teamId, evaluatorStaffId]);
 
   useEffect(() => {
     if (!teamId || !staffId || !evaluatorStaffId) return;

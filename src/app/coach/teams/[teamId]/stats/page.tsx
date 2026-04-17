@@ -147,47 +147,64 @@ export default function CoachTeamStatsPage() {
   // 스냅샷 불러오기
   useEffect(() => {
     if (!teamId) return;
-    try {
-      const raw =
-        typeof window !== "undefined"
-          ? window.localStorage.getItem(`tmt:team-stats-snapshots:${teamId}`)
-          : null;
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Snapshot[];
-      if (Array.isArray(parsed)) setSnapshots(parsed);
-    } catch {
-      // ignore
-    }
+    const tid = teamId;
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      try {
+        const raw =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem(`tmt:team-stats-snapshots:${tid}`)
+            : null;
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as Snapshot[];
+        if (Array.isArray(parsed)) setSnapshots(parsed);
+      } catch {
+        // ignore
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [teamId]);
 
   useEffect(() => {
     if (!teamId) return;
+    const tid = teamId;
     let cancelled = false;
-    setLoading(true);
-    const safeJson = async (r: Response, fallback: unknown) => {
-      const text = await r.text();
-      if (!text.trim()) return fallback;
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      setLoading(true);
+      const safeJson = async (r: Response, fallback: unknown) => {
+        const text = await r.text();
+        if (!text.trim()) return fallback;
+        try {
+          return JSON.parse(text) as unknown;
+        } catch {
+          return fallback;
+        }
+      };
       try {
-        return JSON.parse(text) as unknown;
-      } catch {
-        return fallback;
-      }
-    };
-    Promise.all([
-      fetch(`/api/teams/${teamId}`).then((r) => (r.ok ? r.json() : null)) as Promise<Team | null>,
-      fetch(`/api/players?teamId=${encodeURIComponent(teamId)}`).then((r) => safeJson(r, []) as Promise<Player[]>),
-      fetch(`/api/teams/${teamId}/player-evaluations`).then((r) => safeJson(r, []) as Promise<PlayerEvalRow[]>),
-    ])
-      .then(([teamRes, playersList, evalsList]) => {
+        const [teamRes, playersList, evalsList] = await Promise.all([
+          fetch(`/api/teams/${tid}`).then((r) => (r.ok ? r.json() : null)) as Promise<Team | null>,
+          fetch(`/api/players?teamId=${encodeURIComponent(tid)}`).then((r) =>
+            safeJson(r, []),
+          ) as Promise<Player[]>,
+          fetch(`/api/teams/${tid}/player-evaluations`).then((r) =>
+            safeJson(r, []),
+          ) as Promise<PlayerEvalRow[]>,
+        ]);
         if (cancelled) return;
         setTeam(teamRes ?? null);
         setPlayers(Array.isArray(playersList) ? playersList : []);
         setEvaluations(Array.isArray(evalsList) ? evalsList : []);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [teamId]);
 
   const def: StatDefinition = team?.statDefinition ?? DEFAULT_STAT_DEFINITION;

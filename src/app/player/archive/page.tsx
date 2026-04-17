@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client";
 
 import FootballTacticsAnalyzer, {
@@ -37,7 +36,7 @@ function getSortDate(a: AnalysisWithMeta): number {
   if (a.matchDate) return new Date(a.matchDate).getTime();
   const d = a.schedule?.date;
   if (!d) return 0;
-  return new Date(typeof d === "string" ? d : (d as unknown as string)).getTime();
+  return new Date(typeof d === "string" ? d : String(d)).getTime();
 }
 
 function formatDate(dateStr: string): string {
@@ -169,6 +168,7 @@ function PlayerArchiveInner() {
       try {
         const res = await fetch(
           `/api/player-match-records?playerId=${encodeURIComponent(currentPlayerId)}`,
+          { credentials: "same-origin" },
         );
         if (!res.ok) return;
         const data: PersonalRecord[] = await res.json();
@@ -188,14 +188,26 @@ function PlayerArchiveInner() {
   useEffect(() => {
     if (!taskId || !currentPlayerId || records.length === 0) return;
     if (selectedRecordId) return;
+    const tid = taskId;
+    const pid = currentPlayerId;
     let cancelled = false;
 
     async function selectRecordByTask() {
       try {
-        const res = await fetch(
-          `/api/tasks/${encodeURIComponent(taskId)}?playerId=${encodeURIComponent(currentPlayerId)}`,
-          { credentials: "same-origin" },
-        );
+        const sessionRes = await fetch("/api/auth/session", {
+          credentials: "same-origin",
+        });
+        const sessionData = (await sessionRes.json().catch(() => ({}))) as {
+          session?: { role?: string; playerId?: string };
+        };
+        const sid =
+          sessionData.session?.role === "player"
+            ? sessionData.session.playerId
+            : null;
+        if (!sid || sid !== pid) return;
+        const res = await fetch(`/api/tasks/${encodeURIComponent(tid)}`, {
+          credentials: "same-origin",
+        });
         if (!res.ok) return;
         const task = (await res.json()) as {
           details?: {
