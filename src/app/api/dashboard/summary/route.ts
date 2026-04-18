@@ -3,6 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 import {
   getTeamTaskTargetPlayerIds,
   normalizeTaskDetails,
@@ -19,7 +20,6 @@ function buildDashboardSummary(
   progresses: ProgressRow[],
 ) {
   const teamMap = new Map(teams.map((t) => [t.id, t]));
-  const playerMap = new Map(players.map((p) => [p.id, p]));
 
   const playersByTeam = new Map<string, string[]>();
   for (const pl of players) {
@@ -73,28 +73,46 @@ function buildDashboardSummary(
     }
   > = {};
 
-  for (const task of tasks) {
-    if (!task.playerId) continue;
-    const key = task.playerId;
-    const player = playerMap.get(key);
-    if (!player) continue;
-    if (!playerTaskCounts[key]) {
-      playerTaskCounts[key] = {
-        total: 0,
-        completed: 0,
-        name: player.name,
-        teamName: teamMap.get(player.teamId)?.name ?? null,
-        teamId: player.teamId,
-      };
-    }
-    playerTaskCounts[key].total += 1;
+  for (const player of players) {
+    playerTaskCounts[player.id] = {
+      total: 0,
+      completed: 0,
+      name: player.name,
+      teamName: player.teamId ? teamMap.get(player.teamId)?.name ?? null : null,
+      teamId: player.teamId,
+    };
   }
 
-  for (const p of progresses) {
-    if (!p.completed) continue;
-    const task = tasks.find((t) => t.id === p.taskId);
-    if (task?.playerId && playerTaskCounts[task.playerId]) {
-      playerTaskCounts[task.playerId].completed += 1;
+  for (const task of tasks) {
+    if (task.playerId) {
+      const key = task.playerId;
+      if (playerTaskCounts[key]) playerTaskCounts[key].total += 1;
+      continue;
+    }
+    if (!task.teamId) continue;
+    const teamPids = playersByTeam.get(task.teamId) ?? [];
+    const d = normalizeTaskDetails(task.details);
+    const targets = getTeamTaskTargetPlayerIds(d, teamPids);
+    for (const pid of targets) {
+      if (playerTaskCounts[pid]) playerTaskCounts[pid].total += 1;
+    }
+  }
+
+  for (const pr of progresses) {
+    if (!pr.completed) continue;
+    const task = tasks.find((t) => t.id === pr.taskId);
+    if (!task) continue;
+    if (task.playerId) {
+      if (playerTaskCounts[task.playerId]) {
+        playerTaskCounts[task.playerId].completed += 1;
+      }
+    } else if (task.teamId) {
+      const teamPids = playersByTeam.get(task.teamId) ?? [];
+      const d = normalizeTaskDetails(task.details);
+      const targets = new Set(getTeamTaskTargetPlayerIds(d, teamPids));
+      if (targets.size > 0 && targets.has(pr.playerId) && playerTaskCounts[pr.playerId]) {
+        playerTaskCounts[pr.playerId].completed += 1;
+      }
     }
   }
 
@@ -135,6 +153,30 @@ export async function GET(req: Request) {
   let taskWhere: Prisma.TaskWhereInput | undefined;
   let teamWhere: Prisma.TeamWhereInput | undefined;
   let playerWhere: Prisma.PlayerWhereInput | undefined;
+
+  if (isAdminApiRequest(req)) {
+    if (teamIdParam) {
+      const teamPlayers = await prisma.player.findMany({
+        where: { teamId: teamIdParam },
+        select: { id: true },
+      });
+      const playerIds = teamPlayers.map((p) => p.id);
+      taskWhere = {
+        OR: [{ teamId: teamIdParam }, { playerId: { in: playerIds } }],
+      };
+      teamWhere = { id: teamIdParam };
+      playerWhere = { teamId: teamIdParam };
+    }
+    const [teams, players, tasks, progresses] = await Promise.all([
+      prisma.team.findMany({ where: teamWhere }),
+      prisma.player.findMany({ where: playerWhere }),
+      prisma.task.findMany({ where: taskWhere }),
+      prisma.taskProgress.findMany(),
+    ]);
+    return NextResponse.json(
+      filterByTeam(buildDashboardSummary(teams, players, tasks, progresses)),
+    );
+  }
 
   if (!session) {
     return NextResponse.json({ teamTaskCounts: {}, playerTaskCounts: {} });

@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { canAccessMatchAnalysis } from "@/lib/matchAnalysisAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getSession();
@@ -21,10 +22,14 @@ export async function GET(
     return NextResponse.json({ error: "분석을 찾을 수 없습니다." }, { status: 404 });
   }
 
-  const ok = await canAccessMatchAnalysis(session, {
-    teamId: a.teamId,
-    scheduleId: a.scheduleId,
-  });
+  const ok = await canAccessMatchAnalysis(
+    session,
+    {
+      teamId: a.teamId,
+      scheduleId: a.scheduleId,
+    },
+    req,
+  );
   if (!ok) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
@@ -50,7 +55,11 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getSession();
-  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+  const adminOk = isAdminApiRequest(req);
+  if (
+    (!session || (session.role !== "coach" && session.role !== "owner")) &&
+    !adminOk
+  ) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
   }
 
@@ -62,10 +71,14 @@ export async function PUT(
   if (!existing) {
     return NextResponse.json({ error: "분석을 찾을 수 없습니다." }, { status: 404 });
   }
-  const ok = await canAccessMatchAnalysis(session, {
-    teamId: existing.teamId,
-    scheduleId: existing.scheduleId,
-  });
+  const ok = await canAccessMatchAnalysis(
+    session,
+    {
+      teamId: existing.teamId,
+      scheduleId: existing.scheduleId,
+    },
+    req,
+  );
   if (!ok) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
@@ -100,11 +113,15 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getSession();
-  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+  const adminOk = isAdminApiRequest(req);
+  if (
+    (!session || (session.role !== "coach" && session.role !== "owner")) &&
+    !adminOk
+  ) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
   }
 
@@ -116,10 +133,14 @@ export async function DELETE(
   if (!existing) {
     return NextResponse.json({ error: "분석을 찾을 수 없습니다." }, { status: 404 });
   }
-  const ok = await canAccessMatchAnalysis(session, {
-    teamId: existing.teamId,
-    scheduleId: existing.scheduleId,
-  });
+  const ok = await canAccessMatchAnalysis(
+    session,
+    {
+      teamId: existing.teamId,
+      scheduleId: existing.scheduleId,
+    },
+    req,
+  );
   if (!ok) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }

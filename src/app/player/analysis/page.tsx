@@ -7,6 +7,7 @@ import type { MatchAnalysis, Player } from "@/lib/types";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { playerApiInit } from "@/lib/playerClientFetch";
 
 type PlayerSession = {
   session?: {
@@ -79,7 +80,7 @@ function PlayerAnalysisInner() {
       try {
         setLoading(true);
         setError(null);
-        const fetchOpts = { credentials: "same-origin" as const };
+        const fetchOpts = playerApiInit();
         const sessionRes = await fetch("/api/auth/session", fetchOpts);
         const sessionData = (await sessionRes.json().catch(() => ({}))) as PlayerSession;
         const sessionRole = sessionData.session?.role;
@@ -191,10 +192,7 @@ function PlayerAnalysisInner() {
         if (!tid || !p) return;
         const pid = p.id;
         if (!sessionPlayerId || sessionPlayerId !== pid) return;
-        const res = await fetch(
-          `/api/tasks/${encodeURIComponent(tid)}`,
-          { credentials: "same-origin" },
-        );
+        const res = await fetch(`/api/tasks/${encodeURIComponent(tid)}`, playerApiInit());
         if (!res.ok) return;
         const task = (await res.json()) as {
           details?: {
@@ -276,12 +274,14 @@ function PlayerAnalysisInner() {
     setSending(true);
     setSendMessage(null);
     try {
-      const res = await fetch(`/api/analyses/${selectedAnalysisId}/player-events`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ playerId: currentPlayerId, events: playerEvents }),
-      });
+      const res = await fetch(
+        `/api/analyses/${selectedAnalysisId}/player-events`,
+        playerApiInit({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playerId: currentPlayerId, events: playerEvents }),
+        }),
+      );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setSendMessage({ type: "err", text: data.error || "저장에 실패했습니다." });
@@ -319,21 +319,23 @@ function PlayerAnalysisInner() {
     setSavingRecord(true);
     setRecordMessage(null);
     try {
-      const res = await fetch("/api/player-match-records", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
-          matchAnalysisId: selectedAnalysisId ?? null,
-          playerId: currentPlayerId,
-          goals,
-          assists,
-          starterType,
-          injured,
-          matchResult,
-          events: playerEvents,
+      const res = await fetch(
+        "/api/player-match-records",
+        playerApiInit({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            matchAnalysisId: selectedAnalysisId ?? null,
+            playerId: currentPlayerId,
+            goals,
+            assists,
+            starterType,
+            injured,
+            matchResult,
+            events: playerEvents,
+          }),
         }),
-      });
+      );
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
         detail?: string;

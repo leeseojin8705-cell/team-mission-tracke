@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { AnnouncementCategory, AnnouncementType } from "@/generated/prisma/enums";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 
 const CATEGORIES = ["DAILY", "SCHEDULE"] as const;
 const TYPES = ["GAME", "PRACTICE", "REST", "EDUCATION", "OFFICIAL", "OTHER"] as const;
@@ -45,13 +46,17 @@ async function canAnnounceForTeam(
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getSession();
   const { id } = await params;
   const a = await prisma.announcement.findUnique({ where: { id } });
   if (!a) return NextResponse.json(null, { status: 404 });
+
+  if (isAdminApiRequest(req)) {
+    return NextResponse.json(toJson(a));
+  }
 
   if (session?.role === "player" && session.playerId) {
     const player = await prisma.player.findUnique({
@@ -77,7 +82,11 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getSession();
-  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+  const adminOk = isAdminApiRequest(req);
+  if (
+    (!session || (session.role !== "coach" && session.role !== "owner")) &&
+    !adminOk
+  ) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
   }
 
@@ -86,7 +95,7 @@ export async function PATCH(
   if (!existing) {
     return NextResponse.json({ error: "공지를 찾을 수 없습니다." }, { status: 404 });
   }
-  if (!(await canAnnounceForTeam(session, existing.teamId))) {
+  if (!adminOk && !(await canAnnounceForTeam(session!, existing.teamId))) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
 
@@ -137,11 +146,15 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getSession();
-  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+  const adminOk = isAdminApiRequest(req);
+  if (
+    (!session || (session.role !== "coach" && session.role !== "owner")) &&
+    !adminOk
+  ) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
   }
 
@@ -150,7 +163,7 @@ export async function DELETE(
   if (!existing) {
     return NextResponse.json({ error: "공지를 찾을 수 없습니다." }, { status: 404 });
   }
-  if (!(await canAnnounceForTeam(session, existing.teamId))) {
+  if (!adminOk && !(await canAnnounceForTeam(session!, existing.teamId))) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
 

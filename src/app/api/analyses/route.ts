@@ -7,15 +7,29 @@ import {
   getTeamIdsForMatchAnalysisSession,
   matchAnalysisWhereForTeams,
 } from "@/lib/matchAnalysisAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
+
 export async function GET(req: Request) {
   const session = await getSession();
   const { searchParams } = new URL(req.url);
   const teamIdParam = searchParams.get("teamId");
   const scheduleIdParam = searchParams.get("scheduleId");
 
-  const scopedIds = await getTeamIdsForMatchAnalysisSession(session);
-
   let teamIdsForQuery: string[];
+
+  if (isAdminApiRequest(req)) {
+    if (teamIdParam) {
+      const t = await prisma.team.findUnique({
+        where: { id: teamIdParam },
+        select: { id: true },
+      });
+      teamIdsForQuery = t ? [teamIdParam] : [];
+    } else {
+      const all = await prisma.team.findMany({ select: { id: true } });
+      teamIdsForQuery = all.map((x) => x.id);
+    }
+  } else {
+  const scopedIds = await getTeamIdsForMatchAnalysisSession(session);
 
   if (scopedIds !== null) {
     if (scopedIds.length === 0) {
@@ -43,6 +57,7 @@ export async function GET(req: Request) {
       return NextResponse.json([]);
     }
     teamIdsForQuery = [teamIdParam];
+  }
   }
 
   let where: Prisma.MatchAnalysisWhereInput =
@@ -94,15 +109,19 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const session = await getSession();
-    if (!session || (session.role !== "coach" && session.role !== "owner")) {
+    const adminOk = isAdminApiRequest(req);
+    if (
+      (!session || (session.role !== "coach" && session.role !== "owner")) &&
+      !adminOk
+    ) {
       return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
     }
 
     const body = await req.json();
     const eventsJson = JSON.stringify(body.events ?? { atk: [], def: [], pass: [], gk: [] });
 
-    const accessible = await getAccessibleTeamIds(session);
-    if (accessible.length === 0) {
+    const accessible = adminOk ? null : await getAccessibleTeamIds(session!);
+    if (!adminOk && accessible!.length === 0) {
       return NextResponse.json({ error: "접근 가능한 팀이 없습니다." }, { status: 403 });
     }
 
@@ -126,7 +145,10 @@ export async function POST(req: Request) {
         where: { id: body.scheduleId },
         select: { teamId: true },
       });
-      if (!sch?.teamId || !accessible.includes(sch.teamId)) {
+      if (
+        !sch?.teamId ||
+        (!adminOk && !accessible!.includes(sch.teamId))
+      ) {
         return NextResponse.json(
           { error: "해당 일정에 분석을 등록할 수 없습니다." },
           { status: 403 },
@@ -142,7 +164,11 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
-      if (!accessible.includes(tid)) {
+      const teamRow = await prisma.team.findUnique({
+        where: { id: tid },
+        select: { id: true },
+      });
+      if (!teamRow || (!adminOk && !accessible!.includes(tid))) {
         return NextResponse.json(
           { error: "해당 팀에 분석을 등록할 수 없습니다." },
           { status: 403 },

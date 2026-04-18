@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
 import { playerCanAccessTeamScopedTask } from "@/lib/taskAssignees";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 
 export async function GET(req: Request) {
   const session = await getSession();
@@ -17,6 +18,12 @@ export async function GET(req: Request) {
     });
     if (!task) {
       return NextResponse.json([]);
+    }
+    if (isAdminApiRequest(req)) {
+      const items = await prisma.taskProgress.findMany({
+        where: { taskId },
+      });
+      return NextResponse.json(items);
     }
     if (session?.role === "player" && session.playerId) {
       const p = await prisma.player.findUnique({
@@ -63,7 +70,18 @@ export async function GET(req: Request) {
     );
   }
 
-  if (session?.role === "player" && session.playerId !== playerId) {
+  if (isAdminApiRequest(req)) {
+    const items = await prisma.taskProgress.findMany({
+      where: { playerId },
+    });
+    return NextResponse.json(items);
+  }
+
+  if (
+    !isAdminApiRequest(req) &&
+    session?.role === "player" &&
+    session.playerId !== playerId
+  ) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
 
@@ -93,6 +111,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await getSession();
   const body = await req.json();
+  const adminOk = isAdminApiRequest(req);
 
   if (!body.taskId || !body.playerId) {
     return NextResponse.json(
@@ -101,26 +120,47 @@ export async function POST(req: Request) {
     );
   }
 
-  if (!session) {
+  if (!session && !adminOk) {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  if (session.role === "player" && session.playerId !== body.playerId) {
+  if (
+    !adminOk &&
+    session?.role === "player" &&
+    session.playerId !== body.playerId
+  ) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
 
-  if (session.role === "coach" || session.role === "owner") {
-    const target = await prisma.player.findUnique({
-      where: { id: body.playerId },
-      select: { teamId: true },
-    });
-    const ids = await getAccessibleTeamIds(session);
-    if (!target?.teamId || !ids.includes(target.teamId)) {
-      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  if (session?.role === "coach" || session?.role === "owner") {
+    if (!adminOk) {
+      const target = await prisma.player.findUnique({
+        where: { id: body.playerId },
+        select: { teamId: true },
+      });
+      const ids = await getAccessibleTeamIds(session);
+      if (!target?.teamId || !ids.includes(target.teamId)) {
+        return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+      }
     }
   }
 
-  if (session.role === "player" && session.playerId === body.playerId) {
+  if (adminOk) {
+    const task = await prisma.task.findUnique({
+      where: { id: body.taskId },
+      select: { id: true },
+    });
+    if (!task) {
+      return NextResponse.json({ error: "과제를 찾을 수 없습니다." }, { status: 404 });
+    }
+    const pl = await prisma.player.findUnique({
+      where: { id: body.playerId },
+      select: { id: true },
+    });
+    if (!pl) {
+      return NextResponse.json({ error: "선수를 찾을 수 없습니다." }, { status: 404 });
+    }
+  } else if (session?.role === "player" && session.playerId === body.playerId) {
     const task = await prisma.task.findUnique({
       where: { id: body.taskId },
       select: { teamId: true, playerId: true, details: true },

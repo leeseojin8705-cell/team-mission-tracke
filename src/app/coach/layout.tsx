@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useState } from "react";
 import {
   installCoachAdminFetchInterceptor,
   syncAdminPinCookieFromSession,
@@ -58,13 +58,9 @@ export default function CoachLayout({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // 관리자 모드일 때는 자식 페이지 fetch보다 먼저 인터셉터를 설치한다.
-  useEffect(() => {
-    try {
-      if (window.localStorage.getItem("tmt:adminMode") !== "on") return;
-    } catch {
-      return;
-    }
+  // 항상 설치: 인터셉터 내부에서 관리자 모드가 꺼져 있으면 그대로 통과합니다.
+  // (마운트 시점에 관리자가 꺼져 있어 인터셉터를 안 붙이면, 나중에 모드를 켠 뒤 PIN이 요청에 안 실립니다.)
+  useLayoutEffect(() => {
     syncAdminPinCookieFromSession();
     return installCoachAdminFetchInterceptor();
   }, []);

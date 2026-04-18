@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
 import { canAccessMatchAnalysis } from "@/lib/matchAnalysisAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 
 /** 선수가 해당 경기 분석에 자기 포인트 데이터를 제출(저장) */
 export async function POST(
@@ -48,12 +49,13 @@ export async function POST(
     const ok = await canAccessMatchAnalysis(
       { role: "player", playerId: session.playerId },
       analysis,
+      req,
     );
     if (!ok) {
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     }
   } else if (session?.role === "coach" || session?.role === "owner") {
-    const coachOk = await canAccessMatchAnalysis(session, analysis);
+    const coachOk = await canAccessMatchAnalysis(session, analysis, req);
     if (!coachOk) {
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     }
@@ -67,6 +69,18 @@ export async function POST(
     const ids = await getAccessibleTeamIds(session);
     if (!ids.includes(target.teamId)) {
       return NextResponse.json({ error: "해당 선수 팀에 접근할 수 없습니다." }, { status: 403 });
+    }
+  } else if (isAdminApiRequest(req)) {
+    const ok = await canAccessMatchAnalysis(null, analysis, req);
+    if (!ok) {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+    }
+    const target = await prisma.player.findUnique({
+      where: { id: playerId },
+      select: { teamId: true },
+    });
+    if (!target?.teamId) {
+      return NextResponse.json({ error: "선수를 찾을 수 없습니다." }, { status: 404 });
     }
   } else {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });

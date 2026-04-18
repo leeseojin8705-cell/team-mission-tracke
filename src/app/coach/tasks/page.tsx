@@ -33,6 +33,7 @@ import {
   normalizeTaskDetails as normalizeDetailsForTaskTargets,
 } from "@/lib/taskDashboardCounts";
 import { FlowPitchWatermark } from "@/components/FlowLogo";
+import { coachTasksApiInit } from "@/lib/coachAdminFetch";
 
 const MAX_SUB_POINTS = 7;
 
@@ -384,13 +385,24 @@ export default function CoachTasksPage() {
     };
   }
 
+  /** 토글과 무관하게 %만 입력돼도 가중치로 집계·저장 (퍼센트 ‘비활성’ 오해 방지) */
+  function rowPosActive(r: AssignmentRow) {
+    return {
+      fw: r.fw || (r.fwWeight ?? 0) > 0,
+      mf: r.mf || (r.mfWeight ?? 0) > 0,
+      df: r.df || (r.dfWeight ?? 0) > 0,
+      gk: r.gk || (r.gkWeight ?? 0) > 0,
+    };
+  }
+
   const assignmentWeightTotals = useMemo(() => {
     return assignmentRows.reduce(
       (acc, row) => {
-        if (row.fw) acc.FW += row.fwWeight || 0;
-        if (row.mf) acc.MF += row.mfWeight || 0;
-        if (row.df) acc.DF += row.dfWeight || 0;
-        if (row.gk) acc.GK += row.gkWeight || 0;
+        const p = rowPosActive(row);
+        if (p.fw) acc.FW += row.fwWeight || 0;
+        if (p.mf) acc.MF += row.mfWeight || 0;
+        if (p.df) acc.DF += row.dfWeight || 0;
+        if (p.gk) acc.GK += row.gkWeight || 0;
         return acc;
       },
       { FW: 0, MF: 0, DF: 0, GK: 0 },
@@ -924,7 +936,10 @@ export default function CoachTasksPage() {
       return;
     }
     let cancelled = false;
-    fetch(`/api/task-progress?taskId=${encodeURIComponent(selectedTaskForModal.id)}`)
+    fetch(
+      `/api/task-progress?taskId=${encodeURIComponent(selectedTaskForModal.id)}`,
+      coachTasksApiInit({ credentials: "same-origin" }),
+    )
       .then((r) => (r.ok ? r.json() : []))
       .then((list: TaskProgress[]) => {
         if (!cancelled) setTaskProgressList(Array.isArray(list) ? list : []);
@@ -941,16 +956,20 @@ export default function CoachTasksPage() {
     if (!selectedTaskForModal?.id) return;
     setProgressSaving(playerId);
     try {
-      const res = await fetch("/api/task-progress", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          taskId: selectedTaskForModal.id,
-          playerId,
-          completed,
-          note: note ?? "",
+      const res = await fetch(
+        "/api/task-progress",
+        coachTasksApiInit({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            taskId: selectedTaskForModal.id,
+            playerId,
+            completed,
+            note: note ?? "",
+          }),
+          credentials: "same-origin",
         }),
-      });
+      );
       if (res.ok) {
         const updated = (await res.json()) as TaskProgress;
         setTaskProgressList((prev) => {
@@ -1016,23 +1035,26 @@ export default function CoachTasksPage() {
 
     const assignmentLines = assignmentRows
       .filter((r) => r.text.trim())
-      .map((r) => ({
-        text: r.text.trim(),
-        scopes: [
-          r.common && "공통과제",
-          r.fw && "FW",
-          r.mf && "MF",
-          r.df && "DF",
-          r.gk && "GK",
-          r.individual && "개인과제",
-        ].filter(Boolean) as string[],
-        weights: {
-          ...(r.fw ? { FW: r.fwWeight || 0 } : {}),
-          ...(r.mf ? { MF: r.mfWeight || 0 } : {}),
-          ...(r.df ? { DF: r.dfWeight || 0 } : {}),
-          ...(r.gk ? { GK: r.gkWeight || 0 } : {}),
-        },
-      }));
+      .map((r) => {
+        const p = rowPosActive(r);
+        return {
+          text: r.text.trim(),
+          scopes: [
+            r.common && "공통과제",
+            p.fw && "FW",
+            p.mf && "MF",
+            p.df && "DF",
+            p.gk && "GK",
+            r.individual && "개인과제",
+          ].filter(Boolean) as string[],
+          weights: {
+            ...(p.fw ? { FW: r.fwWeight || 0 } : {}),
+            ...(p.mf ? { MF: r.mfWeight || 0 } : {}),
+            ...(p.df ? { DF: r.dfWeight || 0 } : {}),
+            ...(p.gk ? { GK: r.gkWeight || 0 } : {}),
+          },
+        };
+      });
 
     if (hasAssignmentWeightOverflow) {
       setError("포지션별 과제 가중치 합이 100%를 넘었습니다. 과제 줄 가중치를 조정해 주세요.");
@@ -1086,7 +1108,60 @@ export default function CoachTasksPage() {
 
     const finalCategory = mappedCategory ?? category;
 
+    const positionSnapshotIds = new Set<string>([
+      ...rosterSelectedIds,
+      ...(targetType === "player" ? targetPlayerIds : []),
+    ]);
+    if (targetType === "team" && targetId) {
+      for (const p of players) {
+        if (p.teamId === targetId) positionSnapshotIds.add(p.id);
+      }
+    }
+    const slotLabel = (slotIndex: number) => {
+      const s = displayFormationSlots[slotIndex];
+      if (s?.label?.trim()) return s.label.trim();
+      return `슬롯 ${slotIndex + 1}`;
+    };
+    const subPlayerIds = new Set(formationSubPoints.map((x) => x.playerId));
+    const playerPositions: Record<string, string> = {};
+    for (const pid of positionSnapshotIds) {
+      const pl = players.find((x) => x.id === pid);
+      const profile = pl?.position?.trim()
+        ? pl.position.trim().toUpperCase()
+        : "미등록";
+      const slotEntry = Object.entries(slotPlayerAssignments).find(
+        ([, id]) => id === pid,
+      );
+      const slotIdx =
+        slotEntry != null ? Number(slotEntry[0]) : Number.NaN;
+      let line = profile;
+      if (
+        formation.trim() &&
+        Number.isFinite(slotIdx) &&
+        slotIdx >= 0 &&
+        slotIdx < displayFormationSlots.length
+      ) {
+        line = `${profile} · 필드 ${slotLabel(slotIdx)}`;
+      }
+      if (subPlayerIds.has(pid)) {
+        line = `${line} · 교체 후보`;
+      }
+      playerPositions[pid] = line;
+    }
+
+    const positionScopeFromLines = Array.from(
+      new Set(
+        assignmentLines.flatMap((l) =>
+          (l.scopes ?? []).filter((s): s is string =>
+            s === "FW" || s === "MF" || s === "DF" || s === "GK",
+          ),
+        ),
+      ),
+    );
+
     const details: TaskDetails = {
+      positions:
+        positionScopeFromLines.length > 0 ? positionScopeFromLines : undefined,
       htmlTaskType,
       htmlCategory: htmlCategory ?? undefined,
       taskType: taskTypeSelections[0] ?? "연습 및 훈련",
@@ -1133,6 +1208,8 @@ export default function CoachTasksPage() {
           : undefined,
       formationSubPoints:
         formationSubPoints.length > 0 ? formationSubPoints : undefined,
+      playerPositions:
+        Object.keys(playerPositions).length > 0 ? playerPositions : undefined,
     };
 
     try {
@@ -1152,24 +1229,27 @@ export default function CoachTasksPage() {
         } else {
           delete detailsPatch.assigneePlayerIds;
         }
-        const res = await fetch(`/api/tasks/${editingId}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            title: resolvedTitle,
-            category: finalCategory,
-            dueDate: finalDueDate,
-            targetType,
-            targetId: patchTargetId,
-            targetIds:
-              targetType === "player" && targetPlayerIds.length > 0
-                ? targetPlayerIds
-                : undefined,
-            details: detailsPatch,
+        const res = await fetch(
+          `/api/tasks/${editingId}`,
+          coachTasksApiInit({
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              title: resolvedTitle,
+              category: finalCategory,
+              dueDate: finalDueDate,
+              targetType,
+              targetId: patchTargetId,
+              targetIds:
+                targetType === "player" && targetPlayerIds.length > 0
+                  ? targetPlayerIds
+                  : undefined,
+              details: detailsPatch,
+            }),
           }),
-        });
+        );
 
         if (!res.ok) {
           const text = await res.text();
@@ -1188,22 +1268,25 @@ export default function CoachTasksPage() {
           prev.map((t) => (t.id === updated.id ? updated : t)),
         );
       } else {
-        const res = await fetch("/api/tasks", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            title: resolvedTitle,
-            category: finalCategory,
-            dueDate: finalDueDate,
-            targetType,
-            targetId:
-              targetType === "player" ? targetPlayerIds[0] ?? "" : targetId,
-            targetIds: targetType === "player" ? targetPlayerIds : undefined,
-            details,
+        const res = await fetch(
+          "/api/tasks",
+          coachTasksApiInit({
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              title: resolvedTitle,
+              category: finalCategory,
+              dueDate: finalDueDate,
+              targetType,
+              targetId:
+                targetType === "player" ? targetPlayerIds[0] ?? "" : targetId,
+              targetIds: targetType === "player" ? targetPlayerIds : undefined,
+              details,
+            }),
           }),
-        });
+        );
 
         if (!res.ok) {
           const text = await res.text();
@@ -1467,9 +1550,10 @@ export default function CoachTasksPage() {
       setSubmitting(true);
       setError(null);
 
-      const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(
+        `/api/tasks/${encodeURIComponent(id)}`,
+        coachTasksApiInit({ method: "DELETE" }),
+      );
 
       if (!res.ok) {
         const detail = await readApiErrorMessage(res);
@@ -1616,7 +1700,10 @@ export default function CoachTasksPage() {
             let completed = 0;
             let total = 0;
             try {
-              const res = await fetch(`/api/task-progress?taskId=${encodeURIComponent(t.id)}`);
+              const res = await fetch(
+                `/api/task-progress?taskId=${encodeURIComponent(t.id)}`,
+                coachTasksApiInit({ credentials: "same-origin" }),
+              );
               if (res.ok) {
                 const list: { playerId: string; completed: boolean }[] =
                   await res.json();
@@ -1649,6 +1736,7 @@ export default function CoachTasksPage() {
                   `/api/teams/${encodeURIComponent(
                     t.teamId,
                   )}/player-evaluations?taskId=${encodeURIComponent(t.id)}`,
+                  coachTasksApiInit({ credentials: "same-origin" }),
                 );
                 if (evalRes.ok) {
                   let evalList = (await evalRes.json()) as EvaluationRow[];
@@ -3171,6 +3259,21 @@ export default function CoachTasksPage() {
                         관리에 등록된 값입니다. 필드의 숫자·GK는 포메이션 슬롯 순서이며,
                         아래 「과제 줄」의 FW/MF/DF/GK 가중치와 대조할 수 있습니다.
                       </p>
+                      <p className="mb-1.5 rounded border border-sky-200/90 bg-white/90 px-2 py-1 text-[9px] text-slate-600">
+                        <span className="font-medium text-slate-800">선수 카드 색</span>
+                        :{" "}
+                        <span className="rounded border border-sky-300 bg-white px-1">
+                          밝은 카드
+                        </span>{" "}
+                        = 포메이션에 올릴 후보 풀(탭으로 다중 선택 가능, 과제에서 제외되는 뜻이{" "}
+                        <span className="font-semibold text-slate-800">아님</span>).{" "}
+                        <span className="rounded border border-lime-400 bg-lime-200 px-1 font-medium text-lime-900">
+                          연두
+                        </span>{" "}
+                        = 지금 필드 슬롯에 넣을 때 사용할{" "}
+                        <span className="font-semibold text-slate-800">선택된 선수</span>
+                        (한 명씩 배치).
+                      </p>
                       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                         <p className="text-[10px] text-slate-500">
                           확정 명단 ({formationDragPlayers.length}명) — 탭 선택 ·
@@ -3299,8 +3402,9 @@ export default function CoachTasksPage() {
             </p>
             <p className="text-slate-500">
               <span className="text-slate-600">가중치(%)</span>는 숫자만 입력합니다.{" "}
-              <strong>FW / MF / DF</strong>는 한 줄에 하나만 지정할 수 있으며, 하나를 켜거나
-              비율을 넣으면 나머지는 꺼집니다. <strong>GK</strong>는 별도로 켤 수 있습니다.
+              칸에 바로 숫자를 넣어도 해당 포지션이 켜지며,{" "}
+              <strong>FW / MF / DF</strong>는 한 줄에 하나만 지정됩니다.{" "}
+              <strong>GK</strong>는 숫자 입력 시 켜집니다.
             </p>
             <p className="text-sky-900/85">
               이 비율은 <strong>과제 안내·기록용</strong>입니다. 선수에게 과제가{" "}
@@ -3373,11 +3477,20 @@ export default function CoachTasksPage() {
                         ["mf", "MF", row.mf, row.mfWeight, "mfWeight"] as const,
                         ["df", "DF", row.df, row.dfWeight, "dfWeight"] as const,
                       ] as const
-                    ).map(([key, label, on, val, weightKey]) => (
+                    ).map(([key, label, on, val, weightKey]) => {
+                      const weightNum =
+                        weightKey === "fwWeight"
+                          ? row.fwWeight
+                          : weightKey === "mfWeight"
+                            ? row.mfWeight
+                            : row.dfWeight;
+                      const hasWeight = (weightNum ?? 0) > 0;
+                      const showPct = on || hasWeight;
+                      return (
                       <div
                         key={key}
-                        className={`flex items-center gap-1 rounded border px-1.5 py-1 ${
-                          on
+                        className={`pointer-events-auto flex items-center gap-1 rounded border px-1.5 py-1 ${
+                          on || hasWeight
                             ? "border-sky-300 bg-white text-slate-700"
                             : "border-sky-200/90 bg-sky-50/75 text-slate-500"
                         }`}
@@ -3410,7 +3523,7 @@ export default function CoachTasksPage() {
                             )
                           }
                           className={`rounded px-1.5 py-0.5 text-[10px] ${
-                            on ? "text-lime-800" : "text-slate-400"
+                            on || hasWeight ? "text-lime-800" : "text-slate-400"
                           }`}
                         >
                           {label}
@@ -3418,9 +3531,9 @@ export default function CoachTasksPage() {
                         <input
                           type="text"
                           inputMode="numeric"
-                          disabled={!on}
-                          value={on ? String(val) : ""}
-                          placeholder={on ? "" : "—"}
+                          value={showPct ? String(val) : ""}
+                          placeholder="숫자"
+                          aria-label={`${label} 가중치 퍼센트`}
                           onFocus={(e) => e.currentTarget.select()}
                           onChange={(e) => {
                             const raw = e.target.value.replace(/\D/g, "");
@@ -3444,14 +3557,15 @@ export default function CoachTasksPage() {
                               }),
                             );
                           }}
-                          className="h-7 w-12 rounded border border-sky-200 bg-white px-1.5 text-[10px] text-slate-900 outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                          className="h-7 w-12 rounded border border-sky-200 bg-white px-1.5 text-[10px] text-slate-900 outline-none placeholder:text-slate-400"
                         />
                         <span className="text-[10px]">%</span>
                       </div>
-                    ))}
+                    );
+                    })}
                     <div
-                      className={`flex items-center gap-1 rounded border px-1.5 py-1 ${
-                        row.gk
+                      className={`pointer-events-auto flex items-center gap-1 rounded border px-1.5 py-1 ${
+                        row.gk || row.gkWeight > 0
                           ? "border-sky-300 bg-white text-slate-700"
                           : "border-sky-200/90 bg-sky-50/75 text-slate-500"
                       }`}
@@ -3472,7 +3586,7 @@ export default function CoachTasksPage() {
                           )
                         }
                         className={`rounded px-1.5 py-0.5 text-[10px] ${
-                          row.gk ? "text-lime-800" : "text-slate-400"
+                          row.gk || row.gkWeight > 0 ? "text-lime-800" : "text-slate-400"
                         }`}
                       >
                         GK
@@ -3480,9 +3594,9 @@ export default function CoachTasksPage() {
                       <input
                         type="text"
                         inputMode="numeric"
-                        disabled={!row.gk}
-                        value={row.gk ? String(row.gkWeight) : ""}
-                        placeholder={row.gk ? "" : "—"}
+                        value={row.gk || row.gkWeight > 0 ? String(row.gkWeight) : ""}
+                        placeholder="숫자"
+                        aria-label="GK 가중치 퍼센트"
                         onFocus={(e) => e.currentTarget.select()}
                         onChange={(e) => {
                           const raw = e.target.value.replace(/\D/g, "");
@@ -3501,7 +3615,7 @@ export default function CoachTasksPage() {
                             }),
                           );
                         }}
-                        className="h-7 w-12 rounded border border-sky-200 bg-white px-1.5 text-[10px] text-slate-900 outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                        className="h-7 w-12 rounded border border-sky-200 bg-white px-1.5 text-[10px] text-slate-900 outline-none placeholder:text-slate-400"
                       />
                       <span className="text-[10px]">%</span>
                     </div>

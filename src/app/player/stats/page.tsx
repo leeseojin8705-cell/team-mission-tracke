@@ -6,6 +6,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import type { StatCategory, StatDefinition } from "@/lib/types";
 import { aggregatePhaseScores, getImprovement, getTaskScores } from "@/lib/taskScore";
 import { DEFAULT_STAT_DEFINITION, formatCategoryValue, getWeightedOverall, isMeasurementCategory } from "@/lib/statDefinition";
+import { playerApiInit } from "@/lib/playerClientFetch";
 
 const RADAR_SIZE = 280;
 const RADAR_CX = RADAR_SIZE / 2;
@@ -134,13 +135,13 @@ function StatsContent() {
         return;
       }
       try {
-        const pr = await fetch(`/api/players/${encodeURIComponent(playerId)}`);
+        const pr = await fetch(`/api/players/${encodeURIComponent(playerId)}`, playerApiInit());
         const p = (pr.ok ? await pr.json() : null) as { teamId?: string | null } | null;
         if (!p?.teamId || cancelled) {
           if (!cancelled) setAffiliationName(null);
           return;
         }
-        const tr = await fetch(`/api/teams/${encodeURIComponent(p.teamId)}`);
+        const tr = await fetch(`/api/teams/${encodeURIComponent(p.teamId)}`, playerApiInit());
         const t = (tr.ok ? await tr.json() : null) as { name?: string } | null;
         if (!cancelled) setAffiliationName(t?.name ?? null);
       } catch {
@@ -173,7 +174,7 @@ function StatsContent() {
       try {
         const evalRes = await fetch(
           `/api/players/${encodeURIComponent(playerId)}/evaluations`,
-          { credentials: "same-origin" },
+          playerApiInit(),
         );
         const list = await safeJson(evalRes, [] as {
           teamId?: string;
@@ -187,9 +188,7 @@ function StatsContent() {
         setEvaluations(evals);
         const teamId = evals[0]?.teamId;
         if (teamId) {
-          const teamRes = await fetch(`/api/teams/${teamId}`, {
-            credentials: "same-origin",
-          });
+          const teamRes = await fetch(`/api/teams/${teamId}`, playerApiInit());
           const teamJson = teamRes.ok
             ? ((await teamRes.json()) as { statDefinition?: StatDefinition | null })
             : null;

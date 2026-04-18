@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
 import { getSession } from "@/lib/session";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 
 function parseScores(raw: string): Record<string, number[]> {
   try {
@@ -18,7 +19,7 @@ function parseScores(raw: string): Record<string, number[]> {
 
 /** GET: 해당 선수가 받은 평가 목록 (팀 내 코치들의 평가) */
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: playerId } = await params;
@@ -31,19 +32,22 @@ export async function GET(
   }
 
   const session = await getSession();
-  if (!session) {
+  if (!session && !isAdminApiRequest(req)) {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
   }
-  if (session.role === "player") {
+  if (!isAdminApiRequest(req) && session?.role === "player") {
     if (session.playerId !== playerId) {
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     }
-  } else if (session.role === "coach" || session.role === "owner") {
-    const ids = await getAccessibleTeamIds(session);
+  } else if (
+    !isAdminApiRequest(req) &&
+    (session?.role === "coach" || session?.role === "owner")
+  ) {
+    const ids = await getAccessibleTeamIds(session!);
     if (!ids.includes(player.teamId)) {
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     }
-  } else {
+  } else if (!isAdminApiRequest(req)) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
 

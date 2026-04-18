@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import type { Player, StatDefinition } from "@/lib/types";
 import { DEFAULT_STAT_DEFINITION, isMeasurementCategory } from "@/lib/statDefinition";
+import { playerApiInit } from "@/lib/playerClientFetch";
 
 const SELF_EVALUATOR_ID = "self";
 
@@ -81,7 +82,7 @@ function SelfEvaluateContent() {
       setPlayer(null);
       setAffiliationName(null);
       try {
-        const fetchOpts = { credentials: "same-origin" as const };
+        const fetchOpts = playerApiInit();
         const sessionRes = await fetch("/api/auth/session", fetchOpts);
         const sessionData = (await sessionRes.json().catch(() => ({}))) as PlayerSession;
         const role = sessionData.session?.role;
@@ -160,7 +161,7 @@ function SelfEvaluateContent() {
     if (taskId) evalQs.set("taskId", taskId);
     fetch(
       `/api/teams/${encodeURIComponent(player.teamId)}/player-evaluations?${evalQs}`,
-      { credentials: "same-origin" },
+      playerApiInit(),
     )
       .then((r) => (r.ok ? r.json() : []))
       .then((list: EvalRowSelf[]) => {
@@ -194,10 +195,9 @@ function SelfEvaluateContent() {
     try {
       const res = await fetch(
         `/api/teams/${encodeURIComponent(player.teamId)}/player-evaluations`,
-        {
+        playerApiInit({
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
           body: JSON.stringify({
             evaluatorStaffId: SELF_EVALUATOR_ID,
             subjectPlayerId: effectivePlayerId,
@@ -205,7 +205,7 @@ function SelfEvaluateContent() {
             scores,
             taskId,
           }),
-        },
+        }),
       );
       const errBody = (await res.json().catch(() => ({}))) as { error?: string };
       if (res.status === 401) {

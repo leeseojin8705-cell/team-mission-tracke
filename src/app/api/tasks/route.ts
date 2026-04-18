@@ -28,6 +28,28 @@ export async function GET(req: Request) {
       return NextResponse.json(tasks);
     }
 
+    if (isAdminApiRequest(req)) {
+      let where: Prisma.TaskWhereInput | undefined;
+      if (qpTeamId) {
+        const teamPlayers = await prisma.player.findMany({
+          where: { teamId: qpTeamId },
+          select: { id: true },
+        });
+        const playerIds = teamPlayers.map((p) => p.id);
+        where =
+          playerIds.length > 0
+            ? {
+                OR: [{ teamId: qpTeamId }, { playerId: { in: playerIds } }],
+              }
+            : { teamId: qpTeamId };
+      }
+      const tasks = await prisma.task.findMany({
+        where,
+        orderBy: { title: "asc" },
+      });
+      return NextResponse.json(tasks);
+    }
+
     const session = await getSession();
     let where: Prisma.TaskWhereInput | undefined;
 

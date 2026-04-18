@@ -271,7 +271,11 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const session = await getSession();
-    if (!session || (session.role !== "coach" && session.role !== "owner")) {
+    const adminOk = isAdminApiRequest(req);
+    if (
+      (!session || (session.role !== "coach" && session.role !== "owner")) &&
+      !adminOk
+    ) {
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
     }
 
@@ -282,14 +286,42 @@ export async function POST(req: Request) {
     const createdByUserId =
       session?.role === "coach" || session?.role === "owner" ? session.userId : null;
 
-    const team = await prisma.team.create({
-      data: {
-        name: body.name,
-        season: body.season ?? "",
-        organization: organizationJson,
-        statDefinition: statDefinitionJson,
-        ...(createdByUserId ? { createdByUserId } : {}),
-      },
+    const team = await prisma.$transaction(async (tx) => {
+      const t = await tx.team.create({
+        data: {
+          name: body.name,
+          season: body.season ?? "",
+          organization: organizationJson,
+          statDefinition: statDefinitionJson,
+          ...(createdByUserId ? { createdByUserId } : {}),
+        },
+      });
+      if (createdByUserId) {
+        const existing = await tx.teamStaff.findFirst({
+          where: { teamId: t.id, userId: createdByUserId },
+        });
+        if (!existing) {
+          const u = await tx.user.findUnique({
+            where: { id: createdByUserId },
+            select: { email: true },
+          });
+          const email = u?.email?.trim() ?? "";
+          const shortName = email.includes("@")
+            ? email.split("@")[0]!.slice(0, 40)
+            : "코치";
+          await tx.teamStaff.create({
+            data: {
+              teamId: t.id,
+              role: "주 코치",
+              name: shortName,
+              email: email || null,
+              guidance: true,
+              userId: createdByUserId,
+            },
+          });
+        }
+      }
+      return t;
     });
 
     return NextResponse.json(

@@ -2,6 +2,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { SessionPayload } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 
 /** 세션 기준으로 볼 수 있는 팀 id 목록 (빈 배열 = 없음, null = 비로그인 등으로 범위 없음) */
 export async function getTeamIdsForMatchAnalysisSession(
@@ -42,7 +43,9 @@ type AnalysisRow = {
 export async function canAccessMatchAnalysis(
   session: SessionPayload | null,
   analysis: AnalysisRow,
+  req?: Request,
 ): Promise<boolean> {
+  if (req && isAdminApiRequest(req)) return true;
   const ids = await getTeamIdsForMatchAnalysisSession(session);
   if (ids === null) return false;
   if (ids.length === 0) return false;

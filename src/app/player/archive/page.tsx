@@ -7,6 +7,7 @@ import type { MatchAnalysis } from "@/lib/types";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { playerApiInit } from "@/lib/playerClientFetch";
 
 type AnalysisWithMeta = MatchAnalysis & {
   schedule?: { id: string; title: string; date: string } | null;
@@ -76,7 +77,7 @@ function PlayerArchiveInner() {
       return;
     }
     let cancelled = false;
-    fetch(`/api/teams/${encodeURIComponent(myTeamId)}`)
+    fetch(`/api/teams/${encodeURIComponent(myTeamId)}`, playerApiInit())
       .then((r) => (r.ok ? r.json() : null))
       .then((t: { name?: string } | null) => {
         if (!cancelled && t?.name) setAffiliationName(t.name);
@@ -99,7 +100,7 @@ function PlayerArchiveInner() {
       teamId: myTeamId,
       playerId: currentPlayerId,
     });
-    fetch(`/api/analyses?${q.toString()}`, { credentials: "same-origin" })
+    fetch(`/api/analyses?${q.toString()}`, playerApiInit())
       .then((r) => (r.ok ? r.json() : []))
       .then((data: AnalysisWithMeta[]) => {
         if (!cancelled && Array.isArray(data)) setAnalyses(data);
@@ -129,7 +130,7 @@ function PlayerArchiveInner() {
           }
           return;
         }
-        const meRes = await fetch(`/api/players/${encodeURIComponent(saved)}`);
+        const meRes = await fetch(`/api/players/${encodeURIComponent(saved)}`, playerApiInit());
         if (!meRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
         const me = (await meRes.json()) as {
           id: string;
@@ -145,6 +146,7 @@ function PlayerArchiveInner() {
         setCurrentPlayerId(me.id);
         const playersRes = await fetch(
           `/api/players?teamId=${encodeURIComponent(me.teamId)}`,
+          playerApiInit(),
         );
         if (!playersRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
         const playersData: { id: string; name: string; teamId: string }[] =
@@ -168,7 +170,7 @@ function PlayerArchiveInner() {
       try {
         const res = await fetch(
           `/api/player-match-records?playerId=${encodeURIComponent(currentPlayerId)}`,
-          { credentials: "same-origin" },
+          playerApiInit(),
         );
         if (!res.ok) return;
         const data: PersonalRecord[] = await res.json();
@@ -194,9 +196,7 @@ function PlayerArchiveInner() {
 
     async function selectRecordByTask() {
       try {
-        const sessionRes = await fetch("/api/auth/session", {
-          credentials: "same-origin",
-        });
+        const sessionRes = await fetch("/api/auth/session", playerApiInit());
         const sessionData = (await sessionRes.json().catch(() => ({}))) as {
           session?: { role?: string; playerId?: string };
         };
@@ -205,9 +205,7 @@ function PlayerArchiveInner() {
             ? sessionData.session.playerId
             : null;
         if (!sid || sid !== pid) return;
-        const res = await fetch(`/api/tasks/${encodeURIComponent(tid)}`, {
-          credentials: "same-origin",
-        });
+        const res = await fetch(`/api/tasks/${encodeURIComponent(tid)}`, playerApiInit());
         if (!res.ok) return;
         const task = (await res.json()) as {
           details?: {

@@ -3,6 +3,8 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
+
 export async function GET(req: Request) {
   const session = await getSession();
   const { searchParams } = new URL(req.url);
@@ -10,7 +12,16 @@ export async function GET(req: Request) {
 
   let where: Prisma.ScheduleWhereInput | undefined;
 
-  /** 코치/오너는 관리자 PIN이 있어도 접근 가능한 팀 일정만 */
+  if (isAdminApiRequest(req)) {
+    where = teamIdParam ? { teamId: teamIdParam } : undefined;
+    const schedules = await prisma.schedule.findMany({
+      where,
+      orderBy: { date: "asc" },
+    });
+    return NextResponse.json(schedules);
+  }
+
+  /** 코치/오너는 접근 가능한 팀 일정만 */
   if (session?.role === "coach" || session?.role === "owner") {
     const ids = await getAccessibleTeamIds(session);
     if (ids.length === 0) {
@@ -51,7 +62,11 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const session = await getSession();
-  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+  const adminOk = isAdminApiRequest(req);
+  if (
+    (!session || (session.role !== "coach" && session.role !== "owner")) &&
+    !adminOk
+  ) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
   }
 
@@ -64,12 +79,22 @@ export async function POST(req: Request) {
     );
   }
 
-  const ids = await getAccessibleTeamIds(session);
-  if (!ids.includes(body.teamId)) {
-    return NextResponse.json(
-      { error: "해당 팀에 일정을 등록할 수 없습니다." },
-      { status: 403 },
-    );
+  if (adminOk) {
+    const team = await prisma.team.findUnique({
+      where: { id: body.teamId },
+      select: { id: true },
+    });
+    if (!team) {
+      return NextResponse.json({ error: "팀을 찾을 수 없습니다." }, { status: 400 });
+    }
+  } else {
+    const ids = await getAccessibleTeamIds(session!);
+    if (!ids.includes(body.teamId)) {
+      return NextResponse.json(
+        { error: "해당 팀에 일정을 등록할 수 없습니다." },
+        { status: 403 },
+      );
+    }
   }
 
   const schedule = await prisma.schedule.create({

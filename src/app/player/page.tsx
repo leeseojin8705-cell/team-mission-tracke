@@ -14,6 +14,7 @@ import type {
   StatDefinition,
 } from "@/lib/types";
 import { readApiErrorMessage } from "@/lib/apiError";
+import { playerApiInit as playerApi } from "@/lib/playerClientFetch";
 import { playerCanAccessTeamScopedTask } from "@/lib/taskAssignees";
 import { DEFAULT_STAT_DEFINITION, isMeasurementCategory } from "@/lib/statDefinition";
 
@@ -129,7 +130,7 @@ function PlayerHomeInner() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/auth/session")
+    fetch("/api/auth/session", playerApi())
       .then((r) => r.ok ? r.json() : { session: null })
       .then((data: { session?: { role: string; playerId: string } | null }) => {
         if (cancelled) return;
@@ -181,7 +182,7 @@ function PlayerHomeInner() {
 
         const meRes = await fetch(
           `/api/players/${encodeURIComponent(currentPlayerId)}`,
-          { credentials: "same-origin" },
+          playerApi(),
         );
         if (!meRes.ok) {
           throw new Error(
@@ -196,11 +197,10 @@ function PlayerHomeInner() {
         }
         const tid = me.teamId;
 
-        const fetchOpts = { credentials: "same-origin" as const };
         const [teamsRes, playersRes, schedulesRes] = await Promise.all([
-          fetch(`/api/teams?teamId=${encodeURIComponent(tid)}`, fetchOpts),
-          fetch(`/api/players?teamId=${encodeURIComponent(tid)}`, fetchOpts),
-          fetch(`/api/schedules?teamId=${encodeURIComponent(tid)}`, fetchOpts),
+          fetch(`/api/teams?teamId=${encodeURIComponent(tid)}`, playerApi()),
+          fetch(`/api/players?teamId=${encodeURIComponent(tid)}`, playerApi()),
+          fetch(`/api/schedules?teamId=${encodeURIComponent(tid)}`, playerApi()),
         ]);
 
         if (!teamsRes.ok || !playersRes.ok || !schedulesRes.ok) {
@@ -223,7 +223,7 @@ function PlayerHomeInner() {
 
         // 세션은 쿠키로 전달됨. isLoggedIn 상태와 레이스 나지 않게 항상 요청(비로그인이면 API가 []).
         let tasksData: Task[] = [];
-        const tasksRes = await fetch(`/api/tasks`, fetchOpts);
+        const tasksRes = await fetch(`/api/tasks`, playerApi());
         if (!tasksRes.ok) {
           const detail = await readApiErrorMessage(tasksRes);
           throw new Error(detail ?? "과제 목록을 불러오지 못했습니다.");
@@ -285,7 +285,7 @@ function PlayerHomeInner() {
       try {
         const res = await fetch(
           `/api/task-progress?playerId=${encodeURIComponent(currentPlayerId)}`,
-          { credentials: "same-origin" },
+          playerApi(),
         );
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) return;
@@ -321,7 +321,10 @@ function PlayerHomeInner() {
     let cancelled = false;
     const player = players.find((p) => p.id === currentPlayerId);
     if (player?.teamId) {
-      fetch(`/api/announcements?teamId=${encodeURIComponent(player.teamId)}`)
+      fetch(
+        `/api/announcements?teamId=${encodeURIComponent(player.teamId)}`,
+        playerApi(),
+      )
         .then((r) => (r.ok ? r.json() : []))
         .then((arr: unknown[]) => {
           if (!cancelled && Array.isArray(arr)) setAnnouncementCount(arr.length);
@@ -338,9 +341,10 @@ function PlayerHomeInner() {
   useEffect(() => {
     if (!currentPlayerId || !isLoggedIn) return;
     let cancelled = false;
-    fetch(`/api/schedule-absence?playerId=${encodeURIComponent(currentPlayerId)}`, {
-      credentials: "same-origin",
-    })
+    fetch(
+      `/api/schedule-absence?playerId=${encodeURIComponent(currentPlayerId)}`,
+      playerApi(),
+    )
       .then((r) => (r.ok ? r.json() : []))
       .then((arr: { scheduleId?: string }[]) => {
         if (!cancelled && Array.isArray(arr))
@@ -355,7 +359,7 @@ function PlayerHomeInner() {
     let cancelled = false;
     fetch(
       `/api/schedule-absence?scheduleId=${encodeURIComponent(absenceModalSchedule.id)}&playerId=${encodeURIComponent(currentPlayerId)}`,
-      { credentials: "same-origin" },
+      playerApi(),
     )
       .then((r) => (r.ok ? r.json() : []))
       .then((arr: { reasons?: string[]; reasonText?: string | null }[]) => {
@@ -437,7 +441,7 @@ function PlayerHomeInner() {
       try {
         const res = await fetch(
           `/api/players/${encodeURIComponent(currentPlayerId)}/evaluations`,
-          { credentials: "same-origin" },
+          playerApi(),
         );
         if (!res.ok) return;
         const evals = (await res.json()) as {
@@ -453,9 +457,10 @@ function PlayerHomeInner() {
         const teamId = evals[0]?.teamId;
         let def: StatDefinition = DEFAULT_STAT_DEFINITION;
         if (teamId) {
-          const teamRes = await fetch(`/api/teams/${encodeURIComponent(teamId)}`, {
-            credentials: "same-origin",
-          });
+          const teamRes = await fetch(
+            `/api/teams/${encodeURIComponent(teamId)}`,
+            playerApi(),
+          );
           if (teamRes.ok) {
             const teamData = (await teamRes.json()) as Team & {
               statDefinition?: StatDefinition | null;
@@ -519,18 +524,21 @@ function PlayerHomeInner() {
     setCompletedMap((prev) => ({ ...prev, [id]: next }));
 
     try {
-      await fetch("/api/task-progress", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          taskId: id,
-          playerId: currentPlayerId,
-          completed: next,
-          note: noteMap[id] ?? "",
+      await fetch(
+        "/api/task-progress",
+        playerApi({
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            taskId: id,
+            playerId: currentPlayerId,
+            completed: next,
+            note: noteMap[id] ?? "",
+          }),
         }),
-      });
+      );
     } catch {
       // 실패해도 UI는 그대로 두고, 다음 변경 때 다시 시도될 수 있도록 함
     }
@@ -541,18 +549,21 @@ function PlayerHomeInner() {
     setNoteMap((prev) => ({ ...prev, [id]: value }));
 
     try {
-      await fetch("/api/task-progress", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          taskId: id,
-          playerId: currentPlayerId,
-          completed: completedMap[id] ?? false,
-          note: value,
+      await fetch(
+        "/api/task-progress",
+        playerApi({
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            taskId: id,
+            playerId: currentPlayerId,
+            completed: completedMap[id] ?? false,
+            note: value,
+          }),
         }),
-      });
+      );
     } catch {
       // 실패해도 메모는 로컬에 남아 있고, 다음 변경 시 다시 시도
     }
@@ -569,16 +580,19 @@ function PlayerHomeInner() {
     if (!absenceModalSchedule || !currentPlayerId) return;
     setAbsenceSaving(true);
     try {
-      const res = await fetch("/api/schedule-absence", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          scheduleId: absenceModalSchedule.id,
-          playerId: currentPlayerId,
-          reasons: Array.from(absenceReasons),
-          reasonText: absenceReasonText.trim() || null,
+      const res = await fetch(
+        "/api/schedule-absence",
+        playerApi({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            scheduleId: absenceModalSchedule.id,
+            playerId: currentPlayerId,
+            reasons: Array.from(absenceReasons),
+            reasonText: absenceReasonText.trim() || null,
+          }),
         }),
-      });
+      );
       if (res.ok) {
         setAbsenceSubmittedIds((prev) => new Set([...prev, absenceModalSchedule.id]));
         setAbsenceModalSchedule(null);
@@ -730,7 +744,7 @@ function PlayerHomeInner() {
               <button
                 type="button"
                 onClick={async () => {
-                  await fetch("/api/auth/logout", { method: "POST" });
+                  await fetch("/api/auth/logout", playerApi({ method: "POST" }));
                   setIsLoggedIn(false);
                   setCurrentPlayerId("");
                   window.location.href = "/login";

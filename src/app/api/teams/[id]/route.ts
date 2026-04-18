@@ -64,12 +64,23 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const session = await getSession();
-  if (!session || (session.role !== "coach" && session.role !== "owner")) {
+  const adminOk = isAdminApiRequest(req);
+  if (
+    (!session || (session.role !== "coach" && session.role !== "owner")) &&
+    !adminOk
+  ) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 401 });
   }
-  const ids = await getAccessibleTeamIds(session);
-  if (!ids.includes(id)) {
-    return NextResponse.json({ error: "접근 가능한 팀이 아닙니다." }, { status: 403 });
+  if (!adminOk) {
+    const ids = await getAccessibleTeamIds(session!);
+    if (!ids.includes(id)) {
+      return NextResponse.json({ error: "접근 가능한 팀이 아닙니다." }, { status: 403 });
+    }
+  } else {
+    const exists = await prisma.team.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) {
+      return NextResponse.json({ error: "팀을 찾을 수 없습니다." }, { status: 404 });
+    }
   }
   const body = await req.json();
 

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { Player, StatCategory, StatDefinition, Task, Team } from "@/lib/types";
 import { readApiErrorMessage } from "@/lib/apiError";
+import { coachTasksApiInit } from "@/lib/coachAdminFetch";
 import { countDashboardTaskSlots } from "@/lib/taskDashboardCounts";
 import { DEFAULT_STAT_DEFINITION, isMeasurementCategory } from "@/lib/statDefinition";
 
@@ -140,14 +141,16 @@ export default function CoachHome() {
         const teamQs = scopeTeamId
           ? `?teamId=${encodeURIComponent(scopeTeamId)}`
           : "";
-        const [teamsRes, playersRes, schedulesRes, tasksRes, annRes, analysesRes] = await Promise.all([
-          fetch(`/api/teams${teamQs}`),
-          fetch(`/api/players${teamQs}`),
-          fetch(`/api/schedules${teamQs}`),
-          fetch(`/api/tasks${teamQs}`),
-          fetch(`/api/announcements${teamQs}`),
-          fetch(`/api/analyses${teamQs}`),
-        ]);
+        const same = () => coachTasksApiInit({ credentials: "same-origin" });
+        const [teamsRes, playersRes, schedulesRes, tasksRes, annRes, analysesRes] =
+          await Promise.all([
+            fetch(`/api/teams${teamQs}`, same()),
+            fetch(`/api/players${teamQs}`, same()),
+            fetch(`/api/schedules${teamQs}`, same()),
+            fetch(`/api/tasks${teamQs}`, same()),
+            fetch(`/api/announcements${teamQs}`, same()),
+            fetch(`/api/analyses${teamQs}`, same()),
+          ]);
 
         const teams = teamsRes.ok ? await teamsRes.json() : [];
         const playersData = playersRes.ok ? await playersRes.json() : [];

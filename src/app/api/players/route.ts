@@ -35,6 +35,16 @@ export async function GET(req: Request) {
       return NextResponse.json(players);
     }
 
+    if (isAdminApiRequest(req)) {
+      const where = teamId ? { teamId } : {};
+      const players = await prisma.player.findMany({
+        where,
+        orderBy: { name: "asc" },
+        select: playerListSelect,
+      });
+      return NextResponse.json(players);
+    }
+
     let session: Awaited<ReturnType<typeof getSession>> = null;
     try {
       session = await getSession();

@@ -11,6 +11,7 @@ import {
   isMeasurementCategory,
 } from "@/lib/statDefinition";
 import { aggregatePhaseScores, getImprovement, getTaskScores } from "@/lib/taskScore";
+import { playerApiInit } from "@/lib/playerClientFetch";
 
 type EvalRow = {
   teamId?: string;
@@ -156,7 +157,7 @@ function PlayerReportContent() {
         return;
       }
       try {
-        const fetchOpts = { credentials: "same-origin" as const };
+        const fetchOpts = playerApiInit();
         const pr = await fetch(
           `/api/players/${encodeURIComponent(playerId)}`,
           fetchOpts,
@@ -166,9 +167,7 @@ function PlayerReportContent() {
           if (!cancelled) setAffiliationName(null);
           return;
         }
-        const tr = await fetch(`/api/teams/${encodeURIComponent(p.teamId)}`, {
-          credentials: "same-origin",
-        });
+        const tr = await fetch(`/api/teams/${encodeURIComponent(p.teamId)}`, playerApiInit());
         const t = (tr.ok ? await tr.json() : null) as { name?: string } | null;
         if (!cancelled) setAffiliationName(t?.name ?? null);
       } catch {
@@ -200,7 +199,7 @@ function PlayerReportContent() {
         }
       };
       try {
-        const fetchOpts = { credentials: "same-origin" as const };
+        const fetchOpts = playerApiInit();
         const evalRes = await fetch(
           `/api/players/${encodeURIComponent(playerId)}/evaluations`,
           fetchOpts,
@@ -252,7 +251,7 @@ function PlayerReportContent() {
     let cancelled = false;
     fetch(
       `/api/player-match-records?playerId=${encodeURIComponent(playerId)}`,
-      { credentials: "same-origin" },
+      playerApiInit(),
     )
       .then((r) => (r.ok ? r.json() : []))
       .then((data: PersonalRecord[]) => {

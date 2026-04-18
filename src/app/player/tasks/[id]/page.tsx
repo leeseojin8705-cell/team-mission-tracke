@@ -17,6 +17,7 @@ import {
   getImprovement,
   type EvaluationRow,
 } from "@/lib/taskScore";
+import { playerApiInit } from "@/lib/playerClientFetch";
 
 type PlayerSession = {
   session?: {
@@ -60,9 +61,7 @@ function PlayerTaskDetailInner() {
         setLoading(true);
         setError(null);
 
-        const sessionRes = await fetch("/api/auth/session", {
-          credentials: "same-origin",
-        });
+        const sessionRes = await fetch("/api/auth/session", playerApiInit());
         const sessionData = (await sessionRes.json().catch(() => ({}))) as PlayerSession;
         const sessionRole = sessionData.session?.role;
         if (sessionRole === "coach" || sessionRole === "owner") {
@@ -85,7 +84,7 @@ function PlayerTaskDetailInner() {
 
         const playerRes = await fetch(
           `/api/players/${encodeURIComponent(pid)}`,
-          { credentials: "same-origin" },
+          playerApiInit(),
         );
         if (!playerRes.ok) {
           if (playerRes.status === 404) {
@@ -102,7 +101,7 @@ function PlayerTaskDetailInner() {
 
         const taskRes = await fetch(
           `/api/tasks/${encodeURIComponent(id)}`,
-          { credentials: "same-origin" },
+          playerApiInit(),
         );
         if (!taskRes.ok) {
           const errBody = (await taskRes.json().catch(() => ({}))) as {
@@ -139,9 +138,10 @@ function PlayerTaskDetailInner() {
         ) {
           const tid = parsedTask.teamId;
           if (tid) {
-            const metaRes = await fetch(`/api/teams/${encodeURIComponent(tid)}`, {
-              credentials: "same-origin",
-            });
+            const metaRes = await fetch(
+              `/api/teams/${encodeURIComponent(tid)}`,
+              playerApiInit(),
+            );
             if (metaRes.ok) {
               const tm = (await metaRes.json()) as { name?: string };
               if (!cancelled && tm?.name) setAffiliationName(tm.name);
@@ -149,7 +149,7 @@ function PlayerTaskDetailInner() {
           } else if (playerJson?.teamId) {
             const tr = await fetch(
               `/api/teams/${encodeURIComponent(playerJson.teamId)}`,
-              { credentials: "same-origin" },
+              playerApiInit(),
             );
             if (tr.ok) {
               const tm = (await tr.json()) as { name?: string };
@@ -167,14 +167,10 @@ function PlayerTaskDetailInner() {
               `/api/teams/${encodeURIComponent(teamId)}/player-evaluations?taskId=${encodeURIComponent(
                 id,
               )}`,
-              { credentials: "same-origin" },
+              playerApiInit(),
             ),
-            fetch(`/api/players?teamId=${encodeURIComponent(teamId)}`, {
-              credentials: "same-origin",
-            }),
-            fetch(`/api/teams/${encodeURIComponent(teamId)}/staff`, {
-              credentials: "same-origin",
-            }),
+            fetch(`/api/players?teamId=${encodeURIComponent(teamId)}`, playerApiInit()),
+            fetch(`/api/teams/${encodeURIComponent(teamId)}/staff`, playerApiInit()),
           ]);
 
           if (evalRes.ok) {
@@ -215,9 +211,10 @@ function PlayerTaskDetailInner() {
             );
           }
 
-          const metaRes = await fetch(`/api/teams/${encodeURIComponent(teamId)}`, {
-            credentials: "same-origin",
-          });
+          const metaRes = await fetch(
+            `/api/teams/${encodeURIComponent(teamId)}`,
+            playerApiInit(),
+          );
           if (metaRes.ok) {
             const tm = (await metaRes.json()) as { name?: string };
             if (!cancelled && tm?.name) setAffiliationName(tm.name);
@@ -225,7 +222,7 @@ function PlayerTaskDetailInner() {
         } else if (playerJson?.teamId) {
           const tr = await fetch(
             `/api/teams/${encodeURIComponent(playerJson.teamId)}`,
-            { credentials: "same-origin" },
+            playerApiInit(),
           );
           if (tr.ok) {
             const tm = (await tr.json()) as { name?: string };
@@ -235,7 +232,7 @@ function PlayerTaskDetailInner() {
 
         const progressRes = await fetch(
           `/api/task-progress?playerId=${encodeURIComponent(pid)}`,
-          { credentials: "same-origin" },
+          playerApiInit(),
         );
         if (progressRes.ok) {
           const list = (await progressRes.json()) as {
@@ -271,17 +268,19 @@ function PlayerTaskDetailInner() {
     try {
       setSaving(true);
       setSaveMessage(null);
-      const res = await fetch("/api/task-progress", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
-          taskId: id,
-          playerId,
-          completed,
-          note,
+      const res = await fetch(
+        "/api/task-progress",
+        playerApiInit({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            taskId: id,
+            playerId,
+            completed,
+            note,
+          }),
         }),
-      });
+      );
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         if (res.status === 401) {

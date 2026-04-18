@@ -8,6 +8,7 @@ import {
   type TaskBlueprintDraft,
 } from "@/components/TaskBlueprintEditor";
 import type { Player, TaskCategory, TeamStaff } from "@/lib/types";
+import { playerApiInit } from "@/lib/playerClientFetch";
 
 type PlayerSession = {
   session?: {
@@ -51,13 +52,16 @@ export default function NewPlayerTaskPage() {
     async function loadStaff() {
       try {
         setError(null);
-        const sessionRes = await fetch("/api/auth/session");
+        const sessionRes = await fetch("/api/auth/session", playerApiInit());
         const sessionData = (await sessionRes.json().catch(() => ({}))) as PlayerSession;
         const playerId =
           sessionData.session?.role === "player" ? sessionData.session.playerId ?? null : null;
         if (!playerId) return;
 
-        const playerRes = await fetch(`/api/players/${encodeURIComponent(playerId)}`);
+        const playerRes = await fetch(
+          `/api/players/${encodeURIComponent(playerId)}`,
+          playerApiInit(),
+        );
         if (!playerRes.ok) return;
         const player = (await playerRes.json()) as { teamId?: string | null };
         const teamId = player.teamId;
@@ -66,14 +70,23 @@ export default function NewPlayerTaskPage() {
           return;
         }
 
-        const teamMetaRes = await fetch(`/api/teams/${encodeURIComponent(teamId)}`);
+        const teamMetaRes = await fetch(
+          `/api/teams/${encodeURIComponent(teamId)}`,
+          playerApiInit(),
+        );
         if (teamMetaRes.ok) {
           const tm = (await teamMetaRes.json()) as { name?: string };
           if (!cancelled && tm?.name) setAffiliationName(tm.name);
         }
 
-        const staffRes = await fetch(`/api/teams/${encodeURIComponent(teamId)}/staff`);
-        const playersRes = await fetch(`/api/players?teamId=${encodeURIComponent(teamId)}`);
+        const staffRes = await fetch(
+          `/api/teams/${encodeURIComponent(teamId)}/staff`,
+          playerApiInit(),
+        );
+        const playersRes = await fetch(
+          `/api/players?teamId=${encodeURIComponent(teamId)}`,
+          playerApiInit(),
+        );
         if (!staffRes.ok) return;
         const staffList = (await staffRes.json()) as TeamStaff[];
         const playersList = playersRes.ok
@@ -103,7 +116,7 @@ export default function NewPlayerTaskPage() {
       setSaving(true);
       setError(null);
 
-      const sessionRes = await fetch("/api/auth/session");
+      const sessionRes = await fetch("/api/auth/session", playerApiInit());
       const sessionData = (await sessionRes.json().catch(() => ({}))) as PlayerSession;
       const playerId =
         sessionData.session?.role === "player" ? sessionData.session.playerId ?? null : null;
@@ -111,10 +124,12 @@ export default function NewPlayerTaskPage() {
 
       const bp = blueprintDraftRef.current;
 
-      const res = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const res = await fetch(
+        "/api/tasks",
+        playerApiInit({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
           title: title.trim(),
           category,
           dueDate:
@@ -155,7 +170,8 @@ export default function NewPlayerTaskPage() {
             ...bp,
           },
         }),
-      });
+        }),
+      );
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

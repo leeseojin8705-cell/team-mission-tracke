@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session";
 import { getAccessibleTeamIds } from "@/lib/coachAccess";
 import { applyPlayerTaskVisibility } from "@/lib/playerTaskVisibility";
 import { playerCanAccessTeamScopedTask } from "@/lib/taskAssignees";
+import { isAdminApiRequest } from "@/lib/adminApiRequest";
 import type { Task } from "@/lib/types";
 
 async function coachCanAccessTaskRow(
@@ -39,16 +40,26 @@ async function canPlayerAccessTask(
   });
 }
 
-async function canAccessTask(taskId: string): Promise<boolean> {
+async function resolveTaskMutationAccess(
+  taskId: string,
+  req: Request,
+): Promise<"ok" | "unauth" | "not_found" | "forbidden"> {
+  if (isAdminApiRequest(req)) {
+    const t = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: { id: true },
+    });
+    return t ? "ok" : "not_found";
+  }
   const session = await getSession();
   if (!session || (session.role !== "coach" && session.role !== "owner")) {
-    return false;
+    return "unauth";
   }
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     select: { id: true, teamId: true, playerId: true },
   });
-  if (!task) return false;
+  if (!task) return "not_found";
 
   let teamId = task.teamId;
   if (!teamId && task.playerId) {
@@ -58,10 +69,34 @@ async function canAccessTask(taskId: string): Promise<boolean> {
     });
     teamId = player?.teamId ?? null;
   }
-  if (!teamId) return false;
+  if (!teamId) return "forbidden";
 
   const ids = await getAccessibleTeamIds(session);
-  return ids.includes(teamId);
+  return ids.includes(teamId) ? "ok" : "forbidden";
+}
+
+function mutationAccessErrorResponse(
+  access: "unauth" | "not_found" | "forbidden",
+): NextResponse {
+  if (access === "unauth") {
+    return NextResponse.json(
+      {
+        error:
+          "로그인이 필요합니다. 코치 로그인 후 다시 시도하거나, 홈에서 관리자 모드와 PIN을 설정한 뒤 저장해 주세요.",
+      },
+      { status: 401 },
+    );
+  }
+  if (access === "not_found") {
+    return NextResponse.json({ error: "과제를 찾을 수 없습니다." }, { status: 404 });
+  }
+  return NextResponse.json(
+    {
+      error:
+        "이 팀 과제를 수정할 권한이 없습니다. 해당 팀에 팀 스태프로 연결되어 있는지 확인하거나, 홈에서 관리자 모드와 PIN을 켠 뒤 다시 시도해 주세요.",
+    },
+    { status: 403 },
+  );
 }
 
 export async function GET(
@@ -74,6 +109,10 @@ export async function GET(
   });
   if (!task) {
     return NextResponse.json({ error: "과제를 찾을 수 없습니다." }, { status: 404 });
+  }
+
+  if (isAdminApiRequest(req)) {
+    return NextResponse.json(task);
   }
 
   const session = await getSession();
@@ -103,8 +142,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  if (!(await canAccessTask(id))) {
-    return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  const access = await resolveTaskMutationAccess(id, req);
+  if (access !== "ok") {
+    return mutationAccessErrorResponse(access);
   }
   const body = await req.json();
 
@@ -184,8 +224,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  if (!(await canAccessTask(id))) {
-    return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  const access = await resolveTaskMutationAccess(id, req);
+  if (access !== "ok") {
+    return mutationAccessErrorResponse(access);
   }
 
   try {

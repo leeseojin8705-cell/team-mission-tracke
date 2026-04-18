@@ -152,6 +152,8 @@ export interface TaskDetails {
   players?: string[];
   /** 팀 과제(teamId + playerId null)에서 과제·선수 API 노출 대상만 제한; 없으면 해당 팀 전체 */
   assigneePlayerIds?: string[];
+  /** 저장 시점 선수 id → 선수 관리 포지션(미등록 시 "미등록") — 기록·표시용 */
+  playerPositions?: Record<string, string>;
   evaluators?: string[]; // 평가자(코칭 스텝) id 목록
 }
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { TaskCoachBlueprintView } from "@/components/TaskCoachBlueprintView";
+import { playerApiInit } from "@/lib/playerClientFetch";
 import type { Task, TaskDetails } from "@/lib/types";
 
 type PlayerSession = {
@@ -154,9 +155,7 @@ function PlayerTasksInner() {
         setLoading(true);
         setError(null);
 
-        const sessionRes = await fetch("/api/auth/session", {
-          credentials: "same-origin",
-        });
+        const sessionRes = await fetch("/api/auth/session", playerApiInit());
         const sessionData = (await sessionRes.json().catch(() => ({}))) as PlayerSession;
         const sessionRole = sessionData.session?.role;
         if (sessionRole === "coach" || sessionRole === "owner") {
@@ -181,7 +180,7 @@ function PlayerTasksInner() {
 
         const playerRes = await fetch(
           `/api/players/${encodeURIComponent(pid)}`,
-          { credentials: "same-origin" },
+          playerApiInit(),
         );
         if (!playerRes.ok) {
           if (playerRes.status === 404) {
@@ -194,7 +193,7 @@ function PlayerTasksInner() {
         const playerJson = (await playerRes.json()) as { teamId?: string | null };
         const teamId = playerJson?.teamId;
 
-        const tasksRes = await fetch("/api/tasks", { credentials: "same-origin" });
+        const tasksRes = await fetch("/api/tasks", playerApiInit());
         if (!tasksRes.ok) {
           const errBody = (await tasksRes.json().catch(() => ({}))) as {
             error?: string;
@@ -207,7 +206,7 @@ function PlayerTasksInner() {
 
         const progressRes = await fetch(
           `/api/task-progress?playerId=${encodeURIComponent(pid)}`,
-          { credentials: "same-origin" },
+          playerApiInit(),
         );
         if (progressRes.ok) {
           const progressData = (await progressRes.json()) as {
@@ -225,7 +224,7 @@ function PlayerTasksInner() {
           if (teamId) {
             const teamMetaRes = await fetch(
               `/api/teams/${encodeURIComponent(teamId)}`,
-              { credentials: "same-origin" },
+              playerApiInit(),
             );
             if (teamMetaRes.ok) {
               const tm = (await teamMetaRes.json()) as { name?: string };
@@ -233,7 +232,7 @@ function PlayerTasksInner() {
             }
             const evalRes = await fetch(
               `/api/teams/${encodeURIComponent(teamId)}/player-evaluations`,
-              { credentials: "same-origin" },
+              playerApiInit(),
             );
             if (evalRes.ok) {
               const evalList = (await evalRes.json()) as {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Player, Team } from "@/lib/types";
 import { ProfilePhotoPreview } from "@/components/ProfilePhotoPreview";
+import { playerApiInit } from "@/lib/playerClientFetch";
 
 export default function PlayerProfilePage() {
   const [player, setPlayer] = useState<Player | null>(null);
@@ -36,7 +37,7 @@ export default function PlayerProfilePage() {
       try {
         setLoading(true);
         setSaveError(null);
-        const sessionRes = await fetch("/api/auth/session");
+        const sessionRes = await fetch("/api/auth/session", playerApiInit());
         const sessionData = await sessionRes.json().catch(() => ({}));
         const playerId: string | null =
           sessionData?.session?.role === "player" ? sessionData.session.playerId : null;
@@ -46,7 +47,7 @@ export default function PlayerProfilePage() {
           return;
         }
 
-        const res = await fetch(`/api/players/${playerId}`);
+        const res = await fetch(`/api/players/${playerId}`, playerApiInit());
         if (!res.ok) {
           setSaveError("선수 정보를 불러오지 못했습니다.");
           setLoading(false);
@@ -71,7 +72,7 @@ export default function PlayerProfilePage() {
           });
           setNewLoginId(p.loginId ?? "");
 
-          fetch(`/api/teams/${encodeURIComponent(p.teamId)}`)
+          fetch(`/api/teams/${encodeURIComponent(p.teamId)}`, playerApiInit())
             .then((r) => (r.ok ? r.json() : null))
             .then((t: Team | null) => {
               if (!cancelled) setTeam(t);
@@ -95,19 +96,22 @@ export default function PlayerProfilePage() {
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await fetch(`/api/players/${player.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          photo: form.photo || null,
-          height: form.height || null,
-          weight: form.weight || null,
-          phone: form.phone || null,
-          parentPhone: form.parentPhone || null,
-          address: form.address || null,
-          school: form.school || null,
+      const res = await fetch(
+        `/api/players/${player.id}`,
+        playerApiInit({
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            photo: form.photo || null,
+            height: form.height || null,
+            weight: form.weight || null,
+            phone: form.phone || null,
+            parentPhone: form.parentPhone || null,
+            address: form.address || null,
+            school: form.school || null,
+          }),
         }),
-      });
+      );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error ?? "저장에 실패했습니다.");
@@ -129,11 +133,14 @@ export default function PlayerProfilePage() {
     setPwSaving(true);
     setPwError(null);
     try {
-      const res = await fetch("/api/auth/change-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword, newPassword, newLoginId }),
-      });
+      const res = await fetch(
+        "/api/auth/change-password",
+        playerApiInit({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ currentPassword, newPassword, newLoginId }),
+        }),
+      );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error ?? "비밀번호 변경에 실패했습니다.");
@@ -239,10 +246,13 @@ export default function PlayerProfilePage() {
                         setSaveError(null);
                         const fd = new FormData();
                         fd.append("file", file);
-                        const res = await fetch("/api/upload/player-photo", {
-                          method: "POST",
-                          body: fd,
-                        });
+                        const res = await fetch(
+                          "/api/upload/player-photo",
+                          playerApiInit({
+                            method: "POST",
+                            body: fd,
+                          }),
+                        );
                         const data = await res.json().catch(() => ({}));
                         if (!res.ok || !data.url) {
                           throw new Error(data.error ?? "업로드에 실패했습니다.");

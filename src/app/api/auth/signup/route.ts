@@ -65,12 +65,31 @@ export async function POST(req: Request) {
       },
     });
 
-    const team = await prisma.team.create({
-      data: {
-        name: organizationName,
-        season,
-        organizationId: organization.id,
-      },
+    const team = await prisma.$transaction(async (tx) => {
+      const t = await tx.team.create({
+        data: {
+          name: organizationName,
+          season,
+          organizationId: organization.id,
+          createdByUserId: user.id,
+        },
+      });
+      const existing = await tx.teamStaff.findFirst({
+        where: { teamId: t.id, userId: user.id },
+      });
+      if (!existing) {
+        await tx.teamStaff.create({
+          data: {
+            teamId: t.id,
+            role: "감독",
+            name: organizationName.slice(0, 40),
+            email,
+            guidance: true,
+            userId: user.id,
+          },
+        });
+      }
+      return t;
     });
 
     return NextResponse.json(

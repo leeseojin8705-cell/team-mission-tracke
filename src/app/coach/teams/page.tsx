@@ -6,6 +6,11 @@ import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } f
 import type { Player, Team, TeamOrganization, TeamStaff } from "@/lib/types";
 import type { CategoryEvaluationType, StatDefinition } from "@/lib/types";
 import { DEFAULT_STAT_DEFINITION, getEvaluationProgressPercent, getStatDefinitionTotalItems, getWeightedOverall } from "@/lib/statDefinition";
+import { coachTasksApiInit } from "@/lib/coachAdminFetch";
+
+function apiInit(extra?: RequestInit): RequestInit {
+  return coachTasksApiInit({ credentials: "same-origin", ...extra });
+}
 
 const defaultOrganization: TeamOrganization = {
   front: [],
@@ -97,7 +102,7 @@ export default function CoachTeamsPage() {
           qs.set("contextTeamId", contextTeamId);
         }
         const url = qs.toString() ? `/api/teams?${qs.toString()}` : "/api/teams";
-        const res = await fetch(url, { credentials: "same-origin" });
+        const res = await fetch(url, apiInit());
         if (!res.ok) {
           throw new Error("팀 목록을 불러오지 못했습니다.");
         }
@@ -254,7 +259,7 @@ export default function CoachTeamsPage() {
     }
     let cancelled = false;
     setStaffLoading(true);
-    fetch(`/api/teams/${staffTeamId}/staff`)
+    fetch(`/api/teams/${staffTeamId}/staff`, apiInit())
       .then((r) => r.json())
       .then((list: TeamStaff[]) => {
         if (!cancelled) setStaffList(list);
@@ -289,8 +294,8 @@ export default function CoachTeamsPage() {
     };
     setExpandedTeamPlayersLoading(true);
     Promise.all([
-      fetch(`/api/teams/${expandedId}/evaluations`).then((r) => safeJson(r, []) as Promise<{ evaluatorStaffId: string; subjectStaffId: string; scores: Record<string, number[]> }[]>),
-      fetch(`/api/players?teamId=${encodeURIComponent(expandedId)}`).then((r) =>
+      fetch(`/api/teams/${expandedId}/evaluations`, apiInit()).then((r) => safeJson(r, []) as Promise<{ evaluatorStaffId: string; subjectStaffId: string; scores: Record<string, number[]> }[]>),
+      fetch(`/api/players?teamId=${encodeURIComponent(expandedId)}`, apiInit()).then((r) =>
         r.text().then((text) => {
           if (!text.trim()) return [] as Player[];
           try {
@@ -348,16 +353,19 @@ export default function CoachTeamsPage() {
     if (!row.name.trim()) return;
     try {
       setError(null);
-      const res = await fetch(`/api/teams/${editingId}/staff`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          role,
-          name: row.name.trim(),
-          phone: row.phone.trim() || undefined,
-          email: row.email.trim() || undefined,
+      const res = await fetch(
+        `/api/teams/${editingId}/staff`,
+        apiInit({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            role,
+            name: row.name.trim(),
+            phone: row.phone.trim() || undefined,
+            email: row.email.trim() || undefined,
+          }),
         }),
-      });
+      );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as { error?: string }).error || "등록에 실패했습니다.");
       const created = data as TeamStaff;
@@ -373,7 +381,10 @@ export default function CoachTeamsPage() {
     if (!tid) return;
     try {
       setError(null);
-      const res = await fetch(`/api/teams/${tid}/staff/${staffId}`, { method: "DELETE" });
+      const res = await fetch(
+        `/api/teams/${tid}/staff/${staffId}`,
+        apiInit({ method: "DELETE" }),
+      );
       if (!res.ok) throw new Error("삭제에 실패했습니다.");
       setStaffList((prev) => prev.filter((s) => s.id !== staffId));
     } catch (e) {
@@ -387,11 +398,14 @@ export default function CoachTeamsPage() {
     const next = !current;
     try {
       setError(null);
-      const res = await fetch(`/api/teams/${tid}/staff/${staffId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guidance: next }),
-      });
+      const res = await fetch(
+        `/api/teams/${tid}/staff/${staffId}`,
+        apiInit({
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ guidance: next }),
+        }),
+      );
       if (!res.ok) throw new Error("지도 설정에 실패했습니다.");
       setStaffList((prev) => prev.map((s) => (s.id === staffId ? { ...s, guidance: next } : s)));
     } catch (e) {
@@ -407,11 +421,14 @@ export default function CoachTeamsPage() {
     try {
       const results = await Promise.all(
         toUpdate.map((s) =>
-          fetch(`/api/teams/${editingId}/staff/${s.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ guidance: value }),
-          }).then((r) => r.ok),
+          fetch(
+            `/api/teams/${editingId}/staff/${s.id}`,
+            apiInit({
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ guidance: value }),
+            }),
+          ).then((r) => r.ok),
         ),
       );
       if (results.every(Boolean)) setStaffList((prev) => prev.map((s) => ({ ...s, guidance: value })));
@@ -430,21 +447,25 @@ export default function CoachTeamsPage() {
       setError(null);
 
       if (editingId) {
-        const res = await fetch(`/api/teams/${editingId}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: name.trim(),
-            season: season.trim() || "시즌 미정",
-            organization,
-            statDefinition: buildStatDefinition(),
+        const res = await fetch(
+          `/api/teams/${editingId}`,
+          apiInit({
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              name: name.trim(),
+              season: season.trim() || "시즌 미정",
+              organization,
+              statDefinition: buildStatDefinition(),
+            }),
           }),
-        });
+        );
 
         if (!res.ok) {
-          throw new Error("팀을 수정하지 못했습니다.");
+          const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(errBody.error ?? "팀을 수정하지 못했습니다.");
         }
 
         const updated: Team = await res.json();
@@ -452,20 +473,24 @@ export default function CoachTeamsPage() {
           prev.map((t) => (t.id === updated.id ? updated : t)),
         );
       } else {
-        const res = await fetch("/api/teams", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: name.trim(),
-            season: season.trim() || "시즌 미정",
-            organization,
+        const res = await fetch(
+          "/api/teams",
+          apiInit({
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              name: name.trim(),
+              season: season.trim() || "시즌 미정",
+              organization,
+            }),
           }),
-        });
+        );
 
         if (!res.ok) {
-          throw new Error("팀을 저장하지 못했습니다.");
+          const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(errBody.error ?? "팀을 저장하지 못했습니다.");
         }
 
         const created: Team = await res.json();
@@ -493,12 +518,11 @@ export default function CoachTeamsPage() {
       setSubmitting(true);
       setError(null);
 
-      const res = await fetch(`/api/teams/${id}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(`/api/teams/${id}`, apiInit({ method: "DELETE" }));
 
       if (!res.ok) {
-        throw new Error("팀을 삭제하지 못했습니다.");
+        const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(errBody.error ?? "팀을 삭제하지 못했습니다.");
       }
 
       setTeams((prev) => prev.filter((t) => t.id !== id));
@@ -547,8 +571,8 @@ export default function CoachTeamsPage() {
       }
     };
     Promise.all([
-      fetch(`/api/teams/${tid}/staff`).then((r) => safeJson(r, []) as Promise<TeamStaff[]>),
-      fetch(`/api/teams/${tid}/evaluations`).then((r) => safeJson(r, []) as Promise<{ evaluatorStaffId: string; subjectStaffId: string; scores: Record<string, number[]> }[]>),
+      fetch(`/api/teams/${tid}/staff`, apiInit()).then((r) => safeJson(r, []) as Promise<TeamStaff[]>),
+      fetch(`/api/teams/${tid}/evaluations`, apiInit()).then((r) => safeJson(r, []) as Promise<{ evaluatorStaffId: string; subjectStaffId: string; scores: Record<string, number[]> }[]>),
     ])
       .then(([staffListRes, evalsRes]) => {
         if (cancelled) return;
